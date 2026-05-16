@@ -243,6 +243,98 @@ function summarizeCookies(cookies = []) {
   };
 }
 
+function cookiePartitionKeyLabel(cookie) {
+  const key = cookie?.partitionKey;
+  if (key === undefined || key === null || key === "") return "(unpartitioned)";
+  if (typeof key === "string") return key;
+  try {
+    return JSON.stringify(key);
+  } catch {
+    return String(key);
+  }
+}
+
+function summarizeCookiePartitions(cookies = []) {
+  const list = Array.isArray(cookies) ? cookies : [];
+  const byPartitionKey = {};
+  const byStoreId = {};
+  const partitionedCookies = [];
+  let partitionedCount = 0;
+  let opaquePartitionCount = 0;
+  let partitionMetadataCount = 0;
+  for (const cookie of list) {
+    const partitionKey = cookiePartitionKeyLabel(cookie);
+    byPartitionKey[partitionKey] = (byPartitionKey[partitionKey] || 0) + 1;
+    if (cookie.storeId) byStoreId[cookie.storeId] = (byStoreId[cookie.storeId] || 0) + 1;
+    if (cookie.partitionKey !== undefined || cookie.partitionKeyOpaque !== undefined) partitionMetadataCount += 1;
+    if (cookie.partitionKey !== undefined && cookie.partitionKey !== null && cookie.partitionKey !== "") partitionedCount += 1;
+    if (cookie.partitionKeyOpaque) opaquePartitionCount += 1;
+    if (cookie.partitionKey !== undefined || cookie.partitionKeyOpaque !== undefined) {
+      partitionedCookies.push({
+        name: cookie.name,
+        domain: cookie.domain,
+        path: cookie.path,
+        partitionKey: cookie.partitionKey,
+        partitionKeyOpaque: cookie.partitionKeyOpaque,
+        sourceScheme: cookie.sourceScheme,
+        sourcePort: cookie.sourcePort,
+        storeId: cookie.storeId,
+      });
+    }
+  }
+  return {
+    cookieCount: list.length,
+    partitionedCount,
+    unpartitionedCount: list.length - partitionedCount,
+    opaquePartitionCount,
+    partitionMetadataCount,
+    partitionMetadataExposed: partitionMetadataCount > 0,
+    byPartitionKey,
+    byStoreId,
+    partitionedCookies,
+  };
+}
+
+function summarizeStorageBoundaries(frames = []) {
+  const list = Array.isArray(frames) ? frames : [];
+  const byOrigin = {};
+  const byStorageKey = {};
+  const storageKeyErrors = [];
+  const quotaErrors = [];
+  let framesWithStorageKey = 0;
+  let framesWithQuota = 0;
+  for (const frame of list) {
+    const origin = frame.origin || frame.securityOrigin || "(unknown)";
+    byOrigin[origin] = (byOrigin[origin] || 0) + 1;
+    if (frame.storageKey) {
+      framesWithStorageKey += 1;
+      byStorageKey[frame.storageKey] = (byStorageKey[frame.storageKey] || 0) + 1;
+    }
+    if (frame.storageKeyError) {
+      storageKeyErrors.push({ frameId: frame.id, url: frame.url, error: frame.storageKeyError });
+    }
+    if (frame.usageAndQuota?.error) {
+      quotaErrors.push({ frameId: frame.id, origin: frame.origin, error: frame.usageAndQuota.error });
+    } else if (frame.usageAndQuota) {
+      framesWithQuota += 1;
+    }
+  }
+  return {
+    frameCount: list.length,
+    originCount: Object.keys(byOrigin).length,
+    storageKeyCount: Object.keys(byStorageKey).length,
+    framesWithStorageKey,
+    framesWithoutStorageKey: list.length - framesWithStorageKey,
+    framesWithQuota,
+    framesWithoutQuota: list.length - framesWithQuota,
+    byOrigin,
+    byStorageKey,
+    storageKeyErrors,
+    quotaErrors,
+    incomplete: storageKeyErrors.length > 0 || quotaErrors.length > 0,
+  };
+}
+
 function severityRank(severity) {
   return { high: 3, medium: 2, low: 1, info: 0 }[severity] ?? 0;
 }
@@ -1866,6 +1958,49 @@ function buildReplayBody(params = {}, request = {}, headers = {}) {
   };
 }
 
+function headerMapLower(headers = {}) {
+  const out = {};
+  for (const [name, value] of Object.entries(headers || {})) {
+    out[String(name).toLowerCase()] = String(value);
+  }
+  return out;
+}
+
+function diffReplayResponse(originalRequest = {}, response = {}, maxBodyPreview = 500) {
+  const originalHeaders = headerMapLower(originalRequest.responseHeaders || {});
+  const replayHeaders = headerMapLower(response.headers || {});
+  const headerNames = new Set([...Object.keys(originalHeaders), ...Object.keys(replayHeaders)]);
+  const headerDiff = [];
+  for (const name of [...headerNames].sort()) {
+    if (originalHeaders[name] !== replayHeaders[name]) {
+      headerDiff.push({ name, original: originalHeaders[name], replay: replayHeaders[name] });
+    }
+  }
+  const originalBody = typeof originalRequest.bodyText === "string" ? originalRequest.bodyText : null;
+  const replayBody = typeof response.bodyText === "string" ? response.bodyText : null;
+  const bodyComparable = originalBody !== null && replayBody !== null;
+  const originalLength = originalBody === null ? (originalRequest.bodyBytes ?? originalRequest.encodedDataLength ?? null) : originalBody.length;
+  const replayLength = replayBody === null ? (response.bodyBytes ?? null) : replayBody.length;
+  return {
+    originalStatus: originalRequest.status ?? null,
+    replayStatus: response.status ?? null,
+    statusChanged: (originalRequest.status ?? null) !== (response.status ?? null),
+    originalUrl: originalRequest.url || null,
+    replayUrl: response.url || null,
+    urlChanged: Boolean(originalRequest.url && response.url && originalRequest.url !== response.url),
+    redirectedChanged: Boolean(response.redirected) !== Boolean(originalRequest.redirected),
+    headerChangedCount: headerDiff.length,
+    headerDiff: headerDiff.slice(0, 50),
+    bodyComparable,
+    bodyChanged: bodyComparable ? originalBody !== replayBody : null,
+    originalBodyLength: originalLength,
+    replayBodyLength: replayLength,
+    bodyLengthDelta: typeof originalLength === "number" && typeof replayLength === "number" ? replayLength - originalLength : null,
+    originalBodyPreview: originalBody === null ? null : originalBody.slice(0, maxBodyPreview),
+    replayBodyPreview: replayBody === null ? null : replayBody.slice(0, maxBodyPreview),
+  };
+}
+
 function createProfileRegistry({ cdpPort, dataDir, onProfileReady }) {
   const registryFile = process.env.CDP_PROFILE_REGISTRY_FILE || join(dataDir, "profiles.json");
   const captureState = new Map();
@@ -2918,7 +3053,127 @@ function registerStandaloneBrowserTools(tools, cdpPort, profileRegistry, default
             credentials: params?.credentials || "include",
           },
           response: result.result?.value,
+          responseDiff: result.result?.value ? diffReplayResponse(request, result.result.value, params?.maxBodyPreview) : null,
           exception: result.exceptionDetails,
+        };
+      }));
+    },
+  });
+
+  tools.set("profile_request_replay_batch", {
+    name: "profile_request_replay_batch",
+    description: "Replay one captured managed browser request through multiple variants and return response diffs for edit-and-resend security testing.",
+    parameters: {
+      type: "object",
+      properties: {
+        profile: { type: "string" },
+        requestId: { type: "string" },
+        variants: { type: "array", items: { type: "object" } },
+        maxVariants: { type: "number" },
+        maxBodyPreview: { type: "number" },
+      },
+      required: ["requestId", "variants"],
+    },
+    async execute(_id, params) {
+      const profile = await resolveProfile(params?.profile);
+      const request = profileRegistry.getTraffic(profile.name, params?.requestId);
+      if (!request) throw new Error(`request not found: ${params?.requestId}`);
+      const variants = Array.isArray(params?.variants) ? params.variants.slice(0, Math.max(1, Math.min(50, Number(params?.maxVariants || params.variants.length)))) : [];
+      if (!variants.length) throw new Error("variants must contain at least one replay variant");
+      return toolResult(await withPageClient(cdpPort, profile.tabId, async (client, target) => {
+        const results = [];
+        for (let index = 0; index < variants.length; index += 1) {
+          const variant = variants[index] || {};
+          const url = variant.url || request.url;
+          const method = String(variant.method || request.method || "GET").toUpperCase();
+          const removeHeaders = Array.isArray(variant.removeHeaders) ? Object.fromEntries(variant.removeHeaders.map((name) => [name, null])) : {};
+          const headerPrep = prepareReplayHeaders(request.requestHeaders || {}, { ...removeHeaders, ...(variant.headers || {}) });
+          const bodyPrep = buildReplayBody(variant, request, headerPrep.headers);
+          const includeBody = !["GET", "HEAD"].includes(method) && bodyPrep.bodyKind !== "none";
+          const result = await client.Runtime.evaluate({
+            expression: `(async () => {
+              const replay = ${JSON.stringify({
+                url,
+                method,
+                headers: headerPrep.headers,
+                body: bodyPrep.body,
+                bodyKind: bodyPrep.bodyKind,
+                includeBody,
+                credentials: variant.credentials || params?.credentials || "include",
+              })};
+              function buildBody(replay) {
+                if (!replay.includeBody) return undefined;
+                if (replay.bodyKind === "multipart") {
+                  const form = new FormData();
+                  for (const [key, value] of Object.entries(replay.body.fields || {})) {
+                    if (Array.isArray(value)) {
+                      for (const item of value) form.append(key, String(item));
+                    } else {
+                      form.append(key, String(value));
+                    }
+                  }
+                  for (const file of replay.body.files || []) {
+                    const blob = new Blob([file.content || ""], { type: file.type || "application/octet-stream" });
+                    form.append(file.field || "file", blob, file.filename || "upload.bin");
+                  }
+                  return form;
+                }
+                return replay.body;
+              }
+              const startedAt = new Date().toISOString();
+              const response = await fetch(replay.url, {
+                method: replay.method,
+                headers: replay.headers,
+                credentials: replay.credentials,
+                cache: "no-store",
+                redirect: "follow",
+                ...(replay.includeBody ? { body: buildBody(replay) } : {}),
+              });
+              const text = await response.text();
+              return {
+                ok: response.ok,
+                startedAt,
+                finishedAt: new Date().toISOString(),
+                url: response.url,
+                redirected: response.redirected,
+                status: response.status,
+                statusText: response.statusText,
+                headers: Object.fromEntries(response.headers.entries()),
+                bodyText: text,
+                bodyBytes: text.length,
+              };
+            })()`,
+            returnByValue: true,
+            awaitPromise: true,
+          });
+          const response = result.result?.value || null;
+          results.push({
+            index,
+            label: variant.label || `variant-${index + 1}`,
+            replayRequest: {
+              url,
+              method,
+              headers: headerPrep.headers,
+              bodyKind: bodyPrep.bodyKind,
+              skippedHeaders: headerPrep.skipped,
+              removedHeaders: headerPrep.removed,
+              skippedHeaderNames: headerPrep.skipped.map((entry) => entry.name),
+              bodyLength: includeBody ? bodyPrep.bodyLength : 0,
+              contentTypeNote: bodyPrep.contentTypeNote || null,
+              credentials: variant.credentials || params?.credentials || "include",
+            },
+            response,
+            responseDiff: response ? diffReplayResponse(request, response, params?.maxBodyPreview) : null,
+            exception: result.exceptionDetails,
+          });
+        }
+        await profileRegistry.touchProfile(profile.name, { tabId: target.id });
+        return {
+          profile: profile.name,
+          tabId: target.id,
+          originalRequest: request,
+          variantCount: results.length,
+          results,
         };
       }));
     },
@@ -3940,26 +4195,32 @@ function registerStandaloneBrowserTools(tools, cdpPort, profileRegistry, default
         const framesWithStorage = [];
         for (const frame of frames) {
           let storageKey = null;
+          let storageKeyError = null;
           try {
             storageKey = (await client.Storage.getStorageKeyForFrame({ frameId: frame.id })).storageKey;
-          } catch {
+          } catch (error) {
             storageKey = null;
+            storageKeyError = String(error?.message || error);
           }
           let usageAndQuota = null;
           if (frame.origin && frame.origin !== "null") {
             usageAndQuota = await client.Storage.getUsageAndQuota({ origin: frame.origin }).catch((error) => ({ error: String(error?.message || error) }));
           }
-          framesWithStorage.push({ ...frame, storageKey, usageAndQuota });
+          framesWithStorage.push({ ...frame, storageKey, storageKeyError, usageAndQuota });
         }
         const cookiesResult = await client.Network.getCookies().catch(() => ({ cookies: [] }));
         const cookies = Array.isArray(cookiesResult.cookies) ? cookiesResult.cookies : [];
+        const storageBoundarySummary = summarizeStorageBoundaries(framesWithStorage);
+        const cookiePartitionSummary = summarizeCookiePartitions(cookies);
         await profileRegistry.touchProfile(profile.name, { tabId: target.id });
         return {
           profile: profile.name,
           tabId: target.id,
           page: page.result?.value,
           frames: framesWithStorage,
+          storageBoundarySummary,
           cookieCount: cookies.length,
+          cookiePartitionSummary,
           cookiePartitions: cookies.map((cookie) => ({
             name: cookie.name,
             domain: cookie.domain,
@@ -3996,6 +4257,7 @@ function registerStandaloneBrowserTools(tools, cdpPort, profileRegistry, default
           profile: profile.name,
           tabId: target.id,
           summary: summarizeCookies(cookies.cookies || []),
+          partitionSummary: summarizeCookiePartitions(cookies.cookies || []),
           cookies: cookies.cookies || cookies,
         };
       }));
@@ -6609,6 +6871,7 @@ function registerStandaloneBrowserTools(tools, cdpPort, profileRegistry, default
   aliasTool("devtools_request_detail", "profile_request_detail", "Unified Agent DevTools API: read F12 request-detail evidence by requestId.");
   aliasTool("devtools_request_payload", "profile_request_payload", "Unified Agent DevTools API: read request payload/postData for a requestId.");
   aliasTool("devtools_request_replay", "profile_request_replay", "Unified Agent DevTools API: replay/edit-and-resend a captured request.");
+  aliasTool("devtools_request_replay_batch", "profile_request_replay_batch", "Unified Agent DevTools API: replay a captured request through multiple variants and compare responses.");
   aliasTool("devtools_console_log", "browser_console_log", "Unified Agent DevTools API: read Console panel events, exceptions, and stack traces.");
   aliasTool("devtools_console_source_context", "browser_console_source_context", "Unified Agent DevTools API: read source context around a console stack frame.");
   aliasTool("devtools_security_summary", "browser_security_summary", "Unified Agent DevTools API: summarize page security context and TLS/certificate details.");

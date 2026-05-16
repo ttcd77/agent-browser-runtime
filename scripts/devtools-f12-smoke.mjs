@@ -542,6 +542,18 @@ try {
   assert(multipartReplay.replayRequest?.bodyKind === "multipart", `multipart replay bodyKind mismatch: ${JSON.stringify(multipartReplay.replayRequest)}`);
   assert(multipartReplay.replayRequest?.contentTypeNote, "multipart replay did not report browser boundary Content-Type handling");
   assert(String(multipartReplay.response?.bodyText || "").includes("field-value"), "multipart replay response did not include field body");
+  const batchReplay = await callTool(baseUrl, "devtools_request_replay_batch", {
+    profile: "default",
+    requestId: echoRequest.requestId,
+    variants: [
+      { label: "json-variant", json: { hello: "batch" } },
+      { label: "form-variant", headers: { "Content-Type": null }, form: { answer: 7, mode: "batch" } },
+    ],
+  });
+  assert(batchReplay.variantCount === 2, `batch replay variant count mismatch: ${JSON.stringify(batchReplay)}`);
+  assert(batchReplay.results?.[0]?.response?.status === 200, `batch replay first variant failed: ${JSON.stringify(batchReplay.results?.[0])}`);
+  assert(batchReplay.results?.[0]?.responseDiff?.replayStatus === 200, `batch replay missing response diff: ${JSON.stringify(batchReplay.results?.[0])}`);
+  assert(batchReplay.results?.[1]?.responseDiff?.bodyComparable === true, `batch replay second variant missing body comparison: ${JSON.stringify(batchReplay.results?.[1])}`);
 
   const applicationExport = await callTool(baseUrl, "devtools_application_export", {
     profile: "default",
@@ -563,6 +575,10 @@ try {
   });
   assert(storageOrigin.page?.origin === `http://127.0.0.1:${appPort}`, `storage origin mismatch: ${JSON.stringify(storageOrigin.page)}`);
   assert(Array.isArray(storageOrigin.frames) && storageOrigin.frames.length >= 1, "storage origin summary missing frames");
+  assert(storageOrigin.storageBoundarySummary?.frameCount >= 1, `storage boundary summary missing frame count: ${JSON.stringify(storageOrigin)}`);
+  assert(storageOrigin.storageBoundarySummary?.originCount >= 1, `storage boundary summary missing origin count: ${JSON.stringify(storageOrigin)}`);
+  assert(storageOrigin.cookiePartitionSummary?.cookieCount >= 1, `cookie partition summary missing cookie count: ${JSON.stringify(storageOrigin)}`);
+  assert(typeof storageOrigin.cookiePartitionSummary?.partitionMetadataExposed === "boolean", `cookie partition summary missing metadata flag: ${JSON.stringify(storageOrigin)}`);
 
   const signalSummary = await callTool(baseUrl, "devtools_signal_summary", {
     profile: "default",

@@ -112,6 +112,7 @@ DevTools/F12 data layer:
 - `devtools_request_detail`
 - `devtools_request_payload`
 - `devtools_request_replay`
+- `devtools_request_replay_batch`
 - `devtools_console_log`
 - `devtools_console_source_context`
 - `devtools_security_summary`
@@ -170,7 +171,7 @@ Implemented:
 - Elements/Page snapshot: visible text, controls, screenshots, click/type/scroll including same-origin iframe targeting, DOM tree, selected element inspection, layout boxes, key computed styles, forced pseudo-state style inspection (`:hover`, `:focus`, etc.), raw Chrome DOMSnapshot data, live DOM search with same-origin iframe fallback context, Elements-panel Event Listeners, Styles/Computed/Box Model evidence, and selected-node DOM mutation watch for breakpoint-style evidence.
 - Sources/Debugger/Search: parsed script metadata, source map URL metadata, module flag, script source by script id, heuristic pretty-printing, inline/external source map metadata, Debugger pause/resume/step/breakpoint controls with paused frame/scope previews, temporary token-flow instrumentation across fetch/XHR/storage/cookie APIs, literal source search, global literal search across Network/Sources/Application evidence, and compact F12 evidence bundle export with optional HAR, token scan, and token-flow sections.
 - Performance/Memory: navigation timing, resource timing, paint timing, marks/measures, long-task entries, Chrome Tracing capture with full trace file output, trace screenshot frame extraction where Chrome emits frames, trace event summaries, phase duration buckets, busiest thread/process summaries, top duration events, short JS/CSS coverage snapshots, Coverage-panel range drilldown with bounded source snippets, JS heap usage, DOM counters, and Performance Monitor metrics.
-- Network: request URL, method, headers, status, response headers, request-detail evidence including cookies and ExtraInfo events, initiator stack summaries, lifecycle flags, Timing/Initiator-style rows, frame id, redirect chain, cache/service-worker flags, TLS details where exposed, WebSocket lifecycle and frames, request replay/edit-and-resend with explicit forbidden-header reporting plus raw/form/json/multipart body helpers, HAR-like object export with timing phase extensions, HAR file save, and low-token summary for dashboards/triage.
+- Network: request URL, method, headers, status, response headers, request-detail evidence including cookies and ExtraInfo events, initiator stack summaries, lifecycle flags, Timing/Initiator-style rows, frame id, redirect chain, cache/service-worker flags, TLS details where exposed, WebSocket lifecycle and frames, request replay/edit-and-resend with explicit forbidden-header reporting plus raw/form/json/multipart body helpers, batch replay variants with response diffs, HAR-like object export with timing phase extensions, HAR file save, and low-token summary for dashboards/triage.
 - Payload/Body: response body by request id; request postData/payload by request id when Chrome exposes it.
 - Console/Issues: console API, log entries, exceptions, stack traces, source
   context around stack frames, and Chrome DevTools Issues-panel events where
@@ -178,7 +179,7 @@ Implemented:
 - Security: page secure-context summary and TLS/certificate details collected from Network security metadata.
 - Accessibility: AX tree nodes, roles, names, values, descriptions, properties, child ids, and backend DOM node ids where Chrome exposes them.
 - Frames: frame tree, same-origin frame accessibility map, inaccessible/sandboxed frame boundary reporting, and recent frame lifecycle events.
-- Storage: localStorage, sessionStorage, document-visible cookies, backend cookie API/CDP cookies, cookie security summaries, origin/storage-key/quota evidence, cookie partition metadata where Chrome exposes it, IndexedDB database/object-store/index/sample records, IndexedDB paged record reads, Cache Storage request/response metadata and body reads, Service Worker registrations, Service Worker script/status detail, Service Worker target summary, CacheStorage summary/detail, and Application panel JSON export.
+- Storage: localStorage, sessionStorage, document-visible cookies, backend cookie API/CDP cookies, cookie security summaries, origin/storage-key/quota evidence, explicit storage-boundary summaries, cookie partition metadata summaries where Chrome exposes them, IndexedDB database/object-store/index/sample records, IndexedDB paged record reads, Cache Storage request/response metadata and body reads, Service Worker registrations, Service Worker script/status detail, Service Worker target summary, CacheStorage summary/detail, and Application panel JSON export.
 - Token scan: full-value scan across headers, payloads, storage, and cookies in authorized browser mode.
 
 Not fully implemented yet:
@@ -186,8 +187,8 @@ Not fully implemented yet:
 - Fully lossless HAR export with exact timings and all bodies.
 - Sources panel parity beyond raw/searchable script source: breakpoints, scopes, live debugging, and AST-lossless formatting. Heuristic pretty-print and source map metadata are already exposed.
 - Performance panel parity beyond current tracing: deeper layout/paint flame chart reconstruction.
-- Application panel deep browsing beyond current reads: deeper cookie partition metadata where exposed.
-- Network replay edge cases: raw socket-level replay and replay UI. Browser fetch replay already reports forbidden/skipped headers and supports raw/form/json/multipart body helpers.
+- Application panel deep browsing beyond current reads: CHIPS/partitioned-cookie write scenarios in smoke fixtures and richer quota/storage bucket coverage where Chrome exposes it.
+- Network replay edge cases: raw socket-level replay and replay UI. Browser fetch replay already reports forbidden/skipped headers, supports raw/form/json/multipart body helpers, and can run batch variants with response diffs.
 - Browser UI/system dialogs and Chrome internal pages.
 - Complete JavaScript heap/closure inspection. Tokens that exist only in live JS memory and never enter storage/network are not generally visible unless the debugger pauses in the right execution context.
 

@@ -176,6 +176,8 @@ async function executeCommand(command, params) {
       return await chromeRequestPayload(params);
     case "chrome_request_replay":
       return await chromeRequestReplay(params);
+    case "chrome_request_replay_batch":
+      return await chromeRequestReplayBatch(params);
     case "chrome_console_log":
       return await chromeConsoleLog(params);
     case "chrome_console_source_context":
@@ -598,6 +600,98 @@ function summarizeCookies(cookies = []) {
     byDomain,
     bySameSite,
     findings,
+  };
+}
+
+function cookiePartitionKeyLabel(cookie) {
+  const key = cookie?.partitionKey;
+  if (key === undefined || key === null || key === "") return "(unpartitioned)";
+  if (typeof key === "string") return key;
+  try {
+    return JSON.stringify(key);
+  } catch {
+    return String(key);
+  }
+}
+
+function summarizeCookiePartitions(cookies = []) {
+  const list = Array.isArray(cookies) ? cookies : [];
+  const byPartitionKey = {};
+  const byStoreId = {};
+  const partitionedCookies = [];
+  let partitionedCount = 0;
+  let opaquePartitionCount = 0;
+  let partitionMetadataCount = 0;
+  for (const cookie of list) {
+    const partitionKey = cookiePartitionKeyLabel(cookie);
+    byPartitionKey[partitionKey] = (byPartitionKey[partitionKey] || 0) + 1;
+    if (cookie.storeId) byStoreId[cookie.storeId] = (byStoreId[cookie.storeId] || 0) + 1;
+    if (cookie.partitionKey !== undefined || cookie.partitionKeyOpaque !== undefined) partitionMetadataCount += 1;
+    if (cookie.partitionKey !== undefined && cookie.partitionKey !== null && cookie.partitionKey !== "") partitionedCount += 1;
+    if (cookie.partitionKeyOpaque) opaquePartitionCount += 1;
+    if (cookie.partitionKey !== undefined || cookie.partitionKeyOpaque !== undefined) {
+      partitionedCookies.push({
+        name: cookie.name,
+        domain: cookie.domain,
+        path: cookie.path,
+        partitionKey: cookie.partitionKey,
+        partitionKeyOpaque: cookie.partitionKeyOpaque,
+        sourceScheme: cookie.sourceScheme,
+        sourcePort: cookie.sourcePort,
+        storeId: cookie.storeId,
+      });
+    }
+  }
+  return {
+    cookieCount: list.length,
+    partitionedCount,
+    unpartitionedCount: list.length - partitionedCount,
+    opaquePartitionCount,
+    partitionMetadataCount,
+    partitionMetadataExposed: partitionMetadataCount > 0,
+    byPartitionKey,
+    byStoreId,
+    partitionedCookies,
+  };
+}
+
+function summarizeStorageBoundaries(frames = []) {
+  const list = Array.isArray(frames) ? frames : [];
+  const byOrigin = {};
+  const byStorageKey = {};
+  const storageKeyErrors = [];
+  const quotaErrors = [];
+  let framesWithStorageKey = 0;
+  let framesWithQuota = 0;
+  for (const frame of list) {
+    const origin = frame.origin || frame.securityOrigin || "(unknown)";
+    byOrigin[origin] = (byOrigin[origin] || 0) + 1;
+    if (frame.storageKey) {
+      framesWithStorageKey += 1;
+      byStorageKey[frame.storageKey] = (byStorageKey[frame.storageKey] || 0) + 1;
+    }
+    if (frame.storageKeyError) {
+      storageKeyErrors.push({ frameId: frame.id, url: frame.url, error: frame.storageKeyError });
+    }
+    if (frame.usageAndQuota?.error) {
+      quotaErrors.push({ frameId: frame.id, origin: frame.origin, error: frame.usageAndQuota.error });
+    } else if (frame.usageAndQuota) {
+      framesWithQuota += 1;
+    }
+  }
+  return {
+    frameCount: list.length,
+    originCount: Object.keys(byOrigin).length,
+    storageKeyCount: Object.keys(byStorageKey).length,
+    framesWithStorageKey,
+    framesWithoutStorageKey: list.length - framesWithStorageKey,
+    framesWithQuota,
+    framesWithoutQuota: list.length - framesWithQuota,
+    byOrigin,
+    byStorageKey,
+    storageKeyErrors,
+    quotaErrors,
+    incomplete: storageKeyErrors.length > 0 || quotaErrors.length > 0,
   };
 }
 
@@ -1787,6 +1881,49 @@ function buildReplayBody(params = {}, request = {}, headers = {}) {
   };
 }
 
+function headerMapLower(headers = {}) {
+  const out = {};
+  for (const [name, value] of Object.entries(headers || {})) {
+    out[String(name).toLowerCase()] = String(value);
+  }
+  return out;
+}
+
+function diffReplayResponse(originalRequest = {}, response = {}, maxBodyPreview = 500) {
+  const originalHeaders = headerMapLower(originalRequest.responseHeaders || {});
+  const replayHeaders = headerMapLower(response.headers || {});
+  const headerNames = new Set([...Object.keys(originalHeaders), ...Object.keys(replayHeaders)]);
+  const headerDiff = [];
+  for (const name of [...headerNames].sort()) {
+    if (originalHeaders[name] !== replayHeaders[name]) {
+      headerDiff.push({ name, original: originalHeaders[name], replay: replayHeaders[name] });
+    }
+  }
+  const originalBody = typeof originalRequest.bodyText === "string" ? originalRequest.bodyText : null;
+  const replayBody = typeof response.bodyText === "string" ? response.bodyText : null;
+  const bodyComparable = originalBody !== null && replayBody !== null;
+  const originalLength = originalBody === null ? (originalRequest.bodyBytes ?? originalRequest.encodedDataLength ?? null) : originalBody.length;
+  const replayLength = replayBody === null ? (response.bodyBytes ?? null) : replayBody.length;
+  return {
+    originalStatus: originalRequest.status ?? null,
+    replayStatus: response.status ?? null,
+    statusChanged: (originalRequest.status ?? null) !== (response.status ?? null),
+    originalUrl: originalRequest.url || null,
+    replayUrl: response.url || null,
+    urlChanged: Boolean(originalRequest.url && response.url && originalRequest.url !== response.url),
+    redirectedChanged: Boolean(response.redirected) !== Boolean(originalRequest.redirected),
+    headerChangedCount: headerDiff.length,
+    headerDiff: headerDiff.slice(0, 50),
+    bodyComparable,
+    bodyChanged: bodyComparable ? originalBody !== replayBody : null,
+    originalBodyLength: originalLength,
+    replayBodyLength: replayLength,
+    bodyLengthDelta: typeof originalLength === "number" && typeof replayLength === "number" ? replayLength - originalLength : null,
+    originalBodyPreview: originalBody === null ? null : originalBody.slice(0, maxBodyPreview),
+    replayBodyPreview: replayBody === null ? null : replayBody.slice(0, maxBodyPreview),
+  };
+}
+
 async function chromeRequestReplay(params) {
   if (!params.requestId) throw new Error("requestId is required");
   const { tab, session } = await ensureDevtoolsAttached(params);
@@ -1865,6 +2002,40 @@ async function chromeRequestReplay(params) {
       credentials: params.credentials || "include",
     },
     response: replay,
+    responseDiff: diffReplayResponse(request, replay, params.maxBodyPreview),
+  };
+}
+
+async function chromeRequestReplayBatch(params) {
+  if (!params.requestId) throw new Error("requestId is required");
+  const { tab, session } = await ensureDevtoolsAttached(params);
+  const request = session.requests.get(String(params.requestId));
+  if (!request) throw new Error(`request not found: ${params.requestId}`);
+  const variants = Array.isArray(params.variants) ? params.variants.slice(0, Math.max(1, Math.min(50, Number(params.maxVariants || params.variants.length)))) : [];
+  if (!variants.length) throw new Error("variants must contain at least one replay variant");
+  const results = [];
+  for (let index = 0; index < variants.length; index += 1) {
+    const variant = variants[index] || {};
+    const replay = await chromeRequestReplay({
+      ...variant,
+      tabId: params.tabId,
+      requestId: params.requestId,
+      maxBodyPreview: params.maxBodyPreview,
+      credentials: variant.credentials || params.credentials,
+    });
+    results.push({
+      index,
+      label: variant.label || `variant-${index + 1}`,
+      replayRequest: replay.replayRequest,
+      response: replay.response,
+      responseDiff: replay.responseDiff,
+    });
+  }
+  return {
+    tab: pickTab(tab),
+    originalRequest: request,
+    variantCount: results.length,
+    results,
   };
 }
 
@@ -2336,18 +2507,27 @@ async function chromeStorageOriginSummary(params) {
   walkFrame(frameTree?.frameTree);
   const framesWithStorage = [];
   for (const frame of frames) {
-    const storageKeyResult = await chromeDebuggerSendCommand(target, "Storage.getStorageKeyForFrame", { frameId: frame.id }).catch(() => null);
+    let storageKeyResult = null;
+    let storageKeyError = null;
+    try {
+      storageKeyResult = await chromeDebuggerSendCommand(target, "Storage.getStorageKeyForFrame", { frameId: frame.id });
+    } catch (error) {
+      storageKeyError = String(error?.message || error);
+    }
     const usageAndQuota = frame.origin && frame.origin !== "null"
       ? await chromeDebuggerSendCommand(target, "Storage.getUsageAndQuota", { origin: frame.origin }).catch((error) => ({ error: String(error?.message || error) }))
       : null;
-    framesWithStorage.push({ ...frame, storageKey: storageKeyResult?.storageKey || null, usageAndQuota });
+    framesWithStorage.push({ ...frame, storageKey: storageKeyResult?.storageKey || null, storageKeyError, usageAndQuota });
   }
   const cookies = await chrome.cookies.getAll({ url: tab.url }).catch(() => []);
+  const cookieList = Array.isArray(cookies) ? cookies : [];
   return {
     tab: pickTab(tab),
     page,
     frames: framesWithStorage,
-    cookieCount: Array.isArray(cookies) ? cookies.length : 0,
+    storageBoundarySummary: summarizeStorageBoundaries(framesWithStorage),
+    cookieCount: cookieList.length,
+    cookiePartitionSummary: summarizeCookiePartitions(cookieList),
     cookiePartitions: Array.isArray(cookies) ? cookies.map((cookie) => ({
       name: cookie.name,
       domain: cookie.domain,
@@ -2370,6 +2550,7 @@ async function chromeCookieSummary(params) {
   return {
     tab: pickTab(tab),
     summary: summarizeCookies(cookies),
+    partitionSummary: summarizeCookiePartitions(cookies),
     cookies,
   };
 }

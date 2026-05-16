@@ -17,11 +17,13 @@
 - Network panel: raw socket-level replay edge cases and replay UI. Initiator
   stack summaries, lifecycle flags, HAR object/file export with timing phase
   extensions, bounded HAR bodies, browser fetch replay, forbidden-header
-  reporting, and raw/form/json/multipart replay helpers are now in the unified
-  tool contract.
+  reporting, raw/form/json/multipart replay helpers, and batch replay response
+  diffs are now in the unified tool contract.
 - Application panel: Service Worker summaries/detail, CacheStorage summaries/detail,
-  and Application JSON export are now in the unified tool contract. Next work is
-  deeper cookie partition metadata where exposed.
+  Application JSON export, storage-boundary summaries, and cookie partition
+  summaries where Chrome exposes metadata are now in the unified tool contract.
+  Next work is CHIPS/partitioned-cookie write scenarios in smoke fixtures and
+  richer quota/storage bucket coverage where Chrome exposes it.
 - Elements panel: same-origin iframe-aware DOM search, iframe selector targeting
   for click/type/styles/listeners, forced pseudo-state style inspection,
   Accessibility snapshot, and raw Chrome DOMSnapshot are now in the unified tool
