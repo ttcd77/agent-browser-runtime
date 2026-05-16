@@ -12,6 +12,7 @@ const bodyDir = process.env.PERSONAL_CHROME_BODY_DIR || join(process.cwd(), "tmp
 const traceDir = process.env.PERSONAL_CHROME_TRACE_DIR || join(process.cwd(), "tmp", "personal-chrome-traces");
 const harDir = process.env.PERSONAL_CHROME_HAR_DIR || join(process.cwd(), "tmp", "personal-chrome-har");
 const applicationExportDir = process.env.PERSONAL_CHROME_APPLICATION_EXPORT_DIR || join(process.cwd(), "tmp", "personal-chrome-application");
+const cpuProfileDir = process.env.PERSONAL_CHROME_CPU_PROFILE_DIR || join(process.cwd(), "tmp", "personal-chrome-cpu-profiles");
 
 const clients = new Map();
 const pending = new Map();
@@ -111,6 +112,7 @@ function normalizeCommand(toolName) {
     devtools_sources_search: "chrome_sources_search",
     devtools_performance_trace: "chrome_performance_trace",
     devtools_chrome_trace: "chrome_chrome_trace",
+    devtools_cpu_profile: "chrome_cpu_profile",
     devtools_coverage_snapshot: "chrome_coverage_snapshot",
     devtools_coverage_detail: "chrome_coverage_detail",
     devtools_token_scan: "chrome_token_scan",
@@ -184,6 +186,20 @@ function persistChromeTrace(result, params = {}) {
     ...rest,
     tracePath: path,
     traceTextBytes: Buffer.byteLength(traceText, "utf8"),
+  };
+}
+
+function persistCpuProfile(result, params = {}) {
+  if (!result?.profile) return result;
+  const path = params.path || join(cpuProfileDir, `${Date.now()}-cpu-profile.json`);
+  mkdirSync(dirname(path), { recursive: true });
+  const profileText = `${JSON.stringify(result.profile, null, 2)}\n`;
+  writeFileSync(path, profileText, "utf8");
+  const { profile, ...rest } = result;
+  return {
+    ...rest,
+    cpuProfilePath: path,
+    cpuProfileBytes: Buffer.byteLength(profileText, "utf8"),
   };
 }
 
@@ -335,6 +351,7 @@ const tools = {
   personal_chrome_sources_search: "Search parsed JavaScript sources captured through chrome.debugger.",
   personal_chrome_performance_trace: "Capture a short Performance panel-style snapshot from the user's real Chrome tab.",
   personal_chrome_chrome_trace: "Capture Chrome Tracing data from the user's real Chrome tab and write the full trace locally.",
+  personal_chrome_cpu_profile: "Capture a JavaScript CPU profile from the user's real Chrome tab and write the full profile locally.",
   personal_chrome_coverage_snapshot: "Capture short JavaScript precise coverage and CSS rule usage from the user's real Chrome tab.",
   personal_chrome_coverage_detail: "Capture Coverage-panel JavaScript/CSS range drilldown data from the user's real Chrome tab.",
   personal_chrome_token_scan: "Scan Network, storage, and cookies for token-like material. Returns full values after the operator authorizes this local browser backend.",
@@ -397,6 +414,7 @@ const tools = {
   devtools_sources_search: "Unified Agent DevTools API: search parsed JavaScript sources by literal query.",
   devtools_performance_trace: "Unified Agent DevTools API: capture navigation/resource/paint/long-task performance data.",
   devtools_chrome_trace: "Unified Agent DevTools API: capture Chrome Tracing data and return a summary plus full trace path.",
+  devtools_cpu_profile: "Unified Agent DevTools API: capture a JavaScript CPU profile and hotspot summary.",
   devtools_coverage_snapshot: "Unified Agent DevTools API: capture short JavaScript and CSS coverage data.",
   devtools_coverage_detail: "Unified Agent DevTools API: capture Coverage-panel JavaScript/CSS range drilldown data.",
   devtools_token_scan: "Unified Agent DevTools API: scan headers, payloads, storage, and cookies for token-like material.",
@@ -436,6 +454,9 @@ const httpServer = http.createServer(async (req, res) => {
       }
       if (toolName === "personal_chrome_chrome_trace" || toolName === "devtools_chrome_trace") {
         result = persistChromeTrace(result, params);
+      }
+      if (toolName === "personal_chrome_cpu_profile" || toolName === "devtools_cpu_profile") {
+        result = persistCpuProfile(result, params);
       }
       if (toolName === "personal_chrome_save_har" || toolName === "devtools_save_har") {
         result = persistHar(result, params);

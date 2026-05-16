@@ -194,6 +194,15 @@ try {
   assert(trace.tracePath, "Chrome trace path missing");
   assert(trace.traceSummary?.eventCount > 0, "Chrome trace summary missing events");
 
+  const cpuProfile = await callTool(baseUrl, "devtools_cpu_profile", {
+    profile: "default",
+    durationMs: 300,
+    maxNodes: 10,
+    triggerExpression: "(() => { let total = 0; for (let i = 0; i < 50000; i++) total += Math.sqrt(i); return total; })()",
+  });
+  assert(cpuProfile.cpuProfilePath, "CPU profile path missing");
+  assert(cpuProfile.summary?.nodeCount > 0, "CPU profile summary missing nodes");
+
   const coverage = await callTool(baseUrl, "devtools_coverage_snapshot", {
     profile: "default",
     durationMs: 500,

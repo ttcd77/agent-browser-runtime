@@ -614,6 +614,46 @@ function summarizeTraceEvents(events = [], limit = 10) {
   };
 }
 
+function summarizeCpuProfile(profile = {}, limit = 20) {
+  const nodes = Array.isArray(profile.nodes) ? profile.nodes : [];
+  const samples = Array.isArray(profile.samples) ? profile.samples : [];
+  const timeDeltas = Array.isArray(profile.timeDeltas) ? profile.timeDeltas : [];
+  const hitsByNodeId = new Map();
+  for (const sample of samples) {
+    hitsByNodeId.set(sample, (hitsByNodeId.get(sample) || 0) + 1);
+  }
+  const topNodes = nodes
+    .map((node) => {
+      const frame = node.callFrame || {};
+      const sampleHits = hitsByNodeId.get(node.id) || 0;
+      return {
+        nodeId: node.id,
+        functionName: frame.functionName || "(anonymous)",
+        url: frame.url || "",
+        lineNumber: frame.lineNumber,
+        columnNumber: frame.columnNumber,
+        hitCount: Number(node.hitCount || 0),
+        sampleHits,
+        childCount: Array.isArray(node.children) ? node.children.length : 0,
+        positionTickCount: Array.isArray(node.positionTicks) ? node.positionTicks.reduce((sum, tick) => sum + Number(tick.ticks || 0), 0) : 0,
+      };
+    })
+    .filter((node) => node.hitCount || node.sampleHits || node.positionTickCount)
+    .sort((a, b) => (b.sampleHits + b.hitCount + b.positionTickCount) - (a.sampleHits + a.hitCount + a.positionTickCount))
+    .slice(0, limit);
+  const totalTimeDeltaUs = timeDeltas.reduce((sum, value) => sum + Number(value || 0), 0);
+  return {
+    nodeCount: nodes.length,
+    sampleCount: samples.length,
+    timeDeltaCount: timeDeltas.length,
+    totalTimeDeltaUs,
+    totalTimeDeltaMs: totalTimeDeltaUs / 1000,
+    startTime: profile.startTime,
+    endTime: profile.endTime,
+    topNodes,
+  };
+}
+
 function sourceMatches(script, params = {}) {
   if (params.urlContains) {
     const needle = String(params.urlContains).toLowerCase();
@@ -5110,6 +5150,57 @@ function registerStandaloneBrowserTools(tools, cdpPort, profileRegistry, default
     },
   });
 
+  tools.set("browser_cpu_profile", {
+    name: "browser_cpu_profile",
+    description: "Capture a JavaScript CPU profile from the current profile tab and save the full DevTools profile to evidence.",
+    parameters: {
+      type: "object",
+      properties: {
+        profile: { type: "string" },
+        tabId: { type: "string" },
+        durationMs: { type: "number" },
+        maxNodes: { type: "number" },
+        triggerExpression: { type: "string" },
+      },
+    },
+    async execute(_id, params) {
+      const profile = await resolveProfile(params?.profile);
+      const durationMs = Math.min(Math.max(typeof params?.durationMs === "number" ? params.durationMs : 1000, 100), 30000);
+      const maxNodes = typeof params?.maxNodes === "number" ? params.maxNodes : 20;
+      return toolResult(await withPageClient(cdpPort, params?.tabId || profile.tabId, async (client, target) => {
+        await client.Runtime.enable().catch(() => {});
+        await client.Profiler.enable().catch(() => {});
+        await client.Profiler.start();
+        const startedAt = new Date().toISOString();
+        let triggerResult = null;
+        if (params?.triggerExpression) {
+          triggerResult = await client.Runtime.evaluate({
+            expression: String(params.triggerExpression),
+            awaitPromise: true,
+            returnByValue: true,
+          }).catch((error) => ({ error: String(error?.message || error) }));
+        }
+        await sleep(durationMs);
+        const stopped = await client.Profiler.stop();
+        const cpuProfile = stopped.profile || {};
+        const profilePath = join(profile.evidenceDir, "profiles", `${Date.now()}-cpu-profile.json`);
+        mkdirSync(dirname(profilePath), { recursive: true });
+        writeFileSync(profilePath, JSON.stringify(cpuProfile, null, 2), "utf8");
+        await profileRegistry.touchProfile(profile.name, { tabId: target.id });
+        return {
+          profile: profile.name,
+          tabId: target.id,
+          startedAt,
+          finishedAt: new Date().toISOString(),
+          durationMs,
+          triggerResult,
+          cpuProfilePath: profilePath,
+          summary: summarizeCpuProfile(cpuProfile, maxNodes),
+        };
+      }));
+    },
+  });
+
   tools.set("browser_coverage_snapshot", {
     name: "browser_coverage_snapshot",
     description: "Capture short JavaScript precise coverage and CSS rule usage for the current profile tab.",
@@ -5510,6 +5601,7 @@ function registerStandaloneBrowserTools(tools, cdpPort, profileRegistry, default
   aliasTool("devtools_sources_search", "browser_sources_search", "Unified Agent DevTools API: search parsed JavaScript sources by literal query.");
   aliasTool("devtools_performance_trace", "browser_performance_trace", "Unified Agent DevTools API: capture navigation/resource/paint/long-task performance data.");
   aliasTool("devtools_chrome_trace", "browser_chrome_trace", "Unified Agent DevTools API: capture Chrome Tracing data and return a summary plus full trace path.");
+  aliasTool("devtools_cpu_profile", "browser_cpu_profile", "Unified Agent DevTools API: capture a JavaScript CPU profile and hotspot summary.");
   aliasTool("devtools_coverage_snapshot", "browser_coverage_snapshot", "Unified Agent DevTools API: capture short JavaScript and CSS coverage data.");
   aliasTool("devtools_coverage_detail", "browser_coverage_detail", "Unified Agent DevTools API: capture Coverage-panel JavaScript/CSS range drilldown data.");
   aliasTool("devtools_token_scan", "browser_token_scan", "Unified Agent DevTools API: scan headers, payloads, storage, and cookies for token-like material.");

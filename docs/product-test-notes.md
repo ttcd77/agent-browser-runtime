@@ -110,6 +110,7 @@ It starts an isolated temporary managed browser and verifies:
 - JS heap, DOM counters, and Performance Monitor metrics,
 - Chrome Tracing stream capture and trace file output,
 - Chrome Tracing summary extraction,
+- JavaScript CPU profile capture, saved full profile, and hotspot summary,
 - short JavaScript/CSS coverage snapshot and range drilldown,
 - Sources-panel literal source search, heuristic pretty-print, and source map metadata,
 - global literal search across Network, Sources, and Application evidence,

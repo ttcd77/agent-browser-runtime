@@ -246,6 +246,8 @@ async function executeCommand(command, params) {
       return await chromePerformanceTrace(params);
     case "chrome_chrome_trace":
       return await chromeChromeTrace(params);
+    case "chrome_cpu_profile":
+      return await chromeCpuProfile(params);
     case "chrome_coverage_snapshot":
       return await chromeCoverageSnapshot(params);
     case "chrome_coverage_detail":
@@ -946,6 +948,46 @@ function summarizeTraceEvents(events = [], limit = 10) {
     screenshots: screenshots.slice(0, limit),
     networkEventCount: networkLike.length,
     networkEvents: networkLike.slice(0, limit),
+  };
+}
+
+function summarizeCpuProfile(profile = {}, limit = 20) {
+  const nodes = Array.isArray(profile.nodes) ? profile.nodes : [];
+  const samples = Array.isArray(profile.samples) ? profile.samples : [];
+  const timeDeltas = Array.isArray(profile.timeDeltas) ? profile.timeDeltas : [];
+  const hitsByNodeId = new Map();
+  for (const sample of samples) {
+    hitsByNodeId.set(sample, (hitsByNodeId.get(sample) || 0) + 1);
+  }
+  const topNodes = nodes
+    .map((node) => {
+      const frame = node.callFrame || {};
+      const sampleHits = hitsByNodeId.get(node.id) || 0;
+      return {
+        nodeId: node.id,
+        functionName: frame.functionName || "(anonymous)",
+        url: frame.url || "",
+        lineNumber: frame.lineNumber,
+        columnNumber: frame.columnNumber,
+        hitCount: Number(node.hitCount || 0),
+        sampleHits,
+        childCount: Array.isArray(node.children) ? node.children.length : 0,
+        positionTickCount: Array.isArray(node.positionTicks) ? node.positionTicks.reduce((sum, tick) => sum + Number(tick.ticks || 0), 0) : 0,
+      };
+    })
+    .filter((node) => node.hitCount || node.sampleHits || node.positionTickCount)
+    .sort((a, b) => (b.sampleHits + b.hitCount + b.positionTickCount) - (a.sampleHits + a.hitCount + a.positionTickCount))
+    .slice(0, limit);
+  const totalTimeDeltaUs = timeDeltas.reduce((sum, value) => sum + Number(value || 0), 0);
+  return {
+    nodeCount: nodes.length,
+    sampleCount: samples.length,
+    timeDeltaCount: timeDeltas.length,
+    totalTimeDeltaUs,
+    totalTimeDeltaMs: totalTimeDeltaUs / 1000,
+    startTime: profile.startTime,
+    endTime: profile.endTime,
+    topNodes,
   };
 }
 
@@ -3881,6 +3923,36 @@ async function chromeChromeTrace(params) {
     traceEvents: events.slice(0, maxEvents),
     truncated: events.length > maxEvents,
     parseError,
+  };
+}
+
+async function chromeCpuProfile(params) {
+  const { tab, target } = await ensureDevtoolsAttached(params);
+  const durationMs = Math.min(Math.max(Number(params.durationMs || 1000), 100), 30000);
+  const maxNodes = Number(params.maxNodes || 20);
+  await chromeDebuggerSendCommand(target, "Runtime.enable").catch(() => {});
+  await chromeDebuggerSendCommand(target, "Profiler.enable").catch(() => {});
+  await chromeDebuggerSendCommand(target, "Profiler.start");
+  const startedAt = new Date().toISOString();
+  let triggerResult = null;
+  if (params.triggerExpression) {
+    triggerResult = await chromeDebuggerSendCommand(target, "Runtime.evaluate", {
+      expression: String(params.triggerExpression),
+      awaitPromise: true,
+      returnByValue: true,
+    }).catch((error) => ({ error: String(error?.message || error) }));
+  }
+  await delay(durationMs);
+  const stopped = await chromeDebuggerSendCommand(target, "Profiler.stop");
+  const cpuProfile = stopped.profile || {};
+  return {
+    tab: pickTab(tab),
+    startedAt,
+    finishedAt: new Date().toISOString(),
+    durationMs,
+    triggerResult,
+    profile: cpuProfile,
+    summary: summarizeCpuProfile(cpuProfile, maxNodes),
   };
 }
 

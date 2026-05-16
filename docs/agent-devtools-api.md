@@ -118,6 +118,7 @@ DevTools/F12 data layer:
 - `devtools_sources_search`
 - `devtools_performance_trace`
 - `devtools_chrome_trace`
+- `devtools_cpu_profile`
 - `devtools_coverage_snapshot`
 - `devtools_coverage_detail`
 - `devtools_token_scan`
