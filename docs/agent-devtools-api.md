@@ -124,6 +124,7 @@ DevTools/F12 data layer:
 - `devtools_storage_origin_summary`
 - `devtools_cookie_summary`
 - `devtools_service_worker_summary`
+- `devtools_service_worker_detail`
 - `devtools_application_export`
 - `devtools_indexeddb_read`
 - `devtools_cache_entry_get`
@@ -174,7 +175,7 @@ Implemented:
 - Security: page secure-context summary and TLS/certificate details collected from Network security metadata.
 - Accessibility: AX tree nodes, roles, names, values, descriptions, properties, child ids, and backend DOM node ids where Chrome exposes them.
 - Frames: frame tree and recent frame lifecycle events.
-- Storage: localStorage, sessionStorage, document-visible cookies, backend cookie API/CDP cookies, cookie security summaries, origin/storage-key/quota evidence, cookie partition metadata where Chrome exposes it, IndexedDB database/object-store/index/sample records, IndexedDB paged record reads, Cache Storage request/response metadata and body reads, Service Worker registrations, Service Worker target summary, CacheStorage summary, and Application panel JSON export.
+- Storage: localStorage, sessionStorage, document-visible cookies, backend cookie API/CDP cookies, cookie security summaries, origin/storage-key/quota evidence, cookie partition metadata where Chrome exposes it, IndexedDB database/object-store/index/sample records, IndexedDB paged record reads, Cache Storage request/response metadata and body reads, Service Worker registrations, Service Worker script/status detail, Service Worker target summary, CacheStorage summary/detail, and Application panel JSON export.
 - Token scan: full-value scan across headers, payloads, storage, and cookies in authorized browser mode.
 
 Not fully implemented yet:
@@ -182,7 +183,7 @@ Not fully implemented yet:
 - Fully lossless HAR export with exact timings and all bodies.
 - Sources panel parity beyond raw/searchable script source: breakpoints, scopes, live debugging, and AST-lossless formatting. Heuristic pretty-print and source map metadata are already exposed.
 - Performance panel parity beyond current tracing: trace interpretation, screenshots, layout/paint flame chart, and CPU profiles.
-- Application panel deep browsing beyond current reads: deeper Service Worker script/status detail and cookie partition metadata.
+- Application panel deep browsing beyond current reads: deeper cookie partition metadata where exposed.
 - Network replay edge cases: exact forbidden header behavior, raw socket-level replay, multipart helpers, and replay UI.
 - Browser UI/system dialogs and Chrome internal pages.
 - Complete JavaScript heap/closure inspection. Tokens that exist only in live JS memory and never enter storage/network are not generally visible unless the debugger pauses in the right execution context.

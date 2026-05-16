@@ -3503,6 +3503,155 @@ function registerStandaloneBrowserTools(tools, cdpPort, profileRegistry, default
     },
   });
 
+  tools.set("browser_service_worker_detail", {
+    name: "browser_service_worker_detail",
+    description: "Return deeper Application panel Service Worker evidence: registrations, worker scripts, CacheStorage entries, and worker debugger targets.",
+    parameters: {
+      type: "object",
+      properties: {
+        profile: { type: "string" },
+        tabId: { type: "string" },
+        includeScripts: { type: "boolean" },
+        includeCacheEntries: { type: "boolean" },
+        maxScriptChars: { type: "number" },
+        maxCacheEntries: { type: "number" },
+      },
+    },
+    async execute(_id, params) {
+      const profile = await resolveProfile(params?.profile);
+      const includeScripts = params?.includeScripts !== false;
+      const includeCacheEntries = params?.includeCacheEntries !== false;
+      const maxScriptChars = typeof params?.maxScriptChars === "number" ? params.maxScriptChars : 120000;
+      const maxCacheEntries = typeof params?.maxCacheEntries === "number" ? params.maxCacheEntries : 50;
+      return toolResult(await withPageClient(cdpPort, params?.tabId || profile.tabId, async (client, target) => {
+        const pageResult = await client.Runtime.evaluate({
+          expression: `(async () => {
+            const limits = ${JSON.stringify({ includeScripts, includeCacheEntries, maxScriptChars, maxCacheEntries })};
+            const textPreview = (text) => ({
+              text: String(text || "").slice(0, limits.maxScriptChars),
+              bytes: new TextEncoder().encode(String(text || "")).length,
+              truncated: String(text || "").length > limits.maxScriptChars,
+            });
+            async function fetchText(url) {
+              if (!limits.includeScripts || !url) return null;
+              try {
+                const response = await fetch(url, { cache: "no-store", credentials: "include" });
+                const text = await response.text();
+                return {
+                  url,
+                  ok: response.ok,
+                  status: response.status,
+                  statusText: response.statusText,
+                  headers: Array.from(response.headers.entries()).map(([name, value]) => ({ name, value })),
+                  ...textPreview(text),
+                };
+              } catch (error) {
+                return { url, error: String(error?.message || error) };
+              }
+            }
+            const result = {
+              url: location.href,
+              origin: location.origin,
+              secureContext: isSecureContext,
+              controller: navigator.serviceWorker?.controller
+                ? { scriptURL: navigator.serviceWorker.controller.scriptURL, state: navigator.serviceWorker.controller.state }
+                : null,
+              registrations: [],
+              scripts: [],
+              cacheStorage: { supported: Boolean(caches), names: [], caches: [] },
+            };
+            try {
+              const registrations = navigator.serviceWorker?.getRegistrations ? await navigator.serviceWorker.getRegistrations() : [];
+              const scriptUrls = new Set();
+              result.registrations = registrations.map((registration) => {
+                const states = {};
+                for (const key of ["active", "waiting", "installing"]) {
+                  const worker = registration[key];
+                  states[key] = worker ? { scriptURL: worker.scriptURL, state: worker.state } : null;
+                  if (worker?.scriptURL) scriptUrls.add(worker.scriptURL);
+                }
+                return {
+                  scope: registration.scope,
+                  updateViaCache: registration.updateViaCache,
+                  ...states,
+                };
+              });
+              result.scripts = await Promise.all(Array.from(scriptUrls).map(fetchText));
+            } catch (error) {
+              result.registrationError = String(error?.message || error);
+            }
+            try {
+              if (caches?.keys) {
+                const names = await caches.keys();
+                result.cacheStorage.names = names;
+                result.cacheStorage.caches = await Promise.all(names.map(async (name) => {
+                  const cache = await caches.open(name);
+                  const requests = await cache.keys();
+                  const entries = [];
+                  if (limits.includeCacheEntries) {
+                    for (const request of requests.slice(0, limits.maxCacheEntries)) {
+                      const response = await cache.match(request).catch(() => null);
+                      entries.push({
+                        url: request.url,
+                        method: request.method,
+                        mode: request.mode,
+                        credentials: request.credentials,
+                        status: response?.status ?? null,
+                        statusText: response?.statusText ?? null,
+                        type: response?.type ?? null,
+                        headers: response ? Array.from(response.headers.entries()).map(([header, value]) => ({ name: header, value })) : [],
+                        bodyUsed: response?.bodyUsed ?? null,
+                      });
+                    }
+                  }
+                  return {
+                    name,
+                    entryCount: requests.length,
+                    entries,
+                    truncated: requests.length > limits.maxCacheEntries,
+                  };
+                }));
+              }
+            } catch (error) {
+              result.cacheStorage.error = String(error?.message || error);
+            }
+            return result;
+          })()`,
+          returnByValue: true,
+          awaitPromise: true,
+        });
+        const page = pageResult.result?.value || {};
+        let cdpTargets = [];
+        try {
+          const targets = await cdpJson(cdpPort, "/json/list");
+          cdpTargets = targets
+            .filter((entry) => ["service_worker", "worker", "shared_worker"].includes(entry.type))
+            .map((entry) => ({
+              id: entry.id,
+              type: entry.type,
+              title: entry.title,
+              url: entry.url,
+              attached: Boolean(entry.webSocketDebuggerUrl),
+              devtoolsFrontendUrl: entry.devtoolsFrontendUrl,
+            }));
+        } catch (error) {
+          cdpTargets = [{ error: String(error?.message || error) }];
+        }
+        await profileRegistry.touchProfile(profile.name, { tabId: target.id });
+        return {
+          profile: profile.name,
+          tabId: target.id,
+          page,
+          registrationCount: page.registrations?.length || 0,
+          scriptCount: page.scripts?.filter(Boolean).length || 0,
+          cacheCount: page.cacheStorage?.names?.length || 0,
+          cdpTargets,
+          cdpTargetCount: cdpTargets.filter((entry) => !entry.error).length,
+        };
+      }));
+    },
+  });
+
   tools.set("browser_application_export", {
     name: "browser_application_export",
     description: "Export Application panel data for the current profile tab to a JSON file: storage, cookies, IndexedDB, CacheStorage, and Service Worker summary.",
@@ -5757,6 +5906,7 @@ function registerStandaloneBrowserTools(tools, cdpPort, profileRegistry, default
   aliasTool("devtools_storage_origin_summary", "browser_storage_origin_summary", "Unified Agent DevTools API: read Application-panel origin, storage key, quota, and cookie partition evidence.");
   aliasTool("devtools_cookie_summary", "browser_cookie_summary", "Unified Agent DevTools API: summarize cookie security attributes and risk hints.");
   aliasTool("devtools_service_worker_summary", "browser_service_worker_summary", "Unified Agent DevTools API: summarize Service Worker registrations and CacheStorage state.");
+  aliasTool("devtools_service_worker_detail", "browser_service_worker_detail", "Unified Agent DevTools API: inspect Service Worker registrations, scripts, CacheStorage entries, and worker targets.");
   aliasTool("devtools_application_export", "browser_application_export", "Unified Agent DevTools API: export Application panel data to a JSON file.");
   aliasTool("devtools_indexeddb_read", "browser_indexeddb_read", "Unified Agent DevTools API: read IndexedDB records by database and object store.");
   aliasTool("devtools_cache_entry_get", "browser_cache_entry_get", "Unified Agent DevTools API: read a CacheStorage response by cache name and URL.");

@@ -17,9 +17,9 @@
 - Network panel: fuller HAR timings, initiator stack visualization, raw
   socket-level replay edge cases, and replay UI. HAR object export and HAR file
   save are now in the unified tool contract.
-- Application panel: Service Worker and CacheStorage summaries plus Application
-  JSON export are now in the unified tool contract. Next work is deeper Service
-  Worker target inspection and cookie partition metadata where exposed.
+- Application panel: Service Worker summaries/detail, CacheStorage summaries/detail,
+  and Application JSON export are now in the unified tool contract. Next work is
+  deeper cookie partition metadata where exposed.
 - Elements panel: iframe-aware element targeting and deeper pseudo-state/style
   inspection. Accessibility snapshot and raw Chrome DOMSnapshot are now in the
   unified tool contract.
@@ -30,10 +30,9 @@
 - Security panel: certificate/security-state summaries from response
   `securityDetails` and CDP security events are now in the unified tool
   contract; next work is UI-level explanation and edge-case coverage.
-- Performance panel: Chrome Tracing stream capture and first-pass trace
-  summaries are now in the unified tool contract. Next work is deeper trace
-  interpretation, screenshots, layout/paint flame chart summaries, and CPU
-  profiles.
+- Performance panel: Chrome Tracing stream capture, first-pass trace summaries,
+  and CPU profiles are now in the unified tool contract. Next work is deeper
+  trace interpretation, screenshots, and layout/paint flame chart summaries.
 
 ## 0.3: Open-Source Polish
 

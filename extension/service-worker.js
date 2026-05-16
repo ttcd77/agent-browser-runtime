@@ -204,6 +204,8 @@ async function executeCommand(command, params) {
       return await chromeCookieSummary(params);
     case "chrome_service_worker_summary":
       return await chromeServiceWorkerSummary(params);
+    case "chrome_service_worker_detail":
+      return await chromeServiceWorkerDetail(params);
     case "chrome_application_export":
       return await chromeApplicationExport(params);
     case "chrome_indexeddb_read":
@@ -2222,6 +2224,130 @@ async function chromeServiceWorkerSummary(params) {
     tab: pickTab(tab),
     page,
     registrationCount: page.registrations?.length || 0,
+    cacheCount: page.cacheStorage?.names?.length || 0,
+    debuggerTargets,
+    debuggerTargetCount: debuggerTargets.filter((target) => !target.error).length,
+  };
+}
+
+async function chromeServiceWorkerDetail(params) {
+  const tab = await getTargetTab(params);
+  const includeScripts = params.includeScripts !== false;
+  const includeCacheEntries = params.includeCacheEntries !== false;
+  const maxScriptChars = Number(params.maxScriptChars || 120000);
+  const maxCacheEntries = Number(params.maxCacheEntries || 50);
+  const page = await runInTab(tab.id, async ({ includeScripts, includeCacheEntries, maxScriptChars, maxCacheEntries }) => {
+    const textPreview = (text) => ({
+      text: String(text || "").slice(0, maxScriptChars),
+      bytes: new TextEncoder().encode(String(text || "")).length,
+      truncated: String(text || "").length > maxScriptChars,
+    });
+    async function fetchText(url) {
+      if (!includeScripts || !url) return null;
+      try {
+        const response = await fetch(url, { cache: "no-store", credentials: "include" });
+        const text = await response.text();
+        return {
+          url,
+          ok: response.ok,
+          status: response.status,
+          statusText: response.statusText,
+          headers: Array.from(response.headers.entries()).map(([name, value]) => ({ name, value })),
+          ...textPreview(text),
+        };
+      } catch (error) {
+        return { url, error: String(error?.message || error) };
+      }
+    }
+    const result = {
+      url: location.href,
+      origin: location.origin,
+      secureContext: isSecureContext,
+      controller: navigator.serviceWorker?.controller
+        ? { scriptURL: navigator.serviceWorker.controller.scriptURL, state: navigator.serviceWorker.controller.state }
+        : null,
+      registrations: [],
+      scripts: [],
+      cacheStorage: { supported: Boolean(caches), names: [], caches: [] },
+    };
+    try {
+      const registrations = navigator.serviceWorker?.getRegistrations ? await navigator.serviceWorker.getRegistrations() : [];
+      const scriptUrls = new Set();
+      result.registrations = registrations.map((registration) => {
+        const states = {};
+        for (const key of ["active", "waiting", "installing"]) {
+          const worker = registration[key];
+          states[key] = worker ? { scriptURL: worker.scriptURL, state: worker.state } : null;
+          if (worker?.scriptURL) scriptUrls.add(worker.scriptURL);
+        }
+        return {
+          scope: registration.scope,
+          updateViaCache: registration.updateViaCache,
+          ...states,
+        };
+      });
+      result.scripts = await Promise.all(Array.from(scriptUrls).map(fetchText));
+    } catch (error) {
+      result.registrationError = String(error?.message || error);
+    }
+    try {
+      if (caches?.keys) {
+        const names = await caches.keys();
+        result.cacheStorage.names = names;
+        result.cacheStorage.caches = await Promise.all(names.map(async (name) => {
+          const cache = await caches.open(name);
+          const requests = await cache.keys();
+          const entries = [];
+          if (includeCacheEntries) {
+            for (const request of requests.slice(0, maxCacheEntries)) {
+              const response = await cache.match(request).catch(() => null);
+              entries.push({
+                url: request.url,
+                method: request.method,
+                mode: request.mode,
+                credentials: request.credentials,
+                status: response?.status ?? null,
+                statusText: response?.statusText ?? null,
+                type: response?.type ?? null,
+                headers: response ? Array.from(response.headers.entries()).map(([header, value]) => ({ name: header, value })) : [],
+                bodyUsed: response?.bodyUsed ?? null,
+              });
+            }
+          }
+          return {
+            name,
+            entryCount: requests.length,
+            entries,
+            truncated: requests.length > maxCacheEntries,
+          };
+        }));
+      }
+    } catch (error) {
+      result.cacheStorage.error = String(error?.message || error);
+    }
+    return result;
+  }, [{ includeScripts, includeCacheEntries, maxScriptChars, maxCacheEntries }]);
+  let debuggerTargets = [];
+  try {
+    const targets = await chrome.debugger.getTargets();
+    debuggerTargets = targets
+      .filter((target) => ["service_worker", "worker", "shared_worker"].includes(target.type))
+      .map((target) => ({
+        id: target.id,
+        type: target.type,
+        title: target.title,
+        url: target.url,
+        tabId: target.tabId,
+        attached: target.attached,
+      }));
+  } catch (error) {
+    debuggerTargets = [{ error: String(error?.message || error) }];
+  }
+  return {
+    tab: pickTab(tab),
+    page,
+    registrationCount: page.registrations?.length || 0,
+    scriptCount: page.scripts?.filter(Boolean).length || 0,
     cacheCount: page.cacheStorage?.names?.length || 0,
     debuggerTargets,
     debuggerTargetCount: debuggerTargets.filter((target) => !target.error).length,

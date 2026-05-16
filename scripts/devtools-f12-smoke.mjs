@@ -372,6 +372,15 @@ try {
   assert(serviceWorker.page?.secureContext === true, "localhost service worker smoke should run in a secure context");
   assert(serviceWorker.registrationCount >= 1, `service worker registration missing: ${JSON.stringify(serviceWorker)}`);
   assert(serviceWorker.cacheCount >= 1, `service worker cache missing: ${JSON.stringify(serviceWorker)}`);
+  const serviceWorkerDetail = await callTool(baseUrl, "devtools_service_worker_detail", {
+    profile: "default",
+    maxScriptChars: 10000,
+    maxCacheEntries: 20,
+  });
+  assert(serviceWorkerDetail.registrationCount >= 1, `service worker detail registration missing: ${JSON.stringify(serviceWorkerDetail)}`);
+  assert(serviceWorkerDetail.scriptCount >= 1, `service worker detail script missing: ${JSON.stringify(serviceWorkerDetail)}`);
+  assert(JSON.stringify(serviceWorkerDetail.page?.scripts || []).includes("install"), "service worker detail script content did not include expected install handler");
+  assert(serviceWorkerDetail.page?.cacheStorage?.caches?.some((cache) => cache.entryCount >= 1), "service worker detail cache entries missing");
 
   const applicationExport = await callTool(baseUrl, "devtools_application_export", {
     profile: "default",
@@ -456,6 +465,7 @@ try {
   console.log(`- global search matches: ${globalSearch.matchCount}`);
   console.log(`- evidence bundle: ${evidenceBundle.bundlePath}`);
   console.log(`- service worker registrations/caches: ${serviceWorker.registrationCount}/${serviceWorker.cacheCount}`);
+  console.log(`- service worker detail scripts/caches: ${serviceWorkerDetail.scriptCount}/${serviceWorkerDetail.cacheCount}`);
   console.log(`- application export dbs/caches/bytes: ${applicationExport.indexedDbDatabaseCount}/${applicationExport.cacheCount}/${applicationExport.exportBytes}`);
   console.log(`- cookie summary count/script-readable: ${cookieSummary.summary.cookieCount}/${cookieSummary.summary.scriptReadableCount}`);
   console.log(`- storage origin frames/cookies: ${storageOrigin.frames.length}/${storageOrigin.cookieCount}`);

@@ -103,6 +103,7 @@ Unified Agent DevTools tools:
 - `devtools_storage_origin_summary`
 - `devtools_cookie_summary`
 - `devtools_service_worker_summary`
+- `devtools_service_worker_detail`
 - `devtools_application_export`
 - `devtools_indexeddb_read`
 - `devtools_cache_entry_get`
@@ -169,6 +170,7 @@ Backend-specific aliases:
 - `personal_chrome_storage_origin_summary`
 - `personal_chrome_cookie_summary`
 - `personal_chrome_service_worker_summary`
+- `personal_chrome_service_worker_detail`
 - `personal_chrome_application_export`
 - `personal_chrome_indexeddb_read`
 - `personal_chrome_cache_entry_get`
