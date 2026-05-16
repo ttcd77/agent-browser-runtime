@@ -2909,9 +2909,9 @@ async function chromeDomSearch(params) {
   await chromeDebuggerSendCommand(target, "DOM.discardSearchResults", { searchId: search.searchId }).catch(() => {});
   const validResultCount = results.filter((entry) => entry.outerHTML || entry.nodeName || entry.localName).length;
   let fallback = null;
-  if (validResultCount < Math.min(count, maxResults)) {
+  if (params.includeFrames !== false || validResultCount < Math.min(count, maxResults)) {
     const fallbackResult = await chromeDebuggerSendCommand(target, "Runtime.evaluate", {
-      expression: `(${domSearchFallbackPageFunction.toString()})(${JSON.stringify({ query, maxResults, maxOuterHTMLChars })})`,
+      expression: `(${domSearchFallbackPageFunction.toString()})(${JSON.stringify({ query, maxResults, maxOuterHTMLChars, includeFrames: params.includeFrames !== false })})`,
       awaitPromise: true,
       returnByValue: true,
     }).catch((error) => ({ error: String(error?.message || error) }));
@@ -2926,6 +2926,7 @@ async function chromeDomSearch(params) {
     tab: pickTab(tab),
     query,
     includeUserAgentShadowDOM: Boolean(params.includeUserAgentShadowDOM),
+    includeFrames: params.includeFrames !== false,
     resultCount: count,
     returnedCount: merged.length,
     truncated: count > merged.length,
@@ -3497,14 +3498,17 @@ function domSearchFallbackPageFunction(options) {
   const query = String(options.query || "");
   const maxResults = Math.max(0, Number(options.maxResults || 20));
   const maxOuterHTMLChars = Math.max(0, Number(options.maxOuterHTMLChars || 1200));
+  const includeFrames = options.includeFrames !== false;
   const seen = new Set();
   const results = [];
-  function push(element, source) {
-    if (!element || !(element instanceof Element) || seen.has(element) || results.length >= maxResults) return;
+  const frameErrors = [];
+  function push(element, source, frame = null) {
+    if (!element || element.nodeType !== 1 || seen.has(element) || results.length >= maxResults) return;
     seen.add(element);
     const outerHTML = String(element.outerHTML || "");
     results.push({
       source,
+      frame,
       nodeType: element.nodeType,
       nodeName: element.nodeName,
       localName: element.localName,
@@ -3514,34 +3518,70 @@ function domSearchFallbackPageFunction(options) {
       outerHTMLTruncated: outerHTML.length > maxOuterHTMLChars,
     });
   }
-  try {
-    document.querySelectorAll(query).forEach((element) => push(element, "querySelectorAll"));
-  } catch {
-    // Not a CSS selector; text and XPath passes below can still match.
-  }
-  try {
-    const xpath = document.evaluate(query, document, null, XPathResult.ORDERED_NODE_ITERATOR_TYPE, null);
-    let node = xpath.iterateNext();
-    while (node && results.length < maxResults) {
-      push(node.nodeType === Node.ELEMENT_NODE ? node : node.parentElement, "xpath");
-      node = xpath.iterateNext();
-    }
-  } catch {
-    // Not an XPath expression.
-  }
-  const needle = query.toLowerCase();
-  if (needle) {
-    const walker = document.createTreeWalker(document.documentElement, NodeFilter.SHOW_ELEMENT);
-    let node = walker.currentNode;
-    while (node && results.length < maxResults) {
-      const haystack = `${node.id || ""} ${node.className || ""} ${node.getAttribute?.("name") || ""} ${node.getAttribute?.("aria-label") || ""} ${node.textContent || ""} ${node.outerHTML || ""}`.toLowerCase();
-      if (haystack.includes(needle)) push(node, "text");
-      node = walker.nextNode();
+  function frameInfo(win, path) {
+    try {
+      return {
+        path,
+        url: win.location.href,
+        origin: win.location.origin,
+        title: win.document?.title || "",
+      };
+    } catch (error) {
+      return { path, inaccessible: true, error: String(error?.message || error) };
     }
   }
+  function searchDocument(doc, frame) {
+    if (!doc?.documentElement || results.length >= maxResults) return;
+    try {
+      doc.querySelectorAll(query).forEach((element) => push(element, "querySelectorAll", frame));
+    } catch {
+      // Not a CSS selector; text and XPath passes below can still match.
+    }
+    try {
+      const xpath = doc.evaluate(query, doc, null, XPathResult.ORDERED_NODE_ITERATOR_TYPE, null);
+      let node = xpath.iterateNext();
+      while (node && results.length < maxResults) {
+        push(node.nodeType === Node.ELEMENT_NODE ? node : node.parentElement, "xpath", frame);
+        node = xpath.iterateNext();
+      }
+    } catch {
+      // Not an XPath expression.
+    }
+    const needle = query.toLowerCase();
+    if (needle) {
+      const walker = doc.createTreeWalker(doc.documentElement, NodeFilter.SHOW_ELEMENT);
+      let node = walker.currentNode;
+      while (node && results.length < maxResults) {
+        const haystack = `${node.id || ""} ${node.className || ""} ${node.getAttribute?.("name") || ""} ${node.getAttribute?.("aria-label") || ""} ${node.textContent || ""} ${node.outerHTML || ""}`.toLowerCase();
+        if (haystack.includes(needle)) push(node, "text", frame);
+        node = walker.nextNode();
+      }
+    }
+    if (includeFrames) {
+      const frames = Array.from(doc.querySelectorAll("iframe,frame"));
+      frames.forEach((frameElement, index) => {
+        if (results.length >= maxResults) return;
+        try {
+          const childWindow = frameElement.contentWindow;
+          const childDocument = frameElement.contentDocument || childWindow?.document;
+          if (!childDocument) return;
+          searchDocument(childDocument, frameInfo(childWindow, `${frame?.path || "top"} > frame[${index}]`));
+        } catch (error) {
+          frameErrors.push({
+            path: `${frame?.path || "top"} > frame[${index}]`,
+            src: frameElement.getAttribute("src") || frameElement.getAttribute("srcdoc") || "",
+            error: String(error?.message || error),
+          });
+        }
+      });
+    }
+  }
+  searchDocument(document, frameInfo(window, "top"));
   return {
     query,
     returnedCount: results.length,
+    includeFrames,
+    frameErrors,
     results,
   };
 }

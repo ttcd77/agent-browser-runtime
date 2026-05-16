@@ -248,11 +248,17 @@ try {
         document.getElementById("agent-listener-button").addEventListener("click", function agentListenerSmoke() {
           window.AGENT_EVENT_LISTENER_MARKER = true;
         });
+        const frame = document.getElementById("agent-frame");
+        const marker = "FRAME_" + "SECRET_MARKER";
+        frame.contentDocument.open();
+        frame.contentDocument.write("<!doctype html><title>frame smoke</title><h2 id='frame-marker'>" + marker + "</h2><button aria-label='Frame Action'>Inside Frame</button>");
+        frame.contentDocument.close();
       });
       //# sourceMappingURL=data:application/json;base64,${sourceMap}
     </script>
     <h1>Source Search Smoke</h1>
-    <button id="agent-listener-button">Listener Smoke</button>`)}`;
+    <button id="agent-listener-button">Listener Smoke</button>
+    <iframe id="agent-frame"></iframe>`)}`;
   await callTool(baseUrl, "browser_navigate", {
     profile: "default",
     url: sourcePage,
@@ -265,6 +271,13 @@ try {
     maxMatches: 5,
   });
   assert(sourceSearch.matchCount > 0, "source search did not find the marker script");
+  const frameSearch = await callTool(baseUrl, "devtools_dom_search", {
+    profile: "default",
+    query: "FRAME_SECRET_MARKER",
+    includeFrames: true,
+    maxResults: 10,
+  });
+  assert(frameSearch.results?.some((entry) => entry.frame?.path?.includes("frame")), `iframe DOM search did not report frame context: ${JSON.stringify(frameSearch)}`);
   const prettySource = await callTool(baseUrl, "devtools_source_pretty_print", {
     profile: "default",
     query: sourceMarker,
