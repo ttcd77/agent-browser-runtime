@@ -1,0 +1,10 @@
+{
+  "id": "browser-profile-pool",
+  "name": "browser-profile-pool",
+  "description": "浏览器 profile 注册 + 池租用工具(2 个):register_browser_profile / acquire_browser_profile。",
+  "configSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {}
+  }
+}

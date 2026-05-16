@@ -1,0 +1,33 @@
+{
+  "name": "agent-browser-runtime",
+  "version": "0.1.0",
+  "description": "A local CDP browser runtime for AI agents with profile-scoped browser actions, screenshots, and traffic capture.",
+  "type": "module",
+  "license": "MIT",
+  "private": false,
+  "scripts": {
+    "build": "tsc && node scripts/copy-plugin-manifests.mjs",
+    "test": "vitest run",
+    "test:schemas": "vitest run src/plugins/cdp-traffic-capture/schemas.test.ts",
+    "smoke:product": "npm run build && node scripts/product-smoke.mjs",
+    "smoke:browser": "npm run build && node scripts/live-browser-smoke.mjs",
+    "agent:server": "npm run build && node scripts/agent-cdp-server.mjs",
+    "personal:browser": "node scripts/launch-personal-browser.mjs",
+    "personal:chrome": "node scripts/personal-chrome-bridge.mjs",
+    "contract:devtools": "node scripts/devtools-contract-check.mjs",
+    "smoke:server": "npm run build && node scripts/agent-server-smoke.mjs",
+    "smoke:f12": "npm run build && node scripts/devtools-f12-smoke.mjs",
+    "check": "npm run build && npm run test"
+  },
+  "dependencies": {
+    "chrome-remote-interface": "^0.34.0",
+    "ws": "^8.20.1",
+    "zod": "^3.25.76",
+    "zod-to-json-schema": "^3.25.2"
+  },
+  "devDependencies": {
+    "@types/node": "^22.13.1",
+    "typescript": "^5.7.3",
+    "vitest": "^4.1.5"
+  }
+}

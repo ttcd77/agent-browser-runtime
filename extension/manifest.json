@@ -1,0 +1,26 @@
+{
+  "manifest_version": 3,
+  "name": "Agent Browser Runtime Bridge",
+  "version": "0.1.0",
+  "description": "Expose the user's real Chrome tabs to a local Agent Browser Runtime bridge.",
+  "permissions": [
+    "activeTab",
+    "tabs",
+    "scripting",
+    "debugger",
+    "cookies",
+    "storage"
+  ],
+  "host_permissions": [
+    "<all_urls>",
+    "http://127.0.0.1/*",
+    "ws://127.0.0.1/*"
+  ],
+  "background": {
+    "service_worker": "service-worker.js",
+    "type": "module"
+  },
+  "action": {
+    "default_title": "Agent Browser Runtime"
+  }
+}

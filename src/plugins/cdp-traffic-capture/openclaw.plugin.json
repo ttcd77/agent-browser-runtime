@@ -1,0 +1,8 @@
+{
+  "id": "cdp-traffic-capture",
+  "name": "cdp-traffic-capture",
+  "configSchema": {
+    "type": "object",
+    "additionalProperties": false
+  }
+}

@@ -1,0 +1,192 @@
+# Product Test Notes
+
+## User Problem
+
+AI security agents need more than screenshots. They need a browser workbench that
+can answer questions such as:
+
+- What request did this button actually send?
+- Did the browser receive a redirect, WebSocket frame, security warning, or
+  hidden script?
+- Which cookies are present, including HttpOnly cookies?
+- Can two test identities, such as buyer and seller, stay isolated?
+
+## Plain Language Vocabulary
+
+| Technical term | Product term | Meaning |
+|---|---|---|
+| Profile | Agent operating space | A named role or target space with one tab and one evidence directory. |
+| Lease | Reserve identity | Temporarily reserve a browser identity so two agents do not collide. |
+| CDP | Browser evidence pipe | Chrome's low-level debugging interface for network, script, cookie, and page events. |
+| OpenClaw plugin | Agent tool pack | Tools exposed to an AI agent inside OpenClaw. |
+
+## Current Product Smoke
+
+Run:
+
+```bash
+npm run smoke:product
+```
+
+What this proves:
+
+- the compiled plugin entrypoints import successfully,
+- browser identity reservation does not need the old Hub service,
+- a busy identity is skipped,
+- expired identities return to the pool.
+
+What this does not prove yet:
+
+- a live Chrome or Edge instance is attached,
+- OpenClaw has loaded the plugin in a real gateway,
+- captured traffic can be queried end to end.
+
+## Standalone Agent Server Smoke
+
+Run:
+
+```bash
+npm run smoke:server
+```
+
+It proves the framework-neutral path:
+
+1. start a local browser with CDP,
+2. start the local HTTP tool server,
+3. verify capture is off by default,
+4. explicitly start capture for the default and named profiles,
+5. create a profile,
+6. navigate, click, type, evaluate JavaScript, snapshot, and screenshot,
+7. verify profile-local traffic can be queried and fetched,
+8. verify `/panel` and `/panel-data` expose public-facing dashboard data without
+   tab ids,
+9. stop capture cleanly.
+
+## Unified DevTools Contract Smoke
+
+Run:
+
+```bash
+npm run contract:devtools
+```
+
+It proves the public `devtools_*` tool names stay aligned across Managed Browser
+and Personal Chrome when the Personal bridge is running. If Personal Chrome is
+not running, it still validates that Managed Browser exposes the contract.
+
+Current verified contract:
+
+- Managed Browser: 53 `devtools_*` tools.
+- Personal Chrome: 53 `devtools_*` tools.
+- Drift: none.
+
+The contract smoke uses an isolated temporary browser profile so it does not
+collide with a long-running browser on port 9222.
+
+## Managed F12 Smoke
+
+Run:
+
+```bash
+npm run smoke:f12
+```
+
+It starts an isolated temporary managed browser and verifies:
+
+- Security summary on a real HTTPS page,
+- dashboard-friendly page diagnostics,
+- Network summary from an explicit F12 capture,
+- Network Timing/Initiator-style timeline rows,
+- per-request Network detail including headers, cookies, timing, initiator, and
+  ExtraInfo fields where Chrome exposes them,
+- Accessibility tree extraction,
+- raw Chrome `DOMSnapshot.captureSnapshot`,
+- Chrome Tracing stream capture and trace file output,
+- Chrome Tracing summary extraction,
+- short JavaScript/CSS coverage snapshot,
+- Sources-panel literal source search, heuristic pretty-print, and source map metadata,
+- global literal search across Network, Sources, and Application evidence,
+- compact F12 evidence bundle export,
+- Console exceptions and source context around stack frames,
+- HAR file save.
+- Service Worker registration and CacheStorage summary on a local page.
+- Application panel export to JSON, including IndexedDB and CacheStorage data.
+- Cookie security summary, including Secure, HttpOnly, SameSite, session vs
+  persistent, and risk hints.
+- Cross-panel signal summary that points agents to the next drill-down tools
+  without claiming a vulnerability.
+- Chrome DevTools Issues-panel event access.
+
+## F12 Parity Live Checks
+
+Verified manually during development:
+
+- `devtools_accessibility_snapshot`
+  - Managed Browser on `https://example.com`: returned AX nodes including
+    `RootWebArea`, heading, and paragraph roles.
+  - Personal Chrome on the active tab: returned hundreds of AX nodes from the
+    user's real Chrome tab.
+- `devtools_dom_snapshot`
+  - Managed Browser: returned Chrome `DOMSnapshot.captureSnapshot` data with
+    document and string tables.
+  - Personal Chrome: returned Chrome `DOMSnapshot.captureSnapshot` data from the
+    user's real Chrome tab through `chrome.debugger`.
+- `devtools_chrome_trace`
+  - Managed Browser: captured Chrome Tracing stream and wrote a full trace JSON
+    file under the profile evidence directory, with a dashboard-friendly trace
+    summary.
+  - Personal Chrome: captured Chrome Tracing stream through `chrome.debugger`
+    and wrote a full trace JSON file under `tmp/personal-chrome-traces`, with
+    the same trace summary shape.
+- `devtools_sources_search`
+  - Managed Browser: searched parsed script sources and found a known smoke-test
+    marker in a data URL page.
+  - Personal Chrome: searched parsed script sources from the active real Chrome
+    tab through `chrome.debugger`.
+- `devtools_source_pretty_print`
+  - Managed Browser: returned a heuristic formatted view of parsed JavaScript
+    source for inspection.
+- `devtools_source_map_metadata`
+  - Managed Browser: parsed an inline source map data URL and returned source
+    count, names count, mappings size, and sourcesContent presence without
+    returning the whole original-source tree.
+- `devtools_save_har`
+  - Managed Browser: saved captured traffic as a HAR file under profile
+    evidence.
+  - Personal Chrome: saved captured traffic as a HAR file under
+    `tmp/personal-chrome-har`.
+- `devtools_network_summary`
+  - Managed Browser: summarized captured requests by status, host, resource
+    type, redirects, failures, cache/service-worker involvement, slowest, and
+    largest entries.
+  - Personal Chrome: summarized the active tab's captured request log after a
+    hard reload.
+- `devtools_page_diagnostics`
+  - Managed Browser: returned first-screen dashboard data for page state,
+    Network, Security, Storage, and Accessibility.
+  - Personal Chrome: returned equivalent dashboard data from the user's active
+    Chrome tab.
+- `devtools_coverage_snapshot`
+  - Managed Browser: captured CSS rule usage and JavaScript precise coverage
+    where available.
+  - Personal Chrome: captured JavaScript precise coverage and CSS rule usage
+    through `chrome.debugger`.
+
+## Live OpenClaw-Compatible Browser Smoke
+
+The live browser smoke is now available:
+
+```bash
+npm run smoke:browser
+```
+
+It:
+
+1. start a dedicated Chrome or Edge debug instance,
+2. register or select one browser identity,
+3. navigate to a local test page,
+4. trigger a fetch request,
+5. verify `cdp_query` can find the request,
+6. verify `cdp_get` can retrieve the body path.
+
+It uses a temporary browser profile and deletes it after the run.

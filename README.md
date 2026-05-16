@@ -1,0 +1,457 @@
+# Agent Browser Runtime
+
+A local CDP browser runtime for AI agents.
+
+It gives Codex, Claude, OpenClaw, or a custom agent SDK a browser it can operate through simple tools:
+
+- create a named browser profile,
+- navigate, click, type, evaluate JavaScript, snapshot, and screenshot,
+- capture profile-scoped network traffic,
+- keep evidence under that profile's directory,
+- reuse an existing CDP browser when one is already open.
+
+The OpenClaw plugin adapter is included, but the main product is now framework-neutral: agents call the unified `devtools_*` API. Backend-specific names are kept for debugging and compatibility.
+
+## Why
+
+Agents should not need to reason about Chrome DevTools Protocol target ids, tab ids, ports, body stores, or browser internals.
+
+The user-facing model is deliberately small:
+
+- Personal Profile: inspect the Chrome profile the user is already using.
+- Agent Browser: start a browser for agents; use `default` for simple work, or
+  create extra profiles for separate roles, targets, and identities.
+
+Both modes expose the same `devtools_*` tool names. Profiles, ports, browser
+processes, and extension details are routing choices underneath that tool layer.
+
+In product terms, a `profile` is an agent-facing operating space. It can mean a role, a target, or an identity:
+
+- `default`
+- `researcher`
+- `shop-buyer`
+- `shop-seller`
+- `target-a-tester`
+
+Each profile owns:
+
+- one browser tab,
+- one evidence directory,
+- one traffic journal,
+- one event journal,
+- its own screenshots and snapshots.
+
+By default everything runs through one local CDP endpoint, usually `http://127.0.0.1:9222`. The profile layer is product-level separation on top of that endpoint. Stronger process-level isolation with multiple browser ports can be added later.
+
+## What This Is Not
+
+- Not a stealth browser or anti-bot bypass toolkit.
+- Not a vulnerability scanner.
+- Not a hosted dashboard.
+- Not a replacement for Burp Suite.
+- Not for inspecting accounts, targets, or traffic you are not authorized to access.
+
+Browser profiles can contain live authentication state. Treat screenshots, cookies, headers, bodies, and script sources as sensitive evidence.
+
+## Install
+
+```bash
+npm install
+npm run build
+npm run test
+```
+
+Run all local checks:
+
+```bash
+npm run check
+npm run contract:devtools
+npm run smoke:product
+npm run smoke:server
+npm run smoke:f12
+npm run smoke:browser
+```
+
+## Run The Standalone Agent Server
+
+Start a visible Edge/Chrome browser if no CDP browser is already listening:
+
+```bash
+CDP_LAUNCH_BROWSER=1 npm run agent:server
+```
+
+Windows PowerShell:
+
+```powershell
+$env:CDP_LAUNCH_BROWSER="1"
+npm run agent:server
+```
+
+The server listens on `http://127.0.0.1:17335` by default.
+
+Health check:
+
+```bash
+curl http://127.0.0.1:17335/health
+```
+
+Local dashboard:
+
+```text
+http://127.0.0.1:17335/panel
+```
+
+The panel is intentionally simple: it shows human-readable profile names and a
+page diagnostics summary. It hides CDP target ids and tab ids from the first
+screen. Agents and SDKs should still use the `devtools_*` tools for automation.
+
+Example tool calls:
+
+```bash
+curl -X POST http://127.0.0.1:17335/tool/profile_create \
+  -H "content-type: application/json" \
+  -d "{\"profile\":\"researcher\"}"
+
+curl -X POST http://127.0.0.1:17335/tool/devtools_capture_start \
+  -H "content-type: application/json" \
+  -d "{\"profile\":\"researcher\",\"label\":\"first-capture\"}"
+
+curl -X POST http://127.0.0.1:17335/tool/browser_navigate \
+  -H "content-type: application/json" \
+  -d "{\"profile\":\"researcher\",\"url\":\"https://example.com\"}"
+
+curl -X POST http://127.0.0.1:17335/tool/browser_snapshot \
+  -H "content-type: application/json" \
+  -d "{\"profile\":\"researcher\"}"
+
+curl -X POST http://127.0.0.1:17335/tool/profile_traffic_query \
+  -H "content-type: application/json" \
+  -d "{\"profile\":\"researcher\",\"limit\":20}"
+```
+
+If `profile` is omitted, browser tools use the server default profile. The default is `default`, or `CDP_AGENT_PROFILE` if set.
+
+Network, Console, Frame, and Security evidence recording is an explicit switch.
+Use `devtools_capture_start` before the activity you want to record, or use
+`devtools_hard_reload` when you want a clean F12-style reload capture. If capture
+is off, browser action tools still work, but they do not write a traffic journal.
+
+## Tools
+
+### Unified Agent DevTools API
+
+These names are the product-level contract. They are available in both Personal
+Chrome Extension Mode and Managed Browser Mode:
+
+- `devtools_tabs`
+- `devtools_extension_reload`
+- `devtools_snapshot`
+- `devtools_screenshot`
+- `devtools_click`
+- `devtools_type`
+- `devtools_scroll`
+- `devtools_eval`
+- `devtools_attach`
+- `devtools_detach`
+- `devtools_status`
+- `devtools_capture_start`
+- `devtools_capture_stop`
+- `devtools_capture_clear`
+- `devtools_capture_status`
+- `devtools_network_log`
+- `devtools_network_summary`
+- `devtools_network_timeline`
+- `devtools_export_har`
+- `devtools_save_har`
+- `devtools_request_body`
+- `devtools_request_detail`
+- `devtools_request_payload`
+- `devtools_request_replay`
+- `devtools_console_log`
+- `devtools_console_source_context`
+- `devtools_security_summary`
+- `devtools_page_diagnostics`
+- `devtools_signal_summary`
+- `devtools_risk_summary`
+- `devtools_issues_log`
+- `devtools_accessibility_snapshot`
+- `devtools_frame_tree`
+- `devtools_hard_reload`
+- `devtools_storage_snapshot`
+- `devtools_cookie_summary`
+- `devtools_service_worker_summary`
+- `devtools_application_export`
+- `devtools_indexeddb_read`
+- `devtools_cache_entry_get`
+- `devtools_elements_snapshot`
+- `devtools_dom_snapshot`
+- `devtools_sources_list`
+- `devtools_source_get`
+- `devtools_source_pretty_print`
+- `devtools_source_map_metadata`
+- `devtools_global_search`
+- `devtools_evidence_bundle`
+- `devtools_sources_search`
+- `devtools_performance_trace`
+- `devtools_chrome_trace`
+- `devtools_coverage_snapshot`
+- `devtools_token_scan`
+
+See `docs/agent-devtools-api.md`.
+For an F12-to-tool lookup table, see `docs/devtools-panel-map.md`.
+
+Backend/debug tools:
+
+These are lower-level aliases used by the local server and older integrations.
+New agents and SDKs should prefer the `devtools_*` names above.
+
+- `profile_create`
+- `profile_list`
+- `profile_delete`
+- `profile_traffic_query`
+- `profile_traffic_get`
+- `browser_tabs`
+- `browser_navigate`
+- `browser_click`
+- `browser_type`
+- `browser_screenshot`
+- `browser_snapshot`
+- `browser_eval`
+
+OpenClaw-compatible CDP evidence tools:
+
+- `cdp_query`
+- `cdp_get`
+- `cdp_cookies`
+- `cdp_fetch_intercept`
+- `cdp_stats`
+- `cdp_self_test`
+- `register_browser_profile`
+- `acquire_browser_profile`
+
+## Personal Browser Attach Mode
+
+This project can attach to an existing browser only if that browser already exposes a CDP endpoint.
+
+That means the browser must be launched with a flag such as:
+
+```powershell
+& "C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe" `
+  --remote-debugging-port=9222 `
+  --remote-allow-origins=* `
+  --user-data-dir="$env:USERPROFILE\.agent-browser-runtime\personal-edge" `
+  --no-first-run `
+  --no-default-browser-check
+```
+
+Then start the server without launching another browser:
+
+```powershell
+npm run agent:server
+```
+
+There is also a helper:
+
+```powershell
+npm run personal:browser
+npm run agent:server
+```
+
+The health endpoint will report:
+
+- `browserAttachMode: "attached-existing-cdp"` when it reused an already-running CDP browser,
+- `browserAttachMode: "launched-managed-browser"` when it launched a browser itself.
+
+Important boundary: a normal browser that was started without remote debugging cannot usually be "taken over" afterward. For a private debugging workflow, start a browser window with remote debugging enabled first, then use it normally. When something looks strange, the agent can attach to that same window and inspect tabs, DOM, screenshots, and traffic.
+
+See `docs/personal-browser-mode.md` for the dedicated workflow and safety notes.
+
+## Personal Chrome Extension Mode
+
+If you want the agent to inspect the Chrome window you are already using, use the
+extension bridge instead of CDP port attach:
+
+```powershell
+npm run personal:chrome
+```
+
+Then load the unpacked extension from:
+
+```text
+extension/
+```
+
+The bridge exposes tools at `http://127.0.0.1:17337`, including:
+
+- `personal_chrome_tabs`
+- `personal_chrome_active_tab_snapshot`
+- `personal_chrome_screenshot`
+- `personal_chrome_click`
+- `personal_chrome_type`
+- `personal_chrome_scroll`
+- `personal_chrome_eval`
+- `personal_chrome_devtools_attach`
+- `personal_chrome_devtools_status`
+- `personal_chrome_network_log`
+- `personal_chrome_network_summary`
+- `personal_chrome_network_timeline`
+- `personal_chrome_export_har`
+- `personal_chrome_save_har`
+- `personal_chrome_request_body`
+- `personal_chrome_request_detail`
+- `personal_chrome_request_payload`
+- `personal_chrome_request_replay`
+- `personal_chrome_console_log`
+- `personal_chrome_console_source_context`
+- `personal_chrome_security_summary`
+- `personal_chrome_page_diagnostics`
+- `personal_chrome_signal_summary`
+- `personal_chrome_risk_summary`
+- `personal_chrome_issues_log`
+- `personal_chrome_accessibility_snapshot`
+- `personal_chrome_frame_tree`
+- `personal_chrome_hard_reload`
+- `personal_chrome_storage_snapshot`
+- `personal_chrome_cookie_summary`
+- `personal_chrome_service_worker_summary`
+- `personal_chrome_application_export`
+- `personal_chrome_indexeddb_read`
+- `personal_chrome_cache_entry_get`
+- `personal_chrome_elements_snapshot`
+- `personal_chrome_dom_snapshot`
+- `personal_chrome_sources_list`
+- `personal_chrome_source_get`
+- `personal_chrome_source_pretty_print`
+- `personal_chrome_source_map_metadata`
+- `personal_chrome_global_search`
+- `personal_chrome_evidence_bundle`
+- `personal_chrome_sources_search`
+- `personal_chrome_performance_trace`
+- `personal_chrome_chrome_trace`
+- `personal_chrome_coverage_snapshot`
+- `personal_chrome_token_scan`
+
+See `docs/personal-chrome-extension.md`.
+
+## SDK Integration Shape
+
+An SDK only needs to call local HTTP tools:
+
+```ts
+const baseUrl = "http://127.0.0.1:17335";
+
+async function callTool(name: string, params: unknown) {
+  const response = await fetch(`${baseUrl}/tool/${name}`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(params),
+  });
+  if (!response.ok) throw new Error(await response.text());
+  return await response.json();
+}
+
+await callTool("devtools_capture_start", {
+  profile: "researcher",
+  label: "investigation",
+});
+
+await callTool("browser_navigate", {
+  profile: "researcher",
+  url: "https://example.com",
+});
+
+const snapshot = await callTool("browser_snapshot", {
+  profile: "researcher",
+});
+
+const traffic = await callTool("profile_traffic_query", {
+  profile: "researcher",
+  limit: 20,
+});
+```
+
+The SDK does not need to know CDP target ids, tab ids, browser ports, or evidence paths. It chooses a profile name and calls tools.
+
+## OpenClaw Adapter
+
+Build first:
+
+```bash
+npm run build
+```
+
+Then add the built plugin entrypoints to OpenClaw:
+
+```json
+{
+  "plugins": {
+    "load": {
+      "paths": [
+        "C:/path/to/agent-browser-runtime/dist/plugins/cdp-traffic-capture/index.js",
+        "C:/path/to/agent-browser-runtime/dist/plugins/browser-profile-pool/index.js"
+      ]
+    }
+  }
+}
+```
+
+See `examples/openclaw.config.example.json`.
+
+## Environment Variables
+
+| Variable | Purpose | Default |
+|---|---|---|
+| `CDP_AGENT_SERVER_PORT` | Local HTTP tool server port. | `17335` |
+| `CDP_AGENT_PROFILE` | Default profile used when tool calls omit `profile`. | `default` |
+| `CDP_BROWSER_PORT` | Browser CDP port. | `9222` |
+| `CDP_LAUNCH_BROWSER` | Launch Edge/Chrome if no CDP browser is available. | unset |
+| `CDP_BROWSER_EXECUTABLE` | Explicit Edge/Chrome executable path. | auto-detected |
+| `CDP_BROWSER_USER_DATA_DIR` | Browser user-data directory when launching a browser. | `$CDP_SECURITY_DATA_DIR/browser-identities/$CDP_AGENT_PROFILE` |
+| `CDP_BROWSER_HEADLESS` | Use headless mode for test runs. | unset |
+| `CDP_SECURITY_DATA_DIR` | Base data directory for captured bodies, events, profiles, and logs. | `~/.agent-browser-runtime` |
+| `CDP_PROFILE_REGISTRY_FILE` | Standalone server profile registry. | `$CDP_SECURITY_DATA_DIR/profiles.json` |
+| `CDP_SECURITY_BODY_STORE_DIR` | Response body storage directory for CDP evidence tools. | `$CDP_SECURITY_DATA_DIR/cdp-traffic` |
+| `CDP_SECURITY_SPOOL_DIR` | Ring-buffer eviction spool directory. | `$CDP_SECURITY_DATA_DIR/cdp-spool` |
+| `CDP_SECURITY_ERROR_LOG_DIR` | Tool validation/internal error log directory. | `$CDP_SECURITY_DATA_DIR/cdp-traffic/_errors` |
+| `CDP_SECURITY_LEASE_FILE` | Local browser profile lease store for the OpenClaw adapter. | `$CDP_SECURITY_DATA_DIR/profile-leases.json` |
+| `OPENCLAW_CONFIG_PATH` | OpenClaw config path for adapter mode. | standalone generated config |
+| `BROWSER_BRIDGE_URL` | OpenClaw browser bridge endpoint used by profile registration. | `http://127.0.0.1:9302` |
+| `BROWSER_BRIDGE_TOKEN` | Explicit browser bridge token. | unset |
+| `OPENCLAW_GATEWAY_TOKEN` | Fallback browser bridge token. | unset |
+| `PERSONAL_CHROME_HTTP_PORT` | Local HTTP bridge for real Chrome extension mode. | `17337` |
+| `PERSONAL_CHROME_WS_PORT` | WebSocket port used by the extension. | `17336` |
+
+Use `127.0.0.1`, not `localhost`, when you care about deterministic endpoint ownership. Some systems resolve `localhost` to IPv6 `::1`, which can confuse agents and make it look like two different browsers are using the same numeric port.
+
+## Evidence Layout
+
+By default evidence is stored under:
+
+```text
+~/.agent-browser-runtime/
+  profiles/
+    <profile>/
+      events/events.jsonl
+      traffic/traffic.jsonl
+      screenshots/*.png
+```
+
+Do not commit captured evidence from real targets unless it has been reviewed and sanitized.
+
+## Current Status
+
+Working now:
+
+- standalone local HTTP tool server,
+- profile-scoped browser operations,
+- profile-scoped screenshots and traffic journals,
+- clean local build without the original OpenClaw checkout,
+- OpenClaw adapter compatibility,
+- product smoke tests and live browser smoke tests.
+
+Next likely steps:
+
+- extract the CDP capture internals into a smaller framework-neutral library,
+- add a minimal UI for profile browsing and evidence review,
+- add stronger process-level isolation through multiple browser ports,
+- add an SDK client package.

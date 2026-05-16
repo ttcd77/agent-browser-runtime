@@ -1,0 +1,102 @@
+# DevTools Panel Map
+
+This runtime exposes Chrome/Edge DevTools data as agent-callable tools. The goal
+is not to copy the DevTools UI one-to-one. The goal is to make every important
+F12 evidence surface available through a stable, low-token tool contract.
+
+## First Screen
+
+Use this for an agent dashboard or a quick diagnosis before drilling down:
+
+| Question | Tool |
+|---|---|
+| What page am I on and is the browser healthy? | `devtools_page_diagnostics` |
+| What F12 signals should I inspect first? | `devtools_signal_summary` |
+| Is capture running? | `devtools_capture_status` |
+| What failed or slow requests happened? | `devtools_network_summary` |
+| What browser-reported Issues exist? | `devtools_issues_log` |
+| What console errors or exceptions exist? | `devtools_console_log` |
+| Is the page secure and what TLS details were seen? | `devtools_security_summary` |
+
+## Network Panel
+
+| Human F12 action | Agent tool |
+|---|---|
+| Start recording | `devtools_capture_start` |
+| Stop recording | `devtools_capture_stop` |
+| Clear recording | `devtools_capture_clear` |
+| Reload with cache disabled | `devtools_hard_reload` |
+| Inspect request table | `devtools_network_log` |
+| Summarize request table | `devtools_network_summary` |
+| Inspect Timing/Initiator rows | `devtools_network_timeline` |
+| Read response body | `devtools_request_body` |
+| Inspect one request's headers/cookies/timing/initiator | `devtools_request_detail` |
+| Read request payload | `devtools_request_payload` |
+| Replay/edit a request | `devtools_request_replay` |
+| Export HAR object | `devtools_export_har` |
+| Save HAR file | `devtools_save_har` |
+
+## Elements And Accessibility Panels
+
+| Human F12 action | Agent tool |
+|---|---|
+| Inspect visible page state | `devtools_snapshot` |
+| Inspect DOM tree and styles | `devtools_elements_snapshot` |
+| Capture raw DOMSnapshot | `devtools_dom_snapshot` |
+| Inspect iframe/frame tree | `devtools_frame_tree` |
+| Inspect accessibility tree | `devtools_accessibility_snapshot` |
+| Click/type/scroll | `devtools_click`, `devtools_type`, `devtools_scroll` |
+| Screenshot | `devtools_screenshot` |
+
+## Sources Panel
+
+| Human F12 action | Agent tool |
+|---|---|
+| List parsed scripts | `devtools_sources_list` |
+| Read source by script id | `devtools_source_get` |
+| Pretty-print parsed JavaScript source | `devtools_source_pretty_print` |
+| Inspect source map reference and metadata | `devtools_source_map_metadata` |
+| Search script source | `devtools_sources_search` |
+| Search Network, Sources, and Application evidence | `devtools_global_search` |
+| Export compact F12 evidence bundle | `devtools_evidence_bundle` |
+| Read source context around a console stack frame | `devtools_console_source_context` |
+
+Current boundary: breakpoints, scopes, live debugging, and AST-lossless
+formatting are not fully implemented yet. Pretty-printing is currently
+heuristic, and source maps are exposed as metadata rather than a full
+original-source tree.
+
+## Application Panel
+
+| Human F12 action | Agent tool |
+|---|---|
+| Inspect cookies/storage/cache/service workers | `devtools_storage_snapshot` |
+| Summarize cookie security attributes | `devtools_cookie_summary` |
+| Summarize Service Worker and cache state | `devtools_service_worker_summary` |
+| Export Application panel data | `devtools_application_export` |
+| Read IndexedDB page | `devtools_indexeddb_read` |
+| Read CacheStorage response body | `devtools_cache_entry_get` |
+| Scan authorized browser data for token-like values | `devtools_token_scan` |
+
+## Performance Panel
+
+| Human F12 action | Agent tool |
+|---|---|
+| Navigation/resource/paint timing | `devtools_performance_trace` |
+| Chrome trace capture | `devtools_chrome_trace` |
+| JS/CSS coverage | `devtools_coverage_snapshot` |
+
+`devtools_chrome_trace` saves the full raw trace and returns a first-pass summary
+with top categories, top event names, long events, screenshot events, and
+network-like events.
+
+## Personal And Managed Backends
+
+The same `devtools_*` names are exposed by both modes:
+
+- Managed Browser: local CDP browser launched or attached by the runtime.
+- Personal Chrome: Chrome extension bridge using `chrome.debugger` against the
+  user's real browser after explicit local installation.
+
+Agents should use the `devtools_*` names. Backend-specific names are retained for
+debugging and compatibility only.
