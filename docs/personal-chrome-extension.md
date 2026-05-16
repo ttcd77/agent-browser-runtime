@@ -89,6 +89,7 @@ Unified Agent DevTools tools:
 - `devtools_request_detail`
 - `devtools_request_payload`
 - `devtools_request_replay`
+- `devtools_request_replay_batch`
 - `devtools_console_log`
 - `devtools_console_source_context`
 - `devtools_security_summary`
@@ -115,6 +116,7 @@ Unified Agent DevTools tools:
 - `devtools_dom_mutation_watch`
 - `devtools_cdp_command`
 - `devtools_debugger_control`
+- `devtools_token_flow_trace`
 - `devtools_memory_snapshot`
 - `devtools_sources_list`
 - `devtools_source_get`
@@ -156,6 +158,7 @@ Backend-specific aliases:
 - `personal_chrome_request_detail`
 - `personal_chrome_request_payload`
 - `personal_chrome_request_replay`
+- `personal_chrome_request_replay_batch`
 - `personal_chrome_console_log`
 - `personal_chrome_console_source_context`
 - `personal_chrome_security_summary`

@@ -33,6 +33,7 @@ Use this for an agent dashboard or a quick diagnosis before drilling down:
 | Inspect one request's headers/cookies/timing/initiator | `devtools_request_detail` |
 | Read request payload | `devtools_request_payload` |
 | Replay/edit a request | `devtools_request_replay` |
+| Replay request variants and compare responses | `devtools_request_replay_batch` |
 | Export HAR object | `devtools_export_har` |
 | Save HAR file | `devtools_save_har` |
 
@@ -63,6 +64,7 @@ Use this for an agent dashboard or a quick diagnosis before drilling down:
 | Inspect source map reference and metadata | `devtools_source_map_metadata` |
 | Search script source | `devtools_sources_search` |
 | Pause/resume/step and inspect call frames/scopes | `devtools_debugger_control` |
+| Trace token-like data through fetch/XHR/storage/cookies | `devtools_token_flow_trace` |
 | Search Network, Sources, and Application evidence | `devtools_global_search` |
 | Export compact F12 evidence bundle | `devtools_evidence_bundle` |
 | Read source context around a console stack frame | `devtools_console_source_context` |
