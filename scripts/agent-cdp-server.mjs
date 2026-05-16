@@ -568,21 +568,65 @@ function buildRequestDetail(entry, cookies = []) {
   };
 }
 
+function classifyTraceEvent(name, category) {
+  const text = `${name} ${category}`.toLowerCase();
+  if (/urlrequest|resource|network|netlog|sendrequest|receiveresponse|loading/.test(text)) return "network";
+  if (/parsehtml|commitload|navigation|markload|markDOMContent|firstcontentfulpaint/i.test(name)) return "loading";
+  if (/functioncall|evaluatescript|v8|timerfire|eventdispatch|runtask|compile|parse script|javascript/i.test(name)) return "scripting";
+  if (/layout|style|recalculatestyle|updatelayouttree|invalidate/i.test(name)) return "rendering";
+  if (/paint|raster|composite|draw|gpu/i.test(name)) return "painting";
+  return "other";
+}
+
+function addTraceBucket(map, key, durationMs, count = 1) {
+  const bucket = map[key] || { count: 0, durationMs: 0 };
+  bucket.count += count;
+  bucket.durationMs += durationMs;
+  map[key] = bucket;
+}
+
 function summarizeTraceEvents(events = [], limit = 10) {
   const byCategory = {};
   const byName = {};
+  const byPhase = {};
+  const byThread = {};
+  const byProcess = {};
   const longEvents = [];
   const screenshots = [];
   const networkLike = [];
+  const topDurations = [];
+  let minTs = Infinity;
+  let maxTs = -Infinity;
   for (const event of events) {
     const categories = String(event.cat || "").split(",").filter(Boolean);
     for (const category of categories) byCategory[category] = (byCategory[category] || 0) + 1;
     const name = String(event.name || "(unknown)");
     byName[name] = (byName[name] || 0) + 1;
+    if (typeof event.ts === "number") {
+      minTs = Math.min(minTs, event.ts);
+      maxTs = Math.max(maxTs, event.ts + (typeof event.dur === "number" ? event.dur : 0));
+    }
+    const durationMs = typeof event.dur === "number" ? event.dur / 1000 : 0;
+    if (durationMs > 0) {
+      const phase = classifyTraceEvent(name, event.cat);
+      addTraceBucket(byPhase, phase, durationMs);
+      addTraceBucket(byThread, `${event.pid || "?"}:${event.tid || "?"}`, durationMs);
+      addTraceBucket(byProcess, String(event.pid || "?"), durationMs);
+      topDurations.push({
+        name,
+        category: event.cat,
+        phase,
+        ts: event.ts,
+        durationMs: Math.round(durationMs * 100) / 100,
+        thread: event.tid,
+        process: event.pid,
+      });
+    }
     if (typeof event.dur === "number" && event.dur >= 50_000) {
       longEvents.push({
         name,
         category: event.cat,
+        phase: classifyTraceEvent(name, event.cat),
         ts: event.ts,
         durationMs: Math.round(event.dur / 1000),
         thread: event.tid,
@@ -597,14 +641,28 @@ function summarizeTraceEvents(events = [], limit = 10) {
     }
   }
   longEvents.sort((a, b) => b.durationMs - a.durationMs);
+  topDurations.sort((a, b) => b.durationMs - a.durationMs);
   const topEntries = (object) => Object.entries(object)
     .sort((a, b) => b[1] - a[1])
     .slice(0, limit)
     .map(([name, count]) => ({ name, count }));
+  const topDurationBuckets = (object) => Object.entries(object)
+    .sort((a, b) => b[1].durationMs - a[1].durationMs)
+    .slice(0, limit)
+    .map(([name, value]) => ({
+      name,
+      count: value.count,
+      durationMs: Math.round(value.durationMs * 100) / 100,
+    }));
   return {
     eventCount: events.length,
+    timeRangeMs: Number.isFinite(minTs) && Number.isFinite(maxTs) ? Math.round((maxTs - minTs) / 1000) : 0,
     topCategories: topEntries(byCategory),
     topNames: topEntries(byName),
+    durationByPhase: topDurationBuckets(byPhase),
+    busiestThreads: topDurationBuckets(byThread),
+    busiestProcesses: topDurationBuckets(byProcess),
+    topDurations: topDurations.slice(0, limit),
     longEventCount: longEvents.length,
     longEvents: longEvents.slice(0, limit),
     screenshotEventCount: screenshots.length,

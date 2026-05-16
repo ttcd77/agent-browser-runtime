@@ -30,9 +30,10 @@
 - Security panel: certificate/security-state summaries from response
   `securityDetails` and CDP security events are now in the unified tool
   contract; next work is UI-level explanation and edge-case coverage.
-- Performance panel: Chrome Tracing stream capture, first-pass trace summaries,
-  and CPU profiles are now in the unified tool contract. Next work is deeper
-  trace interpretation, screenshots, and layout/paint flame chart summaries.
+- Performance panel: Chrome Tracing stream capture, trace duration phase
+  summaries, busiest thread/process summaries, top duration events, and CPU
+  profiles are now in the unified tool contract. Next work is screenshots and
+  deeper layout/paint flame chart summaries.
 
 ## 0.3: Open-Source Polish
 

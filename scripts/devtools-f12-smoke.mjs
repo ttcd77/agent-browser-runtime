@@ -193,6 +193,8 @@ try {
   assert(trace.traceTextBytes > 0, "Chrome trace was empty");
   assert(trace.tracePath, "Chrome trace path missing");
   assert(trace.traceSummary?.eventCount > 0, "Chrome trace summary missing events");
+  assert(Array.isArray(trace.traceSummary?.durationByPhase), "Chrome trace summary missing durationByPhase");
+  assert(Array.isArray(trace.traceSummary?.topDurations), "Chrome trace summary missing topDurations");
 
   const cpuProfile = await callTool(baseUrl, "devtools_cpu_profile", {
     profile: "default",
@@ -453,6 +455,7 @@ try {
   console.log(`- DOMSnapshot documents: ${domSnapshot.documentCount}`);
   console.log(`- Chrome trace bytes: ${trace.traceTextBytes}`);
   console.log(`- Chrome trace summary events: ${trace.traceSummary.eventCount}`);
+  console.log(`- Chrome trace phase buckets/top durations: ${trace.traceSummary.durationByPhase.length}/${trace.traceSummary.topDurations.length}`);
   console.log(`- Chrome trace path: ${trace.tracePath}`);
   console.log(`- coverage scripts/rules: ${coverage.js.scriptCount}/${coverage.css.ruleCount}`);
   console.log(`- source search matches: ${sourceSearch.matchCount}`);
