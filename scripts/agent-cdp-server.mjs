@@ -749,6 +749,31 @@ function extractTraceScreenshots(events = [], directory, options = {}) {
   return frames;
 }
 
+function summarizeEvidenceCompleteness(evidence = {}) {
+  const notes = [];
+  const walk = (value, path = "evidence") => {
+    if (!value || typeof value !== "object") return;
+    if (value.unavailable) notes.push({ path, status: "unavailable", detail: value.error || value.tool || "tool unavailable" });
+    else if (value.error) notes.push({ path, status: "error", detail: String(value.error) });
+    if (value.truncated === true) notes.push({ path, status: "truncated", detail: "result limited by max count or max bytes" });
+    if (value.parseError) notes.push({ path, status: "parse_error", detail: String(value.parseError) });
+    if (Array.isArray(value.frameErrors) && value.frameErrors.length) {
+      notes.push({ path, status: "partial_frames", detail: `${value.frameErrors.length} frame(s) could not be inspected` });
+    }
+    for (const [key, child] of Object.entries(value)) {
+      if (!child || typeof child !== "object") continue;
+      if (key === "requestHeaders" || key === "responseHeaders" || key === "browserCookiesForUrl") continue;
+      walk(child, `${path}.${key}`);
+    }
+  };
+  walk(evidence);
+  return {
+    status: notes.length ? "partial" : "complete_for_current_capture",
+    noteCount: notes.length,
+    notes: notes.slice(0, 20),
+  };
+}
+
 function summarizeCpuProfile(profile = {}, limit = 20) {
   const nodes = Array.isArray(profile.nodes) ? profile.nodes : [];
   const samples = Array.isArray(profile.samples) ? profile.samples : [];
@@ -5461,6 +5486,7 @@ function registerStandaloneBrowserTools(tools, cdpPort, profileRegistry, default
       } else {
         throw new Error(`unsupported agent_inspect focus: ${focus}`);
       }
+      out.completeness = summarizeEvidenceCompleteness(out.evidence);
       return toolResult(out);
     },
   });

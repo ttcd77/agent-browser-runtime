@@ -74,10 +74,12 @@ agent chooses a `focus`:
 - `evidence`: compact export bundle.
 - `debug`: paused-frame/scope snapshot or expression-triggered pause.
 
-The response includes `summary`, `evidence`, and `nextTools`. This keeps the
-agent from choosing blindly among dozens of low-level tools while preserving the
-raw tools for drill-down. The router is deliberately objective: it does not
-decide whether a signal is a vulnerability.
+The response includes `summary`, `evidence`, `completeness`, and `nextTools`.
+This keeps the agent from choosing blindly among dozens of low-level tools while
+preserving the raw tools for drill-down. `completeness` reports objective
+limitations such as truncated results, unavailable tools, parse errors, or
+frames that could not be inspected. The router is deliberately objective: it
+does not decide whether a signal is a vulnerability.
 
 ## Unified Tools
 
