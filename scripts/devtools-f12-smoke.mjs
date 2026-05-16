@@ -581,6 +581,7 @@ try {
   });
   const bodyEntries = harWithBodies.har?.log?.entries?.filter((entry) => entry.response?.content?._bodyIncluded) || [];
   assert(bodyEntries.length >= 1, `HAR body export did not include any response bodies: ${JSON.stringify(harWithBodies.har?.log?.entries || [])}`);
+  assert((harWithBodies.har?.log?.entries || []).some((entry) => "_timingPhases" in entry && "_durationMs" in entry), "HAR export missing timing phase extensions");
 
   console.log("F12 smoke passed:");
   console.log(`- security page: ${security.page.url}`);

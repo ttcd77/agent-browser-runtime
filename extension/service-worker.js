@@ -1592,9 +1592,11 @@ async function chromeExportHar(params) {
       };
     }
   }
-  const entries = await Promise.all(requests.map(async (request) => ({
+  const entries = await Promise.all(requests.map(async (request) => {
+    const timelineRow = buildNetworkTimeline([request], 1)[0] || {};
+    return {
     startedDateTime: request.timestamp,
-    time: -1,
+    time: timelineRow.durationMs ?? -1,
     request: {
       method: request.method || "",
       url: request.url || "",
@@ -1637,9 +1639,14 @@ async function chromeExportHar(params) {
     _resourceType: request.resourceType,
     _frameId: request.frameId,
     _initiator: request.initiator,
+    _initiatorSummary: buildInitiatorSummary(request.initiator || null),
+    _timingPhases: timelineRow.phases || null,
+    _durationMs: timelineRow.durationMs ?? null,
+    _timingSource: request.timing ? "cdp-network-timing" : "wall-clock-capture",
     _securityDetails: request.securityDetails,
     _bodyReadable: Boolean(request.bodyReadable),
-  })));
+  };
+  }));
   return {
     tab: pickTab(tab),
     includeBodies,

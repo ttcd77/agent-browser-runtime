@@ -14,10 +14,11 @@
 
 ## 0.2: F12 Parity
 
-- Network panel: fuller HAR timings, raw socket-level replay edge cases, and
-  replay UI. Initiator stack summaries, lifecycle flags, HAR object/file export,
-  bounded HAR bodies, browser fetch replay, forbidden-header reporting, and
-  raw/form/json/multipart replay helpers are now in the unified tool contract.
+- Network panel: raw socket-level replay edge cases and replay UI. Initiator
+  stack summaries, lifecycle flags, HAR object/file export with timing phase
+  extensions, bounded HAR bodies, browser fetch replay, forbidden-header
+  reporting, and raw/form/json/multipart replay helpers are now in the unified
+  tool contract.
 - Application panel: Service Worker summaries/detail, CacheStorage summaries/detail,
   and Application JSON export are now in the unified tool contract. Next work is
   deeper cookie partition metadata where exposed.

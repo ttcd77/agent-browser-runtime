@@ -2829,9 +2829,11 @@ function registerStandaloneBrowserTools(tools, cdpPort, profileRegistry, default
           _bodyUnavailable: true,
         };
       };
-      const entries = rows.map((request) => ({
+      const entries = rows.map((request) => {
+        const timelineRow = buildNetworkTimeline([request], 1)[0] || {};
+        return {
         startedDateTime: request.timestamp,
-        time: -1,
+        time: timelineRow.durationMs ?? -1,
         request: {
           method: request.method || "",
           url: request.url || "",
@@ -2874,9 +2876,14 @@ function registerStandaloneBrowserTools(tools, cdpPort, profileRegistry, default
         _resourceType: request.resourceType,
         _frameId: request.frameId,
         _initiator: request.initiator,
+        _initiatorSummary: buildInitiatorSummary(request.initiator || null),
+        _timingPhases: timelineRow.phases || null,
+        _durationMs: timelineRow.durationMs ?? null,
+        _timingSource: request.timing ? "cdp-network-timing" : "wall-clock-capture",
         _securityDetails: request.securityDetails,
         _bodyReadable: Boolean(request.bodyReadable || request.bodyText || request.bodyPath),
-      }));
+      };
+      });
       return toolResult({
         profile: profile.name,
         includeBodies,
