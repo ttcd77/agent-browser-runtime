@@ -167,7 +167,7 @@ Implemented:
 - Elements/Page snapshot: visible text, controls, screenshots, click/type/scroll, DOM tree, selected element inspection, layout boxes, key computed styles, raw Chrome DOMSnapshot data, live DOM search, Elements-panel Event Listeners, Styles/Computed/Box Model evidence, and selected-node DOM mutation watch for breakpoint-style evidence.
 - Sources/Debugger/Search: parsed script metadata, source map URL metadata, module flag, script source by script id, heuristic pretty-printing, inline/external source map metadata, Debugger pause/resume/step/breakpoint controls with paused frame/scope previews, literal source search, global literal search across Network/Sources/Application evidence, and compact F12 evidence bundle export.
 - Performance/Memory: navigation timing, resource timing, paint timing, marks/measures, long-task entries, Chrome Tracing capture with full trace file output, trace event summaries, phase duration buckets, busiest thread/process summaries, top duration events, short JS/CSS coverage snapshots, Coverage-panel range drilldown with bounded source snippets, JS heap usage, DOM counters, and Performance Monitor metrics.
-- Network: request URL, method, headers, status, response headers, request-detail evidence including cookies and ExtraInfo events, initiator, Timing/Initiator-style rows, frame id, redirect chain, cache/service-worker flags, TLS details where exposed, WebSocket lifecycle and frames, request replay/edit-and-resend, HAR-like object export, HAR file save, and low-token summary for dashboards/triage.
+- Network: request URL, method, headers, status, response headers, request-detail evidence including cookies and ExtraInfo events, initiator, Timing/Initiator-style rows, frame id, redirect chain, cache/service-worker flags, TLS details where exposed, WebSocket lifecycle and frames, request replay/edit-and-resend with explicit forbidden-header reporting plus raw/form/json/multipart body helpers, HAR-like object export, HAR file save, and low-token summary for dashboards/triage.
 - Payload/Body: response body by request id; request postData/payload by request id when Chrome exposes it.
 - Console/Issues: console API, log entries, exceptions, stack traces, source
   context around stack frames, and Chrome DevTools Issues-panel events where
@@ -184,7 +184,7 @@ Not fully implemented yet:
 - Sources panel parity beyond raw/searchable script source: breakpoints, scopes, live debugging, and AST-lossless formatting. Heuristic pretty-print and source map metadata are already exposed.
 - Performance panel parity beyond current tracing: screenshots plus deeper layout/paint flame chart reconstruction.
 - Application panel deep browsing beyond current reads: deeper cookie partition metadata where exposed.
-- Network replay edge cases: exact forbidden header behavior, raw socket-level replay, multipart helpers, and replay UI.
+- Network replay edge cases: raw socket-level replay and replay UI. Browser fetch replay already reports forbidden/skipped headers and supports raw/form/json/multipart body helpers.
 - Browser UI/system dialogs and Chrome internal pages.
 - Complete JavaScript heap/closure inspection. Tokens that exist only in live JS memory and never enter storage/network are not generally visible unless the debugger pauses in the right execution context.
 

@@ -1648,16 +1648,66 @@ function prepareReplayHeaders(rawHeaders = {}, overrides = {}) {
     "upgrade-insecure-requests",
   ]);
   const headers = {};
+  const removed = [];
   const skipped = [];
   for (const [key, value] of Object.entries({ ...rawHeaders, ...overrides })) {
     const lower = String(key).toLowerCase();
+    if (value === null || value === undefined || value === false) {
+      removed.push(key);
+      continue;
+    }
     if (forbidden.has(lower) || lower.startsWith("sec-ch-")) {
-      skipped.push(key);
+      skipped.push({
+        name: key,
+        reason: lower.startsWith("sec-ch-") ? "client-hint-forbidden-in-fetch" : "forbidden-fetch-header",
+      });
       continue;
     }
     headers[key] = String(value);
   }
-  return { headers, skipped };
+  return { headers, skipped, removed };
+}
+
+function headerHas(headers, name) {
+  const lower = String(name).toLowerCase();
+  return Object.keys(headers || {}).some((key) => String(key).toLowerCase() === lower);
+}
+
+function setHeaderIfMissing(headers, name, value) {
+  if (!headerHas(headers, name)) headers[name] = value;
+}
+
+function buildReplayBody(params = {}, request = {}, headers = {}) {
+  if (params.multipart && typeof params.multipart === "object") {
+    for (const key of Object.keys(headers)) {
+      if (String(key).toLowerCase() === "content-type") delete headers[key];
+    }
+    return {
+      bodyKind: "multipart",
+      body: {
+        fields: params.multipart.fields || params.multipart,
+        files: Array.isArray(params.multipart.files) ? params.multipart.files : [],
+      },
+      bodyLength: JSON.stringify(params.multipart).length,
+      contentTypeNote: "Content-Type removed so the browser can generate the multipart boundary.",
+    };
+  }
+  if (params.form && typeof params.form === "object") {
+    setHeaderIfMissing(headers, "Content-Type", "application/x-www-form-urlencoded;charset=UTF-8");
+    const body = new URLSearchParams(Object.entries(params.form).map(([key, value]) => [key, String(value)])).toString();
+    return { bodyKind: "form", body, bodyLength: body.length };
+  }
+  if (params.json !== undefined) {
+    setHeaderIfMissing(headers, "Content-Type", "application/json");
+    const body = JSON.stringify(params.json);
+    return { bodyKind: "json", body, bodyLength: body.length };
+  }
+  const body = params.body !== undefined ? String(params.body) : request.postData;
+  return {
+    bodyKind: body === undefined ? "none" : "raw",
+    body,
+    bodyLength: body === undefined ? 0 : String(body).length,
+  };
 }
 
 async function chromeRequestReplay(params) {
@@ -1667,10 +1717,30 @@ async function chromeRequestReplay(params) {
   if (!request) throw new Error(`request not found: ${params.requestId}`);
   const url = params.url || request.url;
   const method = String(params.method || request.method || "GET").toUpperCase();
-  const headerPrep = prepareReplayHeaders(request.requestHeaders || {}, params.headers || {});
-  const body = params.body !== undefined ? String(params.body) : request.postData;
-  const includeBody = !["GET", "HEAD"].includes(method) && body !== undefined;
-  const replay = await runInTab(tab.id, async ({ url, method, headers, body, includeBody, credentials }) => {
+  const removeHeaders = Array.isArray(params.removeHeaders) ? Object.fromEntries(params.removeHeaders.map((name) => [name, null])) : {};
+  const headerPrep = prepareReplayHeaders(request.requestHeaders || {}, { ...removeHeaders, ...(params.headers || {}) });
+  const bodyPrep = buildReplayBody(params, request, headerPrep.headers);
+  const includeBody = !["GET", "HEAD"].includes(method) && bodyPrep.bodyKind !== "none";
+  const replay = await runInTab(tab.id, async ({ url, method, headers, body, bodyKind, includeBody, credentials }) => {
+    function buildBody() {
+      if (!includeBody) return undefined;
+      if (bodyKind === "multipart") {
+        const form = new FormData();
+        for (const [key, value] of Object.entries(body.fields || {})) {
+          if (Array.isArray(value)) {
+            for (const item of value) form.append(key, String(item));
+          } else {
+            form.append(key, String(value));
+          }
+        }
+        for (const file of body.files || []) {
+          const blob = new Blob([file.content || ""], { type: file.type || "application/octet-stream" });
+          form.append(file.field || "file", blob, file.filename || "upload.bin");
+        }
+        return form;
+      }
+      return body;
+    }
     const startedAt = new Date().toISOString();
     const response = await fetch(url, {
       method,
@@ -1678,7 +1748,7 @@ async function chromeRequestReplay(params) {
       credentials,
       cache: "no-store",
       redirect: "follow",
-      ...(includeBody ? { body } : {}),
+      ...(includeBody ? { body: buildBody() } : {}),
     });
     const text = await response.text();
     return {
@@ -1697,7 +1767,8 @@ async function chromeRequestReplay(params) {
     url,
     method,
     headers: headerPrep.headers,
-    body,
+    body: bodyPrep.body,
+    bodyKind: bodyPrep.bodyKind,
     includeBody,
     credentials: params.credentials || "include",
   }]);
@@ -1708,8 +1779,12 @@ async function chromeRequestReplay(params) {
       url,
       method,
       headers: headerPrep.headers,
+      bodyKind: bodyPrep.bodyKind,
       skippedHeaders: headerPrep.skipped,
-      bodyLength: includeBody ? String(body || "").length : 0,
+      removedHeaders: headerPrep.removed,
+      skippedHeaderNames: headerPrep.skipped.map((entry) => entry.name),
+      bodyLength: includeBody ? bodyPrep.bodyLength : 0,
+      contentTypeNote: bodyPrep.contentTypeNote || null,
       credentials: params.credentials || "include",
     },
     response: replay,

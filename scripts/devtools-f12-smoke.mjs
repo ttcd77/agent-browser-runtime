@@ -54,7 +54,7 @@ const serverPort = await freePort();
 const browserPort = await freePort();
 const appPort = await freePort();
 const tempDir = mkdtempSync(join(tmpdir(), "agent-devtools-f12-smoke-"));
-const appServer = http.createServer((req, res) => {
+const appServer = http.createServer(async (req, res) => {
   if (req.url === "/sw.js") {
     res.writeHead(200, {
       "content-type": "application/javascript",
@@ -68,6 +68,19 @@ const appServer = http.createServer((req, res) => {
       self.addEventListener('activate', event => event.waitUntil(self.clients.claim()));
       self.addEventListener('fetch', event => {});
     `);
+    return;
+  }
+  if (req.url === "/echo") {
+    const chunks = [];
+    for await (const chunk of req) chunks.push(chunk);
+    const body = Buffer.concat(chunks).toString("utf8");
+    res.writeHead(200, { "content-type": "application/json; charset=utf-8" });
+    res.end(JSON.stringify({
+      method: req.method,
+      headers: req.headers,
+      body,
+      bodyBytes: Buffer.byteLength(body, "utf8"),
+    }));
     return;
   }
   res.writeHead(200, { "content-type": "text/html; charset=utf-8" });
@@ -384,6 +397,57 @@ try {
   assert(JSON.stringify(serviceWorkerDetail.page?.scripts || []).includes("install"), "service worker detail script content did not include expected install handler");
   assert(serviceWorkerDetail.page?.cacheStorage?.caches?.some((cache) => cache.entryCount >= 1), "service worker detail cache entries missing");
 
+  await callTool(baseUrl, "devtools_capture_start", {
+    profile: "default",
+    clear: false,
+    label: "replay-smoke",
+  });
+  await callTool(baseUrl, "devtools_eval", {
+    profile: "default",
+    expression: `fetch('/echo', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-smoke-original': 'yes' },
+      body: JSON.stringify({ hello: 'world' })
+    }).then(response => response.text())`,
+    awaitPromise: true,
+  });
+  const replayTraffic = await callTool(baseUrl, "devtools_network_log", {
+    profile: "default",
+    limit: 20,
+  });
+  const echoRequest = (replayTraffic.entries || replayTraffic.requests || []).find((entry) => String(entry.url || "").endsWith("/echo"));
+  assert(echoRequest?.requestId, `echo request was not captured for replay: ${JSON.stringify(replayTraffic)}`);
+  const formReplay = await callTool(baseUrl, "devtools_request_replay", {
+    profile: "default",
+    requestId: echoRequest.requestId,
+    headers: {
+      Host: "example.invalid",
+      "Content-Type": null,
+      "X-Smoke-Replay": "form",
+    },
+    form: { answer: 42, mode: "form" },
+  });
+  assert(formReplay.replayRequest?.bodyKind === "form", `form replay bodyKind mismatch: ${JSON.stringify(formReplay.replayRequest)}`);
+  assert(formReplay.replayRequest?.skippedHeaderNames?.includes("Host"), "form replay did not report skipped forbidden Host header");
+  assert(formReplay.replayRequest?.removedHeaders?.includes("Content-Type"), "form replay did not report removed Content-Type header");
+  assert(formReplay.response?.status === 200, `form replay failed: ${JSON.stringify(formReplay.response)}`);
+  assert(String(formReplay.response?.bodyText || "").includes("answer=42"), "form replay response did not include encoded form body");
+  const multipartReplay = await callTool(baseUrl, "devtools_request_replay", {
+    profile: "default",
+    requestId: echoRequest.requestId,
+    headers: {
+      "Content-Type": "text/plain",
+      "X-Smoke-Replay": "multipart",
+    },
+    multipart: {
+      fields: { field: "field-value" },
+      files: [{ field: "upload", filename: "smoke.txt", type: "text/plain", content: "file-value" }],
+    },
+  });
+  assert(multipartReplay.replayRequest?.bodyKind === "multipart", `multipart replay bodyKind mismatch: ${JSON.stringify(multipartReplay.replayRequest)}`);
+  assert(multipartReplay.replayRequest?.contentTypeNote, "multipart replay did not report browser boundary Content-Type handling");
+  assert(String(multipartReplay.response?.bodyText || "").includes("field-value"), "multipart replay response did not include field body");
+
   const applicationExport = await callTool(baseUrl, "devtools_application_export", {
     profile: "default",
     maxIndexedDbRecords: 50,
@@ -469,6 +533,7 @@ try {
   console.log(`- evidence bundle: ${evidenceBundle.bundlePath}`);
   console.log(`- service worker registrations/caches: ${serviceWorker.registrationCount}/${serviceWorker.cacheCount}`);
   console.log(`- service worker detail scripts/caches: ${serviceWorkerDetail.scriptCount}/${serviceWorkerDetail.cacheCount}`);
+  console.log(`- request replay form/multipart status: ${formReplay.response.status}/${multipartReplay.response.status}`);
   console.log(`- application export dbs/caches/bytes: ${applicationExport.indexedDbDatabaseCount}/${applicationExport.cacheCount}/${applicationExport.exportBytes}`);
   console.log(`- cookie summary count/script-readable: ${cookieSummary.summary.cookieCount}/${cookieSummary.summary.scriptReadableCount}`);
   console.log(`- storage origin frames/cookies: ${storageOrigin.frames.length}/${storageOrigin.cookieCount}`);

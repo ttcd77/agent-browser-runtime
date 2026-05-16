@@ -131,6 +131,10 @@ curl -X POST http://127.0.0.1:17335/tool/profile_traffic_query \
 curl -X POST http://127.0.0.1:17335/tool/devtools_save_har \
   -H "content-type: application/json" \
   -d "{\"profile\":\"researcher\",\"includeBodies\":true,\"maxBodyBytes\":200000}"
+
+curl -X POST http://127.0.0.1:17335/tool/devtools_request_replay \
+  -H "content-type: application/json" \
+  -d "{\"profile\":\"researcher\",\"requestId\":\"<request-id>\",\"form\":{\"role\":\"tester\"},\"headers\":{\"Host\":\"example.invalid\",\"Content-Type\":null}}"
 ```
 
 If `profile` is omitted, browser tools use the server default profile. The default is `default`, or `CDP_AGENT_PROFILE` if set.
