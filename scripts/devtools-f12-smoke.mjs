@@ -256,8 +256,11 @@ try {
         const frame = document.getElementById("agent-frame");
         const marker = "FRAME_" + "SECRET_MARKER";
         frame.contentDocument.open();
-        frame.contentDocument.write("<!doctype html><title>frame smoke</title><h2 id='frame-marker'>" + marker + "</h2><button aria-label='Frame Action'>Inside Frame</button>");
+        frame.contentDocument.write("<!doctype html><title>frame smoke</title><style>#frame-action{color:rgb(45, 67, 89);}</style><h2 id='frame-marker'>" + marker + "</h2><button id='frame-action' aria-label='Frame Action'>Inside Frame</button><input id='frame-input' aria-label='Frame Input'>");
         frame.contentDocument.close();
+        frame.contentDocument.getElementById("frame-action").addEventListener("click", () => {
+          frame.contentDocument.body.dataset.frameClicked = "yes";
+        });
       });
       //# sourceMappingURL=data:application/json;base64,${sourceMap}
     </script>
@@ -282,7 +285,43 @@ try {
     includeFrames: true,
     maxResults: 10,
   });
-  assert(frameSearch.results?.some((entry) => entry.frame?.path?.includes("frame")), `iframe DOM search did not report frame context: ${JSON.stringify(frameSearch)}`);
+  const framePath = frameSearch.results?.find((entry) => entry.frame?.path?.includes("frame"))?.frame?.path;
+  assert(framePath, `iframe DOM search did not report frame context: ${JSON.stringify(frameSearch)}`);
+  const frameStyles = await callTool(baseUrl, "devtools_css_styles", {
+    profile: "default",
+    selector: "#frame-action",
+    framePath,
+    maxRules: 20,
+  });
+  assert(frameStyles.found === true, `iframe css styles did not find frame button: ${JSON.stringify(frameStyles)}`);
+  assert(frameStyles.computedStyle?.computedStyle?.some((entry) => entry.name === "color" && entry.value.includes("45")), "iframe css styles missing computed frame color");
+  const frameListeners = await callTool(baseUrl, "devtools_event_listeners", {
+    profile: "default",
+    selector: "#frame-action",
+    framePath,
+  });
+  assert(frameListeners.listeners?.some((listener) => listener.type === "click"), `iframe event listeners missing click handler: ${JSON.stringify(frameListeners)}`);
+  const frameClick = await callTool(baseUrl, "devtools_click", {
+    profile: "default",
+    selector: "#frame-action",
+    framePath,
+    waitMs: 100,
+  });
+  assert(frameClick.ok === true, `iframe click failed: ${JSON.stringify(frameClick)}`);
+  const frameType = await callTool(baseUrl, "devtools_type", {
+    profile: "default",
+    selector: "#frame-input",
+    framePath,
+    text: "typed-in-frame",
+    waitMs: 100,
+  });
+  assert(frameType.ok === true, `iframe type failed: ${JSON.stringify(frameType)}`);
+  const frameState = await callTool(baseUrl, "devtools_eval", {
+    profile: "default",
+    expression: "(() => ({ clicked: document.getElementById('agent-frame').contentDocument.body.dataset.frameClicked, value: document.getElementById('agent-frame').contentDocument.getElementById('frame-input').value }))()",
+  });
+  const frameStateValue = frameState.page || frameState.result;
+  assert(frameStateValue?.clicked === "yes" && frameStateValue?.value === "typed-in-frame", `iframe action state mismatch: ${JSON.stringify(frameState)}`);
   const prettySource = await callTool(baseUrl, "devtools_source_pretty_print", {
     profile: "default",
     query: sourceMarker,

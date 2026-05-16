@@ -21,9 +21,10 @@
 - Application panel: Service Worker summaries/detail, CacheStorage summaries/detail,
   and Application JSON export are now in the unified tool contract. Next work is
   deeper cookie partition metadata where exposed.
-- Elements panel: same-origin iframe-aware DOM search, forced pseudo-state style
-  inspection, Accessibility snapshot, and raw Chrome DOMSnapshot are now in the
-  unified tool contract. Next work is deeper iframe element targeting.
+- Elements panel: same-origin iframe-aware DOM search, iframe selector targeting
+  for click/type/styles/listeners, forced pseudo-state style inspection,
+  Accessibility snapshot, and raw Chrome DOMSnapshot are now in the unified tool
+  contract. Next work is deeper cross-origin frame boundary reporting.
 - Sources panel: breakpoints, scopes, live debugging, and AST-lossless
   formatting where CDP exposes it. Parsed script listing, source reads, literal
   source search, heuristic pretty-print, and source map metadata are now in the

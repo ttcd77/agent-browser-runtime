@@ -346,7 +346,21 @@ async function chromeScreenshot(params) {
 
 async function chromeClick(params) {
   const tab = await getTargetTab(params);
-  const result = await runInTab(tab.id, ({ selector, text, x, y }) => {
+  const result = await runInTab(tab.id, ({ selector, text, x, y, framePath, frameIndexes }) => {
+    function selectInFrame(options) {
+      let doc = document;
+      for (const index of options.frameIndexes || []) {
+        const frames = Array.from(doc.querySelectorAll("iframe,frame"));
+        const frame = frames[index];
+        if (!frame) return null;
+        doc = frame.contentDocument || frame.contentWindow?.document;
+        if (!doc) return null;
+      }
+      if (options.selector) return doc.querySelector(options.selector);
+      const wanted = String(options.text || "").toLowerCase();
+      return Array.from(doc.querySelectorAll("button,a,input,textarea,[role=button],label,summary"))
+        .find((node) => (node.innerText || node.value || node.getAttribute("aria-label") || "").toLowerCase().includes(wanted)) || null;
+    }
     if (typeof x === "number" && typeof y === "number") {
       const el = document.elementFromPoint(x, y);
       if (!el) return { ok: false, error: "no_element_at_point" };
@@ -355,26 +369,28 @@ async function chromeClick(params) {
       el.dispatchEvent(new MouseEvent("click", { bubbles: true, clientX: x, clientY: y }));
       return { ok: true, mode: "coordinates" };
     }
-    let el = null;
-    if (selector) el = document.querySelector(selector);
-    if (!el && text) {
-      const wanted = String(text).toLowerCase();
-      el = [...document.querySelectorAll("button,a,input,textarea,[role=button],label,summary")]
-        .find((node) => (node.innerText || node.value || node.getAttribute("aria-label") || "").toLowerCase().includes(wanted));
-    }
+    const el = selectInFrame({ selector, text, frameIndexes });
     if (!el) return { ok: false, error: "element_not_found" };
     el.scrollIntoView({ block: "center", inline: "center" });
     el.click();
-    return { ok: true, mode: selector ? "selector" : "text" };
-  }, [params]);
+    return { ok: true, mode: selector ? "selector" : "text", framePath: framePath || null };
+  }, [{ ...params, frameIndexes: frameIndexesFromOptions(params) }]);
   return { tab: pickTab(tab), ...result };
 }
 
 async function chromeType(params) {
   const tab = await getTargetTab(params);
   if (!params.selector) throw new Error("selector is required");
-  const result = await runInTab(tab.id, ({ selector, text, clear, pressEnter }) => {
-    const el = document.querySelector(selector);
+  const result = await runInTab(tab.id, ({ selector, text, clear, pressEnter, framePath, frameIndexes }) => {
+    let doc = document;
+    for (const index of frameIndexes || []) {
+      const frames = Array.from(doc.querySelectorAll("iframe,frame"));
+      const frame = frames[index];
+      if (!frame) return { ok: false, error: "frame_not_found", framePath: framePath || null };
+      doc = frame.contentDocument || frame.contentWindow?.document;
+      if (!doc) return { ok: false, error: "frame_inaccessible", framePath: framePath || null };
+    }
+    const el = doc.querySelector(selector);
     if (!el) return { ok: false, error: "selector_not_found" };
     el.scrollIntoView({ block: "center", inline: "center" });
     el.focus();
@@ -386,8 +402,8 @@ async function chromeType(params) {
       el.dispatchEvent(new KeyboardEvent("keydown", { bubbles: true, key: "Enter", code: "Enter" }));
       el.dispatchEvent(new KeyboardEvent("keyup", { bubbles: true, key: "Enter", code: "Enter" }));
     }
-    return { ok: true };
-  }, [params]);
+    return { ok: true, framePath: framePath || null };
+  }, [{ ...params, frameIndexes: frameIndexesFromOptions(params) }]);
   return { tab: pickTab(tab), ...result };
 }
 
@@ -2991,7 +3007,10 @@ async function chromeDomSearch(params) {
 async function chromeEventListeners(params) {
   const { tab, target } = await ensureDevtoolsAttached(params);
   const selector = params.selector ? String(params.selector) : "document";
-  const expression = selector === "document" ? "document" : `document.querySelector(${JSON.stringify(selector)})`;
+  const frameIndexes = frameIndexesFromOptions(params);
+  const expression = frameIndexes.length
+    ? `(${selectInFramePageFunction.toString()})(${JSON.stringify({ selector, framePath: params.framePath || null, frameIndexes })})`
+    : selector === "document" ? "document" : `document.querySelector(${JSON.stringify(selector)})`;
   const node = await chromeDebuggerSendCommand(target, "Runtime.evaluate", {
     expression,
     objectGroup: "agent-browser-runtime-event-listeners",
@@ -3002,6 +3021,8 @@ async function chromeEventListeners(params) {
     return {
       tab: pickTab(tab),
       selector,
+      framePath: params.framePath || null,
+      frameIndexes,
       found: false,
       listeners: [],
       count: 0,
@@ -3040,6 +3061,8 @@ async function chromeEventListeners(params) {
   return {
     tab: pickTab(tab),
     selector,
+    framePath: params.framePath || null,
+    frameIndexes,
     found: true,
     count: listeners.length,
     listeners,
@@ -3052,43 +3075,58 @@ async function chromeCssStyles(params) {
   const maxRules = Number(params.maxRules || 80);
   await chromeDebuggerSendCommand(target, "DOM.enable");
   await chromeDebuggerSendCommand(target, "CSS.enable");
-  const documentNode = await chromeDebuggerSendCommand(target, "DOM.getDocument", { depth: -1, pierce: true });
-  const query = await chromeDebuggerSendCommand(target, "DOM.querySelector", {
-    nodeId: documentNode.root.nodeId,
-    selector,
-  });
-  if (!query.nodeId) {
+  const resolved = await resolveNodeIdForSelector(target, selector, params);
+  if (!resolved.nodeId) {
+    const fallbackStyle = await chromeDebuggerSendCommand(target, "Runtime.evaluate", {
+      expression: `(() => { const selectInFramePageFunction = ${selectInFramePageFunction.toString()}; const styleInFramePageFunction = ${styleInFramePageFunction.toString()}; return styleInFramePageFunction(${JSON.stringify({
+        selector,
+        framePath: params.framePath || null,
+        frameIndexes: resolved.frameIndexes,
+        maxOuterHTMLChars: 4000,
+      })}); })()`,
+      returnByValue: true,
+      awaitPromise: true,
+    }).catch((error) => ({ error: String(error?.message || error) }));
+    const fallbackValue = fallbackStyle.error ? { found: false, error: fallbackStyle.error } : fallbackStyle.result?.value;
     return {
       tab: pickTab(tab),
       selector,
-      found: false,
+      framePath: params.framePath || null,
+      frameIndexes: resolved.frameIndexes,
+      ...(fallbackValue || { found: false }),
+      selectorResolution: resolved,
+      matchedStyles: null,
+      fallbackUsed: true,
     };
   }
   const pseudo = normalizeForcedPseudoClasses(params.forcePseudoClasses);
   let forcePseudoState = null;
   if (pseudo.forced.length) {
     forcePseudoState = await chromeDebuggerSendCommand(target, "CSS.forcePseudoState", {
-      nodeId: query.nodeId,
+      nodeId: resolved.nodeId,
       forcedPseudoClasses: pseudo.forced,
     }).then(() => ({ applied: true })).catch((error) => ({ applied: false, error: String(error?.message || error) }));
   }
   const matchedStyles = params.includeMatchedRules === false
     ? null
-    : await chromeDebuggerSendCommand(target, "CSS.getMatchedStylesForNode", { nodeId: query.nodeId }).catch((error) => ({ error: String(error?.message || error) }));
+    : await chromeDebuggerSendCommand(target, "CSS.getMatchedStylesForNode", { nodeId: resolved.nodeId }).catch((error) => ({ error: String(error?.message || error) }));
   const computedStyle = params.includeComputed === false
     ? null
-    : await chromeDebuggerSendCommand(target, "CSS.getComputedStyleForNode", { nodeId: query.nodeId }).catch((error) => ({ error: String(error?.message || error) }));
+    : await chromeDebuggerSendCommand(target, "CSS.getComputedStyleForNode", { nodeId: resolved.nodeId }).catch((error) => ({ error: String(error?.message || error) }));
   const boxModel = params.includeBoxModel === false
     ? null
-    : await chromeDebuggerSendCommand(target, "DOM.getBoxModel", { nodeId: query.nodeId }).catch((error) => ({ error: String(error?.message || error) }));
+    : await chromeDebuggerSendCommand(target, "DOM.getBoxModel", { nodeId: resolved.nodeId }).catch((error) => ({ error: String(error?.message || error) }));
   if (pseudo.forced.length && params.persistPseudoState !== true) {
-    await chromeDebuggerSendCommand(target, "CSS.forcePseudoState", { nodeId: query.nodeId, forcedPseudoClasses: [] }).catch(() => {});
+    await chromeDebuggerSendCommand(target, "CSS.forcePseudoState", { nodeId: resolved.nodeId, forcedPseudoClasses: [] }).catch(() => {});
   }
   return {
     tab: pickTab(tab),
     selector,
+    framePath: params.framePath || null,
+    frameIndexes: resolved.frameIndexes,
     found: true,
-    nodeId: query.nodeId,
+    nodeId: resolved.nodeId,
+    selectorResolution: resolved,
     forcedPseudoClasses: pseudo.forced,
     skippedPseudoClasses: pseudo.skipped,
     pseudoStatePersisted: Boolean(params.persistPseudoState && pseudo.forced.length),
@@ -3660,6 +3698,96 @@ function normalizeForcedPseudoClasses(value) {
   const forced = [...new Set(requested.filter((entry) => allowed.has(entry)))];
   const skipped = requested.filter((entry) => !allowed.has(entry));
   return { forced, skipped };
+}
+
+function frameIndexesFromOptions(options = {}) {
+  if (Array.isArray(options.frameIndexes)) return options.frameIndexes.map((entry) => Number(entry)).filter(Number.isInteger);
+  const path = String(options.framePath || "");
+  return [...path.matchAll(/frame\[(\d+)\]/g)].map((match) => Number(match[1])).filter(Number.isInteger);
+}
+
+function selectInFramePageFunction(options) {
+  const selector = String(options.selector || "document");
+  const text = String(options.text || "");
+  const frameIndexes = Array.isArray(options.frameIndexes) ? options.frameIndexes : [];
+  let doc = document;
+  for (const index of frameIndexes) {
+    const frames = Array.from(doc.querySelectorAll("iframe,frame"));
+    const frame = frames[index];
+    if (!frame) return null;
+    doc = frame.contentDocument || frame.contentWindow?.document;
+    if (!doc) return null;
+  }
+  if (selector === "document") return doc;
+  if (selector) return doc.querySelector(selector);
+  const wanted = text.toLowerCase();
+  return Array.from(doc.querySelectorAll("button,a,input,textarea,[role=button],label,summary"))
+    .find((node) => (node.innerText || node.value || node.getAttribute("aria-label") || "").toLowerCase().includes(wanted)) || null;
+}
+
+function styleInFramePageFunction(options) {
+  const el = selectInFramePageFunction(options);
+  if (!el || el.nodeType !== 1) return { found: false, error: "selector_not_found", framePath: options.framePath || null };
+  const computed = getComputedStyle(el);
+  const rect = el.getBoundingClientRect();
+  const computedStyle = Array.from(computed).map((name) => ({ name, value: computed.getPropertyValue(name) }));
+  return {
+    found: true,
+    source: "runtime-frame-fallback",
+    framePath: options.framePath || null,
+    selector: options.selector,
+    nodeName: el.nodeName,
+    localName: el.localName,
+    text: String(el.textContent || "").trim().slice(0, 500),
+    outerHTML: String(el.outerHTML || "").slice(0, options.maxOuterHTMLChars || 4000),
+    computedStyle: { computedStyle },
+    boxModel: {
+      model: {
+        content: [rect.left, rect.top, rect.right, rect.top, rect.right, rect.bottom, rect.left, rect.bottom],
+        border: [rect.left, rect.top, rect.right, rect.top, rect.right, rect.bottom, rect.left, rect.bottom],
+        padding: [rect.left, rect.top, rect.right, rect.top, rect.right, rect.bottom, rect.left, rect.bottom],
+        margin: [rect.left, rect.top, rect.right, rect.top, rect.right, rect.bottom, rect.left, rect.bottom],
+        width: rect.width,
+        height: rect.height,
+      },
+    },
+  };
+}
+
+async function resolveNodeIdForSelector(target, selector, options = {}) {
+  const frameIndexes = frameIndexesFromOptions(options);
+  const searchNode = async () => {
+    const search = await chromeDebuggerSendCommand(target, "DOM.performSearch", { query: selector, includeUserAgentShadowDOM: true }).catch(() => null);
+    const count = Number(search?.resultCount || 0);
+    if (!search?.searchId || count <= 0) return null;
+    const ids = await chromeDebuggerSendCommand(target, "DOM.getSearchResults", { searchId: search.searchId, fromIndex: 0, toIndex: Math.min(count, 5) }).catch(() => ({ nodeIds: [] }));
+    await chromeDebuggerSendCommand(target, "DOM.discardSearchResults", { searchId: search.searchId }).catch(() => {});
+    return (ids.nodeIds || []).find((nodeId) => nodeId) || null;
+  };
+  if (!frameIndexes.length) {
+    const documentNode = await chromeDebuggerSendCommand(target, "DOM.getDocument", { depth: -1, pierce: true });
+    const query = await chromeDebuggerSendCommand(target, "DOM.querySelector", {
+      nodeId: documentNode.root.nodeId,
+      selector,
+    });
+    return { nodeId: query.nodeId || null, frameIndexes, via: "dom-query-selector" };
+  }
+  const objectGroup = "agent-browser-runtime-frame-selector";
+  const evaluated = await chromeDebuggerSendCommand(target, "Runtime.evaluate", {
+    expression: `(${selectInFramePageFunction.toString()})(${JSON.stringify({ selector, frameIndexes })})`,
+    objectGroup,
+    returnByValue: false,
+    awaitPromise: true,
+  });
+  const objectId = evaluated.result?.objectId;
+  if (!objectId || evaluated.result?.subtype === "null") {
+    await chromeDebuggerSendCommand(target, "Runtime.releaseObjectGroup", { objectGroup }).catch(() => {});
+    return { nodeId: null, frameIndexes, via: "runtime-frame-selector", exception: evaluated.exceptionDetails || null };
+  }
+  const node = await chromeDebuggerSendCommand(target, "DOM.requestNode", { objectId }).catch((error) => ({ error: String(error?.message || error), nodeId: null }));
+  await chromeDebuggerSendCommand(target, "Runtime.releaseObjectGroup", { objectGroup }).catch(() => {});
+  const fallbackNodeId = node.nodeId ? null : await searchNode();
+  return { nodeId: node.nodeId || fallbackNodeId || null, frameIndexes, via: node.nodeId ? "runtime-frame-selector" : "dom-search-fallback", error: node.error || null };
 }
 
 async function debuggerScopePreview(target, scopeChain = [], maxScopes = 5, maxProperties = 20) {

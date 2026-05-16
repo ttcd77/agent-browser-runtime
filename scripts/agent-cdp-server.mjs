@@ -1188,6 +1188,113 @@ function normalizeForcedPseudoClasses(value) {
   return { forced, skipped };
 }
 
+function frameIndexesFromOptions(options = {}) {
+  if (Array.isArray(options.frameIndexes)) return options.frameIndexes.map((entry) => Number(entry)).filter(Number.isInteger);
+  const path = String(options.framePath || "");
+  return [...path.matchAll(/frame\[(\d+)\]/g)].map((match) => Number(match[1])).filter(Number.isInteger);
+}
+
+function selectInFramePageFunction(options) {
+  const selector = String(options.selector || "document");
+  const text = String(options.text || "");
+  const frameIndexes = Array.isArray(options.frameIndexes) ? options.frameIndexes : [];
+  let doc = document;
+  for (const index of frameIndexes) {
+    const frames = Array.from(doc.querySelectorAll("iframe,frame"));
+    const frame = frames[index];
+    if (!frame) return null;
+    doc = frame.contentDocument || frame.contentWindow?.document;
+    if (!doc) return null;
+  }
+  if (selector === "document") return doc;
+  if (selector) return doc.querySelector(selector);
+  const wanted = text.toLowerCase();
+  return Array.from(doc.querySelectorAll("button,a,input,textarea,[role=button],label,summary"))
+    .find((node) => (node.innerText || node.value || node.getAttribute("aria-label") || "").toLowerCase().includes(wanted)) || null;
+}
+
+function clickInFramePageFunction(options) {
+  const el = selectInFramePageFunction(options);
+  if (!el) return { ok: false, error: options.selector ? "selector_not_found" : "text_not_found", framePath: options.framePath || null };
+  el.scrollIntoView({ block: "center", inline: "center" });
+  el.click();
+  return { ok: true, mode: options.selector ? "selector" : "text", framePath: options.framePath || null };
+}
+
+function typeInFramePageFunction(options) {
+  const el = selectInFramePageFunction(options);
+  if (!el) return { ok: false, error: "selector_not_found", framePath: options.framePath || null };
+  el.scrollIntoView({ block: "center", inline: "center" });
+  el.focus();
+  if (options.clear !== false) el.value = "";
+  el.value = (el.value || "") + String(options.text || "");
+  el.dispatchEvent(new Event("input", { bubbles: true }));
+  el.dispatchEvent(new Event("change", { bubbles: true }));
+  return { ok: true, framePath: options.framePath || null };
+}
+
+function styleInFramePageFunction(options) {
+  const el = selectInFramePageFunction(options);
+  if (!el || el.nodeType !== 1) return { found: false, error: "selector_not_found", framePath: options.framePath || null };
+  const computed = getComputedStyle(el);
+  const rect = el.getBoundingClientRect();
+  const computedStyle = Array.from(computed).map((name) => ({ name, value: computed.getPropertyValue(name) }));
+  return {
+    found: true,
+    source: "runtime-frame-fallback",
+    framePath: options.framePath || null,
+    selector: options.selector,
+    nodeName: el.nodeName,
+    localName: el.localName,
+    text: String(el.textContent || "").trim().slice(0, 500),
+    outerHTML: String(el.outerHTML || "").slice(0, options.maxOuterHTMLChars || 4000),
+    computedStyle: { computedStyle },
+    boxModel: {
+      model: {
+        content: [rect.left, rect.top, rect.right, rect.top, rect.right, rect.bottom, rect.left, rect.bottom],
+        border: [rect.left, rect.top, rect.right, rect.top, rect.right, rect.bottom, rect.left, rect.bottom],
+        padding: [rect.left, rect.top, rect.right, rect.top, rect.right, rect.bottom, rect.left, rect.bottom],
+        margin: [rect.left, rect.top, rect.right, rect.top, rect.right, rect.bottom, rect.left, rect.bottom],
+        width: rect.width,
+        height: rect.height,
+      },
+    },
+  };
+}
+
+async function resolveNodeIdForSelector(client, selector, options = {}) {
+  const frameIndexes = frameIndexesFromOptions(options);
+  const searchNode = async () => {
+    const search = await client.DOM.performSearch({ query: selector, includeUserAgentShadowDOM: true }).catch(() => null);
+    const count = Number(search?.resultCount || 0);
+    if (!search?.searchId || count <= 0) return null;
+    const ids = await client.DOM.getSearchResults({ searchId: search.searchId, fromIndex: 0, toIndex: Math.min(count, 5) }).catch(() => ({ nodeIds: [] }));
+    await client.DOM.discardSearchResults({ searchId: search.searchId }).catch(() => {});
+    return (ids.nodeIds || []).find((nodeId) => nodeId) || null;
+  };
+  if (!frameIndexes.length) {
+    const documentNode = await client.DOM.getDocument({ depth: -1, pierce: true });
+    const query = await client.DOM.querySelector({ nodeId: documentNode.root.nodeId, selector });
+    return { nodeId: query.nodeId || null, frameIndexes, via: "dom-query-selector" };
+  }
+  const objectGroup = "agent-browser-runtime-frame-selector";
+  const evaluated = await client.Runtime.evaluate({
+    expression: `(${selectInFramePageFunction.toString()})(${JSON.stringify({ selector, frameIndexes })})`,
+    objectGroup,
+    returnByValue: false,
+    awaitPromise: true,
+  });
+  const objectId = evaluated.result?.objectId;
+  if (!objectId || evaluated.result?.subtype === "null") {
+    await client.Runtime.releaseObjectGroup({ objectGroup }).catch(() => {});
+    return { nodeId: null, frameIndexes, via: "runtime-frame-selector", exception: evaluated.exceptionDetails || null };
+  }
+  const node = await client.DOM.requestNode({ objectId }).catch((error) => ({ error: String(error?.message || error), nodeId: null }));
+  await client.Runtime.releaseObjectGroup({ objectGroup }).catch(() => {});
+  const fallbackNodeId = node.nodeId ? null : await searchNode();
+  return { nodeId: node.nodeId || fallbackNodeId || null, frameIndexes, via: node.nodeId ? "runtime-frame-selector" : "dom-search-fallback", error: node.error || null };
+}
+
 async function debuggerScopePreview(client, scopeChain = [], maxScopes = 5, maxProperties = 20) {
   const scopes = [];
   for (const scope of scopeChain.slice(0, maxScopes)) {
@@ -2856,6 +2963,8 @@ function registerStandaloneBrowserTools(tools, cdpPort, profileRegistry, default
         text: { type: "string" },
         x: { type: "number" },
         y: { type: "number" },
+        framePath: { type: "string" },
+        frameIndexes: { type: "array", items: { type: "number" } },
         tabId: { type: "string" },
       },
     },
@@ -2878,29 +2987,20 @@ function registerStandaloneBrowserTools(tools, cdpPort, profileRegistry, default
           await profileRegistry.touchProfile(profile.name, { tabId: target.id });
           return { ok: true, profile: profile.name, tabId: target.id, mode: "coordinates", x: params.x, y: params.y, capturedTraffic: capture.capturedTraffic, trafficFile: capture.trafficFile, eventFile: capture.eventFile };
         }
-        const expression = params?.selector
-          ? `(() => {
-              const el = document.querySelector(${JSON.stringify(params.selector)});
-              if (!el) return { ok: false, error: "selector_not_found" };
-              el.scrollIntoView({ block: "center", inline: "center" });
-              el.click();
-              return { ok: true, mode: "selector" };
-            })()`
-          : `(() => {
-              const wanted = ${JSON.stringify(String(params?.text || ""))}.toLowerCase();
-              const all = [...document.querySelectorAll("button,a,input,textarea,[role=button],label,summary")];
-              const el = all.find((node) => (node.innerText || node.value || node.getAttribute("aria-label") || "").toLowerCase().includes(wanted));
-              if (!el) return { ok: false, error: "text_not_found" };
-              el.scrollIntoView({ block: "center", inline: "center" });
-              el.click();
-              return { ok: true, mode: "text" };
-            })()`;
+        const frameIndexes = frameIndexesFromOptions(params);
+        const actionOptions = {
+          selector: params?.selector ? String(params.selector) : "",
+          text: String(params?.text || ""),
+          framePath: params?.framePath || null,
+          frameIndexes,
+        };
+        const expression = `(() => { const selectInFramePageFunction = ${selectInFramePageFunction.toString()}; const clickInFramePageFunction = ${clickInFramePageFunction.toString()}; return clickInFramePageFunction(${JSON.stringify(actionOptions)}); })()`;
         const capture = await runProfileAction({
           client,
           profile,
           eventType: "browser_click",
           waitMs: typeof params?.waitMs === "number" ? params.waitMs : 700,
-          event: { tabId: target.id, mode: params?.selector ? "selector" : "text", selector: params?.selector, text: params?.text },
+          event: { tabId: target.id, mode: params?.selector ? "selector" : "text", selector: params?.selector, text: params?.text, framePath: params?.framePath, frameIndexes },
           action: async () => {
             const result = await client.Runtime.evaluate({ expression, returnByValue: true, awaitPromise: true });
             return result.result?.value || { ok: false, error: "click_failed" };
@@ -2923,6 +3023,8 @@ function registerStandaloneBrowserTools(tools, cdpPort, profileRegistry, default
         text: { type: "string" },
         clear: { type: "boolean" },
         pressEnter: { type: "boolean" },
+        framePath: { type: "string" },
+        frameIndexes: { type: "array", items: { type: "number" } },
         tabId: { type: "string" },
       },
       required: ["selector", "text"],
@@ -2930,23 +3032,21 @@ function registerStandaloneBrowserTools(tools, cdpPort, profileRegistry, default
     async execute(_id, params) {
       const profile = await resolveProfile(params?.profile);
       return toolResult(await withPageClient(cdpPort, params?.tabId || profile.tabId, async (client, target) => {
-        const expression = `(() => {
-          const el = document.querySelector(${JSON.stringify(params.selector)});
-          if (!el) return { ok: false, error: "selector_not_found" };
-          el.scrollIntoView({ block: "center", inline: "center" });
-          el.focus();
-          if (${params.clear !== false}) el.value = "";
-          el.value = (el.value || "") + ${JSON.stringify(String(params.text || ""))};
-          el.dispatchEvent(new Event("input", { bubbles: true }));
-          el.dispatchEvent(new Event("change", { bubbles: true }));
-          return { ok: true };
-        })()`;
+        const frameIndexes = frameIndexesFromOptions(params);
+        const typeOptions = {
+          selector: String(params.selector || ""),
+          text: String(params.text || ""),
+          clear: params.clear !== false,
+          framePath: params?.framePath || null,
+          frameIndexes,
+        };
+        const expression = `(() => { const selectInFramePageFunction = ${selectInFramePageFunction.toString()}; const typeInFramePageFunction = ${typeInFramePageFunction.toString()}; return typeInFramePageFunction(${JSON.stringify(typeOptions)}); })()`;
         const capture = await runProfileAction({
           client,
           profile,
           eventType: "browser_type",
           waitMs: typeof params?.waitMs === "number" ? params.waitMs : 700,
-          event: { tabId: target.id, selector: params.selector, textLength: String(params.text || "").length, pressEnter: Boolean(params.pressEnter) },
+          event: { tabId: target.id, selector: params.selector, textLength: String(params.text || "").length, pressEnter: Boolean(params.pressEnter), framePath: params?.framePath, frameIndexes },
           action: async () => {
             const result = await client.Runtime.evaluate({ expression, returnByValue: true, awaitPromise: true });
             if (params.pressEnter) {
@@ -4516,6 +4616,8 @@ function registerStandaloneBrowserTools(tools, cdpPort, profileRegistry, default
         profile: { type: "string" },
         tabId: { type: "string" },
         selector: { type: "string" },
+        framePath: { type: "string" },
+        frameIndexes: { type: "array", items: { type: "number" } },
         depth: { type: "number" },
         pierce: { type: "boolean" },
       },
@@ -4526,9 +4628,12 @@ function registerStandaloneBrowserTools(tools, cdpPort, profileRegistry, default
       return toolResult(await withPageClient(cdpPort, params?.tabId || profile.tabId, async (client, target) => {
         await client.Runtime.enable();
         await client.DOMDebugger.enable?.().catch(() => {});
-        const expression = selector === "document"
-          ? "document"
-          : `document.querySelector(${JSON.stringify(selector)})`;
+        const frameIndexes = frameIndexesFromOptions(params);
+        const expression = frameIndexes.length
+          ? `(${selectInFramePageFunction.toString()})(${JSON.stringify({ selector, framePath: params?.framePath || null, frameIndexes })})`
+          : selector === "document"
+            ? "document"
+            : `document.querySelector(${JSON.stringify(selector)})`;
         const node = await client.Runtime.evaluate({
           expression,
           objectGroup: "agent-browser-runtime-event-listeners",
@@ -4540,6 +4645,8 @@ function registerStandaloneBrowserTools(tools, cdpPort, profileRegistry, default
             profile: profile.name,
             tabId: target.id,
             selector,
+            framePath: params?.framePath || null,
+            frameIndexes,
             found: false,
             listeners: [],
             count: 0,
@@ -4580,6 +4687,8 @@ function registerStandaloneBrowserTools(tools, cdpPort, profileRegistry, default
           profile: profile.name,
           tabId: target.id,
           selector,
+          framePath: params?.framePath || null,
+          frameIndexes,
           found: true,
           count: listeners.length,
           listeners,
@@ -4597,6 +4706,8 @@ function registerStandaloneBrowserTools(tools, cdpPort, profileRegistry, default
         profile: { type: "string" },
         tabId: { type: "string" },
         selector: { type: "string" },
+        framePath: { type: "string" },
+        frameIndexes: { type: "array", items: { type: "number" } },
         includeComputed: { type: "boolean" },
         includeMatchedRules: { type: "boolean" },
         includeBoxModel: { type: "boolean" },
@@ -4612,45 +4723,63 @@ function registerStandaloneBrowserTools(tools, cdpPort, profileRegistry, default
       return toolResult(await withPageClient(cdpPort, params?.tabId || profile.tabId, async (client, target) => {
         await client.DOM.enable();
         await client.CSS.enable();
-        const documentNode = await client.DOM.getDocument({ depth: -1, pierce: true });
-        const query = await client.DOM.querySelector({ nodeId: documentNode.root.nodeId, selector });
-        if (!query.nodeId) {
+        const resolved = await resolveNodeIdForSelector(client, selector, params);
+        if (!resolved.nodeId) {
+          const fallbackStyle = await client.Runtime.evaluate({
+            expression: `(() => { const selectInFramePageFunction = ${selectInFramePageFunction.toString()}; const styleInFramePageFunction = ${styleInFramePageFunction.toString()}; return styleInFramePageFunction(${JSON.stringify({
+              selector,
+              framePath: params?.framePath || null,
+              frameIndexes: resolved.frameIndexes,
+              maxOuterHTMLChars: 4000,
+            })}); })()`,
+            returnByValue: true,
+            awaitPromise: true,
+          }).catch((error) => ({ error: String(error?.message || error) }));
+          const fallbackValue = fallbackStyle.error ? { found: false, error: fallbackStyle.error } : fallbackStyle.result?.value;
           return {
             profile: profile.name,
             tabId: target.id,
             selector,
-            found: false,
+            framePath: params?.framePath || null,
+            frameIndexes: resolved.frameIndexes,
+            ...(fallbackValue || { found: false }),
+            selectorResolution: resolved,
+            matchedStyles: null,
+            fallbackUsed: true,
           };
         }
         const pseudo = normalizeForcedPseudoClasses(params?.forcePseudoClasses);
         let forcePseudoState = null;
         if (pseudo.forced.length) {
           forcePseudoState = await client.CSS.forcePseudoState({
-            nodeId: query.nodeId,
+            nodeId: resolved.nodeId,
             forcedPseudoClasses: pseudo.forced,
           }).then(() => ({ applied: true })).catch((error) => ({ applied: false, error: String(error?.message || error) }));
         }
         const [matchedStyles, computedStyle, boxModel] = await Promise.all([
           params?.includeMatchedRules === false
             ? Promise.resolve(null)
-            : client.CSS.getMatchedStylesForNode({ nodeId: query.nodeId }).catch((error) => ({ error: String(error?.message || error) })),
+            : client.CSS.getMatchedStylesForNode({ nodeId: resolved.nodeId }).catch((error) => ({ error: String(error?.message || error) })),
           params?.includeComputed === false
             ? Promise.resolve(null)
-            : client.CSS.getComputedStyleForNode({ nodeId: query.nodeId }).catch((error) => ({ error: String(error?.message || error) })),
+            : client.CSS.getComputedStyleForNode({ nodeId: resolved.nodeId }).catch((error) => ({ error: String(error?.message || error) })),
           params?.includeBoxModel === false
             ? Promise.resolve(null)
-            : client.DOM.getBoxModel({ nodeId: query.nodeId }).catch((error) => ({ error: String(error?.message || error) })),
+            : client.DOM.getBoxModel({ nodeId: resolved.nodeId }).catch((error) => ({ error: String(error?.message || error) })),
         ]);
         if (pseudo.forced.length && params?.persistPseudoState !== true) {
-          await client.CSS.forcePseudoState({ nodeId: query.nodeId, forcedPseudoClasses: [] }).catch(() => {});
+          await client.CSS.forcePseudoState({ nodeId: resolved.nodeId, forcedPseudoClasses: [] }).catch(() => {});
         }
         await profileRegistry.touchProfile(profile.name, { tabId: target.id });
         return {
           profile: profile.name,
           tabId: target.id,
           selector,
+          framePath: params?.framePath || null,
+          frameIndexes: resolved.frameIndexes,
           found: true,
-          nodeId: query.nodeId,
+          nodeId: resolved.nodeId,
+          selectorResolution: resolved,
           forcedPseudoClasses: pseudo.forced,
           skippedPseudoClasses: pseudo.skipped,
           pseudoStatePersisted: Boolean(params?.persistPseudoState && pseudo.forced.length),
