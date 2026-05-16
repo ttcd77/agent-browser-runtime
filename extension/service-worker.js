@@ -2078,9 +2078,18 @@ async function chromeRiskSummary(params) {
 async function chromeFrameTree(params) {
   const { tab, target, session } = await ensureDevtoolsAttached(params);
   const tree = await chromeDebuggerSendCommand(target, "Page.getFrameTree");
+  const access = await chromeDebuggerSendCommand(target, "Runtime.evaluate", {
+    expression: `(${frameAccessPageFunction.toString()})()`,
+    returnByValue: true,
+    awaitPromise: true,
+  }).catch((error) => ({ error: String(error?.message || error) }));
+  const frameAccess = access.error ? [] : access.result?.value || [];
   return {
     tab: pickTab(tab),
     frameTree: tree.frameTree,
+    frameAccess,
+    inaccessibleFrameCount: frameAccess.filter((frame) => frame.accessible === false).length,
+    frameAccessError: access.error || null,
     recentFrameEvents: session.frames.slice(-50),
   };
 }
@@ -3752,6 +3761,39 @@ function styleInFramePageFunction(options) {
       },
     },
   };
+}
+
+function frameAccessPageFunction() {
+  const rows = [];
+  function visit(doc, path) {
+    const frames = Array.from(doc.querySelectorAll("iframe,frame"));
+    frames.forEach((frame, index) => {
+      const childPath = `${path} > frame[${index}]`;
+      const row = {
+        path: childPath,
+        tagName: frame.tagName,
+        id: frame.id || null,
+        name: frame.getAttribute("name") || null,
+        src: frame.getAttribute("src") || frame.getAttribute("srcdoc") || "",
+        sandbox: frame.getAttribute("sandbox") || null,
+        accessible: false,
+      };
+      try {
+        const childWindow = frame.contentWindow;
+        const childDocument = frame.contentDocument || childWindow?.document;
+        row.url = childWindow?.location?.href || "";
+        row.origin = childWindow?.location?.origin || "";
+        row.title = childDocument?.title || "";
+        row.accessible = Boolean(childDocument?.documentElement);
+        if (row.accessible) visit(childDocument, childPath);
+      } catch (error) {
+        row.error = String(error?.message || error);
+      }
+      rows.push(row);
+    });
+  }
+  visit(document, "top");
+  return rows;
 }
 
 async function resolveNodeIdForSelector(target, selector, options = {}) {

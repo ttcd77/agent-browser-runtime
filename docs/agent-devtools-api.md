@@ -176,7 +176,7 @@ Implemented:
   the backend exposes them.
 - Security: page secure-context summary and TLS/certificate details collected from Network security metadata.
 - Accessibility: AX tree nodes, roles, names, values, descriptions, properties, child ids, and backend DOM node ids where Chrome exposes them.
-- Frames: frame tree and recent frame lifecycle events.
+- Frames: frame tree, same-origin frame accessibility map, inaccessible/sandboxed frame boundary reporting, and recent frame lifecycle events.
 - Storage: localStorage, sessionStorage, document-visible cookies, backend cookie API/CDP cookies, cookie security summaries, origin/storage-key/quota evidence, cookie partition metadata where Chrome exposes it, IndexedDB database/object-store/index/sample records, IndexedDB paged record reads, Cache Storage request/response metadata and body reads, Service Worker registrations, Service Worker script/status detail, Service Worker target summary, CacheStorage summary/detail, and Application panel JSON export.
 - Token scan: full-value scan across headers, payloads, storage, and cookies in authorized browser mode.
 

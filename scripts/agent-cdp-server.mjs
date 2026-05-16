@@ -1262,6 +1262,39 @@ function styleInFramePageFunction(options) {
   };
 }
 
+function frameAccessPageFunction() {
+  const rows = [];
+  function visit(doc, path) {
+    const frames = Array.from(doc.querySelectorAll("iframe,frame"));
+    frames.forEach((frame, index) => {
+      const childPath = `${path} > frame[${index}]`;
+      const row = {
+        path: childPath,
+        tagName: frame.tagName,
+        id: frame.id || null,
+        name: frame.getAttribute("name") || null,
+        src: frame.getAttribute("src") || frame.getAttribute("srcdoc") || "",
+        sandbox: frame.getAttribute("sandbox") || null,
+        accessible: false,
+      };
+      try {
+        const childWindow = frame.contentWindow;
+        const childDocument = frame.contentDocument || childWindow?.document;
+        row.url = childWindow?.location?.href || "";
+        row.origin = childWindow?.location?.origin || "";
+        row.title = childDocument?.title || "";
+        row.accessible = Boolean(childDocument?.documentElement);
+        if (row.accessible) visit(childDocument, childPath);
+      } catch (error) {
+        row.error = String(error?.message || error);
+      }
+      rows.push(row);
+    });
+  }
+  visit(document, "top");
+  return rows;
+}
+
 async function resolveNodeIdForSelector(client, selector, options = {}) {
   const frameIndexes = frameIndexesFromOptions(options);
   const searchNode = async () => {
@@ -3233,8 +3266,21 @@ function registerStandaloneBrowserTools(tools, cdpPort, profileRegistry, default
       return toolResult(await withPageClient(cdpPort, params?.tabId || profile.tabId, async (client, target) => {
         await client.Page.enable();
         const tree = await client.Page.getFrameTree();
+        const access = await client.Runtime.evaluate({
+          expression: `(${frameAccessPageFunction.toString()})()`,
+          returnByValue: true,
+          awaitPromise: true,
+        }).catch((error) => ({ error: String(error?.message || error) }));
+        const frameAccess = access.error ? [] : access.result?.value || [];
         await profileRegistry.touchProfile(profile.name, { tabId: target.id });
-        return { profile: profile.name, tabId: target.id, frameTree: tree.frameTree };
+        return {
+          profile: profile.name,
+          tabId: target.id,
+          frameTree: tree.frameTree,
+          frameAccess,
+          inaccessibleFrameCount: frameAccess.filter((frame) => frame.accessible === false).length,
+          frameAccessError: access.error || null,
+        };
       }));
     },
   });

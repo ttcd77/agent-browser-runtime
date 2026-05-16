@@ -266,7 +266,8 @@ try {
     </script>
     <h1>Source Search Smoke</h1>
     <button id="agent-listener-button">Listener Smoke</button>
-    <iframe id="agent-frame"></iframe>`)}`;
+    <iframe id="agent-frame"></iframe>
+    <iframe id="opaque-frame" sandbox srcdoc="<p>Opaque frame</p>"></iframe>`)}`;
   await callTool(baseUrl, "browser_navigate", {
     profile: "default",
     url: sourcePage,
@@ -322,6 +323,11 @@ try {
   });
   const frameStateValue = frameState.page || frameState.result;
   assert(frameStateValue?.clicked === "yes" && frameStateValue?.value === "typed-in-frame", `iframe action state mismatch: ${JSON.stringify(frameState)}`);
+  const frameTree = await callTool(baseUrl, "devtools_frame_tree", {
+    profile: "default",
+  });
+  assert(frameTree.frameAccess?.some((frame) => frame.path === framePath && frame.accessible === true), `frame tree missing accessible same-origin frame: ${JSON.stringify(frameTree)}`);
+  assert(frameTree.frameAccess?.some((frame) => frame.id === "opaque-frame" && frame.accessible === false), `frame tree missing inaccessible sandbox frame boundary: ${JSON.stringify(frameTree)}`);
   const prettySource = await callTool(baseUrl, "devtools_source_pretty_print", {
     profile: "default",
     query: sourceMarker,

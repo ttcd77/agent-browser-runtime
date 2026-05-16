@@ -24,7 +24,7 @@
 - Elements panel: same-origin iframe-aware DOM search, iframe selector targeting
   for click/type/styles/listeners, forced pseudo-state style inspection,
   Accessibility snapshot, and raw Chrome DOMSnapshot are now in the unified tool
-  contract. Next work is deeper cross-origin frame boundary reporting.
+  contract.
 - Sources panel: breakpoints, scopes, live debugging, and AST-lossless
   formatting where CDP exposes it. Parsed script listing, source reads, literal
   source search, heuristic pretty-print, and source map metadata are now in the
@@ -32,6 +32,8 @@
 - Security panel: certificate/security-state summaries from response
   `securityDetails` and CDP security events are now in the unified tool
   contract; next work is UI-level explanation and edge-case coverage.
+- Frames: frame tree, same-origin accessibility map, and inaccessible/sandboxed
+  boundary reporting are now in the unified tool contract.
 - Performance panel: Chrome Tracing stream capture, trace screenshot frame
   extraction, trace duration phase summaries, busiest thread/process summaries,
   top duration events, and CPU profiles are now in the unified tool contract.
