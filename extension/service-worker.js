@@ -228,6 +228,8 @@ async function executeCommand(command, params) {
       return await chromeCdpCommand(params);
     case "chrome_debugger_control":
       return await chromeDebuggerControl(params);
+    case "chrome_token_flow_trace":
+      return await chromeTokenFlowTrace(params);
     case "chrome_memory_snapshot":
       return await chromeMemorySnapshot(params);
     case "chrome_sources_list":
@@ -3282,6 +3284,28 @@ async function chromeDebuggerControl(params) {
   };
 }
 
+async function chromeTokenFlowTrace(params) {
+  const { tab, target } = await ensureDevtoolsAttached(params);
+  const durationMs = Math.min(Math.max(Number(params.durationMs || 1000), 50), 10000);
+  await chromeDebuggerSendCommand(target, "Runtime.enable").catch(() => {});
+  const result = await chromeDebuggerSendCommand(target, "Runtime.evaluate", {
+    expression: `(${tokenFlowTracePageFunction.toString()})(${JSON.stringify({
+      durationMs,
+      maxEvents: Number(params.maxEvents || 100),
+      maxValueChars: Number(params.maxValueChars || 4000),
+      includeValues: params.includeValues !== false,
+      triggerExpression: params.triggerExpression || "",
+    })})`,
+    awaitPromise: true,
+    returnByValue: true,
+  });
+  return {
+    tab: pickTab(tab),
+    trace: result.result?.value || null,
+    exception: result.exceptionDetails || null,
+  };
+}
+
 async function chromeMemorySnapshot(params) {
   const { tab, target } = await ensureDevtoolsAttached(params);
   await chromeDebuggerSendCommand(target, "Runtime.enable").catch(() => {});
@@ -3801,6 +3825,155 @@ function frameAccessPageFunction() {
   }
   visit(document, "top");
   return rows;
+}
+
+function tokenFlowTracePageFunction(options) {
+  const durationMs = Math.max(50, Number(options.durationMs || 1000));
+  const maxEvents = Math.max(1, Number(options.maxEvents || 100));
+  const includeValues = options.includeValues !== false;
+  const triggerExpression = String(options.triggerExpression || "");
+  const tokenPatterns = [
+    /bearer\s+[a-z0-9._~+/=-]{8,}/i,
+    /(?:token|secret|session|jwt|auth|api[_-]?key)[a-z0-9_.:/?&=%+\-\s]{0,40}[=:]\s*[a-z0-9._~+/=-]{8,}/i,
+    /eyJ[a-zA-Z0-9_-]{8,}\.[a-zA-Z0-9_-]{8,}\.[a-zA-Z0-9_-]{8,}/,
+    /sk-[a-zA-Z0-9_-]{16,}/,
+  ];
+  const events = [];
+  const originals = {
+    fetch: window.fetch,
+    xhrOpen: XMLHttpRequest.prototype.open,
+    xhrSetRequestHeader: XMLHttpRequest.prototype.setRequestHeader,
+    xhrSend: XMLHttpRequest.prototype.send,
+    localSet: Storage.prototype.setItem,
+    localGet: Storage.prototype.getItem,
+    cookie: Object.getOwnPropertyDescriptor(Document.prototype, "cookie") || Object.getOwnPropertyDescriptor(HTMLDocument.prototype, "cookie"),
+  };
+  const now = () => new Date().toISOString();
+  const safeString = (value) => {
+    try {
+      if (typeof value === "string") return value;
+      if (value instanceof Headers) return JSON.stringify(Object.fromEntries(value.entries()));
+      if (value && typeof value === "object") return JSON.stringify(value);
+      return String(value ?? "");
+    } catch {
+      return String(value ?? "");
+    }
+  };
+  const tokenHits = (parts) => {
+    const text = parts.map(safeString).join(" ");
+    return tokenPatterns.map((pattern) => text.match(pattern)?.[0]).filter(Boolean);
+  };
+  const push = (event) => {
+    if (events.length >= maxEvents) return;
+    const hits = tokenHits([event.value, event.key, event.url, event.headers, event.body]);
+    events.push({
+      at: now(),
+      tokenLike: hits.length > 0,
+      tokenHits: includeValues ? hits : hits.map((hit) => ({ length: hit.length })),
+      ...event,
+      ...(includeValues ? {} : {
+        value: event.value ? { length: safeString(event.value).length } : undefined,
+        body: event.body ? { length: safeString(event.body).length } : undefined,
+        headers: event.headers ? { length: safeString(event.headers).length } : undefined,
+      }),
+    });
+  };
+  const readHeaders = (headers) => {
+    try {
+      if (!headers) return {};
+      if (headers instanceof Headers) return Object.fromEntries(headers.entries());
+      if (Array.isArray(headers)) return Object.fromEntries(headers);
+      if (typeof headers === "object") return { ...headers };
+      return headers;
+    } catch {
+      return {};
+    }
+  };
+  window.fetch = async function agentTokenFlowFetch(input, init = {}) {
+    const url = typeof input === "string" ? input : input?.url;
+    const headers = readHeaders(init?.headers || input?.headers);
+    push({ api: "fetch", phase: "request", url, method: init?.method || input?.method || "GET", headers, body: init?.body || null });
+    const response = await originals.fetch.apply(this, arguments);
+    try {
+      const clone = response.clone();
+      const text = await clone.text();
+      push({ api: "fetch", phase: "response", url: response.url || url, status: response.status, value: text.slice(0, options.maxValueChars || 4000) });
+    } catch (error) {
+      push({ api: "fetch", phase: "response-body-error", url: response.url || url, status: response.status, error: String(error?.message || error) });
+    }
+    return response;
+  };
+  XMLHttpRequest.prototype.open = function(method, url) {
+    this.__agentTokenFlow = { method, url, headers: {} };
+    return originals.xhrOpen.apply(this, arguments);
+  };
+  XMLHttpRequest.prototype.setRequestHeader = function(name, value) {
+    this.__agentTokenFlow = this.__agentTokenFlow || { headers: {} };
+    this.__agentTokenFlow.headers[name] = value;
+    return originals.xhrSetRequestHeader.apply(this, arguments);
+  };
+  XMLHttpRequest.prototype.send = function(body) {
+    const meta = this.__agentTokenFlow || {};
+    push({ api: "XMLHttpRequest", phase: "request", url: meta.url, method: meta.method, headers: meta.headers, body });
+    this.addEventListener("loadend", () => {
+      push({ api: "XMLHttpRequest", phase: "response", url: meta.url, status: this.status, value: String(this.responseText || "").slice(0, options.maxValueChars || 4000) });
+    });
+    return originals.xhrSend.apply(this, arguments);
+  };
+  Storage.prototype.setItem = function(key, value) {
+    const area = this === localStorage ? "localStorage" : this === sessionStorage ? "sessionStorage" : "Storage";
+    push({ api: area, phase: "setItem", key, value });
+    return originals.localSet.apply(this, arguments);
+  };
+  Storage.prototype.getItem = function(key) {
+    const value = originals.localGet.apply(this, arguments);
+    const area = this === localStorage ? "localStorage" : this === sessionStorage ? "sessionStorage" : "Storage";
+    push({ api: area, phase: "getItem", key, value });
+    return value;
+  };
+  if (originals.cookie?.get && originals.cookie?.set) {
+    Object.defineProperty(document, "cookie", {
+      configurable: true,
+      get() {
+        const value = originals.cookie.get.call(document);
+        push({ api: "document.cookie", phase: "get", value });
+        return value;
+      },
+      set(value) {
+        push({ api: "document.cookie", phase: "set", value });
+        return originals.cookie.set.call(document, value);
+      },
+    });
+  }
+  const restore = () => {
+    window.fetch = originals.fetch;
+    XMLHttpRequest.prototype.open = originals.xhrOpen;
+    XMLHttpRequest.prototype.setRequestHeader = originals.xhrSetRequestHeader;
+    XMLHttpRequest.prototype.send = originals.xhrSend;
+    Storage.prototype.setItem = originals.localSet;
+    Storage.prototype.getItem = originals.localGet;
+    if (originals.cookie) Object.defineProperty(document, "cookie", originals.cookie);
+  };
+  return new Promise((resolve) => {
+    let triggerResult = null;
+    let triggerError = null;
+    Promise.resolve()
+      .then(() => triggerExpression ? Function(triggerExpression)() : null)
+      .then((value) => { triggerResult = value; })
+      .catch((error) => { triggerError = String(error?.message || error); });
+    setTimeout(() => {
+      restore();
+      resolve({
+        url: location.href,
+        durationMs,
+        eventCount: events.length,
+        tokenLikeEventCount: events.filter((event) => event.tokenLike).length,
+        events,
+        triggerResult,
+        triggerError,
+      });
+    }, durationMs);
+  });
 }
 
 async function resolveNodeIdForSelector(target, selector, options = {}) {

@@ -415,6 +415,22 @@ try {
   });
   assert(debuggerPause.paused?.callFrameCount >= 1, `debugger control did not capture paused frames: ${JSON.stringify(debuggerPause)}`);
   assert(debuggerPause.autoResumed === true, "debugger control did not auto-resume after pauseOnExpression");
+  const tokenFlow = await callTool(baseUrl, "devtools_token_flow_trace", {
+    profile: "default",
+    durationMs: 600,
+    maxEvents: 20,
+    triggerExpression: `
+      try { localStorage.setItem('agent-flow-token', 'token=flow_secret_1234567890'); } catch {}
+      try { sessionStorage.setItem('agent-flow-session', 'Bearer flow_header_1234567890'); } catch {}
+      fetch('data:text/plain,token=flow_fetch_1234567890', { headers: { Authorization: 'Bearer flow_auth_1234567890' } }).catch(() => {});
+      const xhr = new XMLHttpRequest();
+      xhr.open('GET', 'data:text/plain,token=flow_xhr_1234567890');
+      xhr.setRequestHeader('X-Agent-Auth', 'Bearer flow_xhr_header_1234567890');
+      xhr.send();
+    `,
+  });
+  assert(tokenFlow.trace?.eventCount >= 3, `token flow trace did not capture enough events: ${JSON.stringify(tokenFlow)}`);
+  assert(tokenFlow.trace?.tokenLikeEventCount >= 2, `token flow trace did not detect token-like events: ${JSON.stringify(tokenFlow)}`);
   const memorySnapshot = await callTool(baseUrl, "devtools_memory_snapshot", {
     profile: "default",
   });

@@ -28,8 +28,9 @@
   contract.
 - Sources panel: breakpoints, scopes, live debugging, and AST-lossless
   formatting where CDP exposes it. Parsed script listing, source reads, literal
-  source search, heuristic pretty-print, and source map metadata are now in the
-  unified tool contract.
+  source search, heuristic pretty-print, source map metadata, and temporary
+  token-flow instrumentation across fetch/XHR/storage/cookie APIs are now in
+  the unified tool contract.
 - Security panel: certificate/security-state summaries from response
   `securityDetails` and CDP security events are now in the unified tool
   contract; next work is UI-level explanation and edge-case coverage.
