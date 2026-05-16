@@ -62,6 +62,7 @@ Use this for an agent dashboard or a quick diagnosis before drilling down:
 | Pretty-print parsed JavaScript source | `devtools_source_pretty_print` |
 | Inspect source map reference and metadata | `devtools_source_map_metadata` |
 | Search script source | `devtools_sources_search` |
+| Pause/resume/step and inspect call frames/scopes | `devtools_debugger_control` |
 | Search Network, Sources, and Application evidence | `devtools_global_search` |
 | Export compact F12 evidence bundle | `devtools_evidence_bundle` |
 | Read source context around a console stack frame | `devtools_console_source_context` |

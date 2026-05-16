@@ -224,6 +224,8 @@ async function executeCommand(command, params) {
       return await chromeDomMutationWatch(params);
     case "chrome_cdp_command":
       return await chromeCdpCommand(params);
+    case "chrome_debugger_control":
+      return await chromeDebuggerControl(params);
     case "chrome_memory_snapshot":
       return await chromeMemorySnapshot(params);
     case "chrome_sources_list":
@@ -457,6 +459,8 @@ function sessionFor(tabId) {
       redirects: new Map(),
       websockets: new Map(),
       scripts: new Map(),
+      paused: null,
+      debuggerEvents: [],
       capture: {
         enabled: false,
         startedAt: null,
@@ -977,6 +981,16 @@ chrome.debugger.onEvent.addListener((source, method, params) => {
       length: params.length,
       stackTrace: params.stackTrace,
     });
+    return;
+  }
+  if (method === "Debugger.paused") {
+    session.paused = { timestamp, ...params };
+    pushLimited(session.debuggerEvents, { timestamp, method, reason: params.reason, hitBreakpoints: params.hitBreakpoints || [] });
+    return;
+  }
+  if (method === "Debugger.resumed") {
+    session.paused = null;
+    pushLimited(session.debuggerEvents, { timestamp, method });
     return;
   }
   if (!session.capture.enabled) return;
@@ -2730,6 +2744,78 @@ async function chromeCdpCommand(params) {
   };
 }
 
+async function chromeDebuggerControl(params) {
+  const { tab, target, session } = await ensureDevtoolsAttached(params);
+  const action = String(params.action || "snapshot");
+  const waitMs = Math.min(Math.max(Number(params.waitMs || 1000), 50), 10000);
+  let commandResult = null;
+  let pendingCommand = null;
+  if (action === "setBreakpointByUrl") {
+    commandResult = await chromeDebuggerSendCommand(target, "Debugger.setBreakpointByUrl", {
+      lineNumber: Number(params.lineNumber || 0),
+      url: params.url ? String(params.url) : undefined,
+      urlRegex: params.urlRegex ? String(params.urlRegex) : undefined,
+      columnNumber: Number(params.columnNumber || 0),
+      condition: params.condition ? String(params.condition) : undefined,
+    });
+  } else if (action === "removeBreakpoint") {
+    commandResult = await chromeDebuggerSendCommand(target, "Debugger.removeBreakpoint", { breakpointId: String(params.breakpointId || "") });
+  } else if (action === "setXHRBreakpoint") {
+    commandResult = await chromeDebuggerSendCommand(target, "DOMDebugger.setXHRBreakpoint", { url: String(params.xhrUrlContains || "") });
+  } else if (action === "removeXHRBreakpoint") {
+    commandResult = await chromeDebuggerSendCommand(target, "DOMDebugger.removeXHRBreakpoint", { url: String(params.xhrUrlContains || "") });
+  } else if (action === "pause") {
+    commandResult = await chromeDebuggerSendCommand(target, "Debugger.pause");
+    await delay(waitMs);
+  } else if (action === "resume") {
+    commandResult = await chromeDebuggerSendCommand(target, "Debugger.resume").catch((error) => ({ error: String(error?.message || error) }));
+    await delay(50);
+  } else if (action === "stepOver") {
+    commandResult = await chromeDebuggerSendCommand(target, "Debugger.stepOver").catch((error) => ({ error: String(error?.message || error) }));
+    await delay(waitMs);
+  } else if (action === "stepInto") {
+    commandResult = await chromeDebuggerSendCommand(target, "Debugger.stepInto").catch((error) => ({ error: String(error?.message || error) }));
+    await delay(waitMs);
+  } else if (action === "stepOut") {
+    commandResult = await chromeDebuggerSendCommand(target, "Debugger.stepOut").catch((error) => ({ error: String(error?.message || error) }));
+    await delay(waitMs);
+  } else if (action === "pauseOnExpression") {
+    const expression = params.expression ? String(params.expression) : "debugger;";
+    pendingCommand = chromeDebuggerSendCommand(target, "Runtime.evaluate", {
+      expression,
+      awaitPromise: false,
+      returnByValue: false,
+    }).catch((error) => ({ error: String(error?.message || error) }));
+    commandResult = { pending: true, reason: "Runtime.evaluate may remain pending while JavaScript is paused." };
+    await delay(waitMs);
+  } else if (action !== "snapshot") {
+    throw new Error(`unsupported debugger action: ${action}`);
+  }
+
+  const paused = await debuggerPausedSummary(target, session.paused, params || {});
+  const shouldResume = params.autoResume !== false && ["pause", "pauseOnExpression", "stepOver", "stepInto", "stepOut"].includes(action);
+  let resumeResult = null;
+  if (paused && shouldResume) {
+    resumeResult = await chromeDebuggerSendCommand(target, "Debugger.resume").catch((error) => ({ error: String(error?.message || error) }));
+    await delay(50);
+  }
+  if (pendingCommand) {
+    commandResult = await Promise.race([
+      pendingCommand,
+      delay(1000).then(() => ({ pending: true, reason: "Runtime.evaluate did not settle after resume timeout." })),
+    ]);
+  }
+  return {
+    tab: pickTab(tab),
+    action,
+    commandResult,
+    paused,
+    debuggerEvents: (session.debuggerEvents || []).slice(-20),
+    autoResumed: Boolean(paused && shouldResume),
+    resumeResult,
+  };
+}
+
 async function chromeMemorySnapshot(params) {
   const { tab, target } = await ensureDevtoolsAttached(params);
   await chromeDebuggerSendCommand(target, "Runtime.enable").catch(() => {});
@@ -3113,6 +3199,91 @@ function domSearchFallbackPageFunction(options) {
     query,
     returnedCount: results.length,
     results,
+  };
+}
+
+async function debuggerScopePreview(target, scopeChain = [], maxScopes = 5, maxProperties = 20) {
+  const scopes = [];
+  for (const scope of scopeChain.slice(0, maxScopes)) {
+    const row = {
+      type: scope.type,
+      name: scope.name || "",
+      startLocation: scope.startLocation || null,
+      endLocation: scope.endLocation || null,
+      object: scope.object ? {
+        type: scope.object.type,
+        subtype: scope.object.subtype,
+        className: scope.object.className,
+        description: scope.object.description,
+      } : null,
+      properties: [],
+      propertyError: null,
+    };
+    if (scope.object?.objectId && scope.type !== "global") {
+      try {
+        const properties = await chromeDebuggerSendCommand(target, "Runtime.getProperties", {
+          objectId: scope.object.objectId,
+          ownProperties: true,
+          accessorPropertiesOnly: false,
+          generatePreview: true,
+        });
+        row.properties = (properties.result || []).slice(0, maxProperties).map((property) => ({
+          name: property.name,
+          enumerable: property.enumerable,
+          configurable: property.configurable,
+          writable: property.writable,
+          isOwn: property.isOwn,
+          value: property.value ? {
+            type: property.value.type,
+            subtype: property.value.subtype,
+            className: property.value.className,
+            description: property.value.description,
+            value: property.value.value,
+            unserializableValue: property.value.unserializableValue,
+          } : null,
+        }));
+        row.propertiesTruncated = (properties.result || []).length > maxProperties;
+      } catch (error) {
+        row.propertyError = String(error?.message || error);
+      }
+    }
+    scopes.push(row);
+  }
+  return scopes;
+}
+
+async function debuggerPausedSummary(target, event, options = {}) {
+  if (!event) return null;
+  const maxFrames = Number(options.maxFrames || 10);
+  const maxScopes = Number(options.maxScopes || 5);
+  const maxProperties = Number(options.maxProperties || 20);
+  const frames = [];
+  for (const frame of (event.callFrames || []).slice(0, maxFrames)) {
+    frames.push({
+      callFrameId: frame.callFrameId,
+      functionName: frame.functionName,
+      url: frame.url,
+      location: frame.location,
+      functionLocation: frame.functionLocation || null,
+      this: frame.this ? {
+        type: frame.this.type,
+        subtype: frame.this.subtype,
+        className: frame.this.className,
+        description: frame.this.description,
+        value: frame.this.value,
+      } : null,
+      scopeChain: await debuggerScopePreview(target, frame.scopeChain || [], maxScopes, maxProperties),
+    });
+  }
+  return {
+    reason: event.reason,
+    data: event.data || null,
+    hitBreakpoints: event.hitBreakpoints || [],
+    asyncStackTrace: event.asyncStackTrace || null,
+    asyncStackTraceId: event.asyncStackTraceId || null,
+    callFrameCount: event.callFrames?.length || 0,
+    callFrames: frames,
+    callFramesTruncated: (event.callFrames?.length || 0) > maxFrames,
   };
 }
 

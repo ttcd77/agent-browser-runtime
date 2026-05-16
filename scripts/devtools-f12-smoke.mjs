@@ -306,6 +306,18 @@ try {
     },
   });
   assert(rawCdp.result?.result?.value === "source-search-smoke", `raw CDP command did not return marker: ${JSON.stringify(rawCdp)}`);
+  const debuggerPause = await callTool(baseUrl, "devtools_debugger_control", {
+    profile: "default",
+    action: "pauseOnExpression",
+    expression: "const agentDebuggerSmoke = 42; debugger; agentDebuggerSmoke;",
+    waitMs: 500,
+    autoResume: true,
+    maxFrames: 5,
+    maxScopes: 3,
+    maxProperties: 10,
+  });
+  assert(debuggerPause.paused?.callFrameCount >= 1, `debugger control did not capture paused frames: ${JSON.stringify(debuggerPause)}`);
+  assert(debuggerPause.autoResumed === true, "debugger control did not auto-resume after pauseOnExpression");
   const memorySnapshot = await callTool(baseUrl, "devtools_memory_snapshot", {
     profile: "default",
   });

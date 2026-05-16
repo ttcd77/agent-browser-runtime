@@ -940,6 +940,91 @@ function domSearchFallbackPageFunction(options) {
   };
 }
 
+async function debuggerScopePreview(client, scopeChain = [], maxScopes = 5, maxProperties = 20) {
+  const scopes = [];
+  for (const scope of scopeChain.slice(0, maxScopes)) {
+    const row = {
+      type: scope.type,
+      name: scope.name || "",
+      startLocation: scope.startLocation || null,
+      endLocation: scope.endLocation || null,
+      object: scope.object ? {
+        type: scope.object.type,
+        subtype: scope.object.subtype,
+        className: scope.object.className,
+        description: scope.object.description,
+      } : null,
+      properties: [],
+      propertyError: null,
+    };
+    if (scope.object?.objectId && scope.type !== "global") {
+      try {
+        const properties = await client.Runtime.getProperties({
+          objectId: scope.object.objectId,
+          ownProperties: true,
+          accessorPropertiesOnly: false,
+          generatePreview: true,
+        });
+        row.properties = (properties.result || []).slice(0, maxProperties).map((property) => ({
+          name: property.name,
+          enumerable: property.enumerable,
+          configurable: property.configurable,
+          writable: property.writable,
+          isOwn: property.isOwn,
+          value: property.value ? {
+            type: property.value.type,
+            subtype: property.value.subtype,
+            className: property.value.className,
+            description: property.value.description,
+            value: property.value.value,
+            unserializableValue: property.value.unserializableValue,
+          } : null,
+        }));
+        row.propertiesTruncated = (properties.result || []).length > maxProperties;
+      } catch (error) {
+        row.propertyError = String(error?.message || error);
+      }
+    }
+    scopes.push(row);
+  }
+  return scopes;
+}
+
+async function debuggerPausedSummary(client, event, options = {}) {
+  if (!event) return null;
+  const maxFrames = typeof options.maxFrames === "number" ? options.maxFrames : 10;
+  const maxScopes = typeof options.maxScopes === "number" ? options.maxScopes : 5;
+  const maxProperties = typeof options.maxProperties === "number" ? options.maxProperties : 20;
+  const frames = [];
+  for (const frame of (event.callFrames || []).slice(0, maxFrames)) {
+    frames.push({
+      callFrameId: frame.callFrameId,
+      functionName: frame.functionName,
+      url: frame.url,
+      location: frame.location,
+      functionLocation: frame.functionLocation || null,
+      this: frame.this ? {
+        type: frame.this.type,
+        subtype: frame.this.subtype,
+        className: frame.this.className,
+        description: frame.this.description,
+        value: frame.this.value,
+      } : null,
+      scopeChain: await debuggerScopePreview(client, frame.scopeChain || [], maxScopes, maxProperties),
+    });
+  }
+  return {
+    reason: event.reason,
+    data: event.data || null,
+    hitBreakpoints: event.hitBreakpoints || [],
+    asyncStackTrace: event.asyncStackTrace || null,
+    asyncStackTraceId: event.asyncStackTraceId || null,
+    callFrameCount: event.callFrames?.length || 0,
+    callFrames: frames,
+    callFramesTruncated: (event.callFrames?.length || 0) > maxFrames,
+  };
+}
+
 function prettyPrintJavaScript(sourceText, options = {}) {
   const text = String(sourceText || "");
   const indentText = typeof options.indent === "string" ? options.indent : "  ";
@@ -4138,6 +4223,115 @@ function registerStandaloneBrowserTools(tools, cdpPort, profileRegistry, default
     },
   });
 
+  tools.set("browser_debugger_control", {
+    name: "browser_debugger_control",
+    description: "Use core DevTools Debugger controls: pause/resume/step, breakpoint setup, XHR breakpoints, and paused call-frame/scope inspection.",
+    parameters: {
+      type: "object",
+      properties: {
+        profile: { type: "string" },
+        tabId: { type: "string" },
+        action: { type: "string" },
+        url: { type: "string" },
+        urlRegex: { type: "string" },
+        lineNumber: { type: "number" },
+        columnNumber: { type: "number" },
+        condition: { type: "string" },
+        breakpointId: { type: "string" },
+        xhrUrlContains: { type: "string" },
+        expression: { type: "string" },
+        waitMs: { type: "number" },
+        autoResume: { type: "boolean" },
+        maxFrames: { type: "number" },
+        maxScopes: { type: "number" },
+        maxProperties: { type: "number" },
+      },
+    },
+    async execute(_id, params) {
+      const profile = await resolveProfile(params?.profile);
+      const action = String(params?.action || "snapshot");
+      const waitMs = Math.min(Math.max(typeof params?.waitMs === "number" ? params.waitMs : 1000, 50), 10000);
+      return toolResult(await withPageClient(cdpPort, params?.tabId || profile.tabId, async (client, target) => {
+        await client.Runtime.enable().catch(() => {});
+        await client.Debugger.enable().catch(() => {});
+        let pausedEvent = null;
+        client.Debugger.paused((event) => {
+          pausedEvent = event;
+        });
+        client.Debugger.resumed(() => {
+          if (action !== "snapshot") pausedEvent = null;
+        });
+
+        let commandResult = null;
+        let pendingCommand = null;
+        if (action === "setBreakpointByUrl") {
+          commandResult = await client.Debugger.setBreakpointByUrl({
+            lineNumber: Number(params?.lineNumber || 0),
+            url: params?.url ? String(params.url) : undefined,
+            urlRegex: params?.urlRegex ? String(params.urlRegex) : undefined,
+            columnNumber: typeof params?.columnNumber === "number" ? params.columnNumber : 0,
+            condition: params?.condition ? String(params.condition) : undefined,
+          });
+        } else if (action === "removeBreakpoint") {
+          commandResult = await client.Debugger.removeBreakpoint({ breakpointId: String(params?.breakpointId || "") });
+        } else if (action === "setXHRBreakpoint") {
+          commandResult = await client.DOMDebugger.setXHRBreakpoint({ url: String(params?.xhrUrlContains || "") });
+        } else if (action === "removeXHRBreakpoint") {
+          commandResult = await client.DOMDebugger.removeXHRBreakpoint({ url: String(params?.xhrUrlContains || "") });
+        } else if (action === "pause") {
+          commandResult = await client.Debugger.pause();
+          await sleep(waitMs);
+        } else if (action === "resume") {
+          commandResult = await client.Debugger.resume().catch((error) => ({ error: String(error?.message || error) }));
+        } else if (action === "stepOver") {
+          commandResult = await client.Debugger.stepOver().catch((error) => ({ error: String(error?.message || error) }));
+          await sleep(waitMs);
+        } else if (action === "stepInto") {
+          commandResult = await client.Debugger.stepInto().catch((error) => ({ error: String(error?.message || error) }));
+          await sleep(waitMs);
+        } else if (action === "stepOut") {
+          commandResult = await client.Debugger.stepOut().catch((error) => ({ error: String(error?.message || error) }));
+          await sleep(waitMs);
+        } else if (action === "pauseOnExpression") {
+          const expression = params?.expression ? String(params.expression) : "debugger;";
+          pendingCommand = client.Runtime.evaluate({
+            expression,
+            awaitPromise: false,
+            returnByValue: false,
+          }).catch((error) => ({ error: String(error?.message || error) }));
+          commandResult = { pending: true, reason: "Runtime.evaluate may remain pending while JavaScript is paused." };
+          await sleep(waitMs);
+        } else if (action !== "snapshot") {
+          throw new Error(`unsupported debugger action: ${action}`);
+        }
+
+        const paused = await debuggerPausedSummary(client, pausedEvent, params || {});
+        const shouldResume = params?.autoResume !== false && ["pause", "pauseOnExpression", "stepOver", "stepInto", "stepOut"].includes(action);
+        let resumeResult = null;
+        if (paused && shouldResume) {
+          resumeResult = await client.Debugger.resume().catch((error) => ({ error: String(error?.message || error) }));
+        }
+        if (pendingCommand) {
+          commandResult = await Promise.race([
+            pendingCommand,
+            sleep(1000).then(() => ({ pending: true, reason: "Runtime.evaluate did not settle after resume timeout." })),
+          ]);
+        }
+        await profileRegistry.touchProfile(profile.name, { tabId: target.id });
+        return {
+          profile: profile.name,
+          tabId: target.id,
+          action,
+          commandResult,
+          paused,
+          autoResumed: Boolean(paused && shouldResume),
+          resumeResult,
+          note: "Managed Browser uses a short-lived CDP session; use pauseOnExpression for capture-and-resume inspection, or raw CDP for specialized flows.",
+        };
+      }));
+    },
+  });
+
   tools.set("browser_memory_snapshot", {
     name: "browser_memory_snapshot",
     description: "Return DevTools Memory/Performance Monitor-style counters: JS heap usage, DOM counters, and performance metrics.",
@@ -5305,6 +5499,7 @@ function registerStandaloneBrowserTools(tools, cdpPort, profileRegistry, default
   aliasTool("devtools_css_styles", "browser_css_styles", "Unified Agent DevTools API: read Elements panel Styles/Computed/Box Model evidence for a selected DOM node.");
   aliasTool("devtools_dom_mutation_watch", "browser_dom_mutation_watch", "Unified Agent DevTools API: watch selected-node DOM mutations as Elements-panel breakpoint evidence.");
   aliasTool("devtools_cdp_command", "browser_cdp_command", "Unified Agent DevTools API: run a raw Chrome DevTools Protocol command for unwrapped F12 features.");
+  aliasTool("devtools_debugger_control", "browser_debugger_control", "Unified Agent DevTools API: use Debugger pause/resume/step/breakpoint controls and inspect paused frames/scopes.");
   aliasTool("devtools_memory_snapshot", "browser_memory_snapshot", "Unified Agent DevTools API: read Memory/Performance Monitor counters.");
   aliasTool("devtools_sources_list", "browser_sources_list", "Unified Agent DevTools API: list parsed scripts and source maps.");
   aliasTool("devtools_source_get", "browser_source_get", "Unified Agent DevTools API: read script source by scriptId.");
