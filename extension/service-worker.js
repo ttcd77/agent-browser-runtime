@@ -3012,6 +3012,14 @@ async function chromeCssStyles(params) {
       found: false,
     };
   }
+  const pseudo = normalizeForcedPseudoClasses(params.forcePseudoClasses);
+  let forcePseudoState = null;
+  if (pseudo.forced.length) {
+    forcePseudoState = await chromeDebuggerSendCommand(target, "CSS.forcePseudoState", {
+      nodeId: query.nodeId,
+      forcedPseudoClasses: pseudo.forced,
+    }).then(() => ({ applied: true })).catch((error) => ({ applied: false, error: String(error?.message || error) }));
+  }
   const matchedStyles = params.includeMatchedRules === false
     ? null
     : await chromeDebuggerSendCommand(target, "CSS.getMatchedStylesForNode", { nodeId: query.nodeId }).catch((error) => ({ error: String(error?.message || error) }));
@@ -3021,11 +3029,18 @@ async function chromeCssStyles(params) {
   const boxModel = params.includeBoxModel === false
     ? null
     : await chromeDebuggerSendCommand(target, "DOM.getBoxModel", { nodeId: query.nodeId }).catch((error) => ({ error: String(error?.message || error) }));
+  if (pseudo.forced.length && params.persistPseudoState !== true) {
+    await chromeDebuggerSendCommand(target, "CSS.forcePseudoState", { nodeId: query.nodeId, forcedPseudoClasses: [] }).catch(() => {});
+  }
   return {
     tab: pickTab(tab),
     selector,
     found: true,
     nodeId: query.nodeId,
+    forcedPseudoClasses: pseudo.forced,
+    skippedPseudoClasses: pseudo.skipped,
+    pseudoStatePersisted: Boolean(params.persistPseudoState && pseudo.forced.length),
+    forcePseudoState,
     matchedStyles: matchedStyles ? {
       inlineStyle: matchedStyles.inlineStyle,
       attributesStyle: matchedStyles.attributesStyle,
@@ -3584,6 +3599,15 @@ function domSearchFallbackPageFunction(options) {
     frameErrors,
     results,
   };
+}
+
+function normalizeForcedPseudoClasses(value) {
+  const allowed = new Set(["active", "focus", "focus-within", "focus-visible", "hover", "target", "visited"]);
+  const raw = Array.isArray(value) ? value : (value ? [value] : []);
+  const requested = raw.map((entry) => String(entry || "").replace(/^:/, "").trim()).filter(Boolean);
+  const forced = [...new Set(requested.filter((entry) => allowed.has(entry)))];
+  const skipped = requested.filter((entry) => !allowed.has(entry));
+  return { forced, skipped };
 }
 
 async function debuggerScopePreview(target, scopeChain = [], maxScopes = 5, maxProperties = 20) {

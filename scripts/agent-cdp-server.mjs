@@ -1077,6 +1077,15 @@ function domSearchFallbackPageFunction(options) {
   };
 }
 
+function normalizeForcedPseudoClasses(value) {
+  const allowed = new Set(["active", "focus", "focus-within", "focus-visible", "hover", "target", "visited"]);
+  const raw = Array.isArray(value) ? value : (value ? [value] : []);
+  const requested = raw.map((entry) => String(entry || "").replace(/^:/, "").trim()).filter(Boolean);
+  const forced = [...new Set(requested.filter((entry) => allowed.has(entry)))];
+  const skipped = requested.filter((entry) => !allowed.has(entry));
+  return { forced, skipped };
+}
+
 async function debuggerScopePreview(client, scopeChain = [], maxScopes = 5, maxProperties = 20) {
   const scopes = [];
   for (const scope of scopeChain.slice(0, maxScopes)) {
@@ -4489,6 +4498,8 @@ function registerStandaloneBrowserTools(tools, cdpPort, profileRegistry, default
         includeComputed: { type: "boolean" },
         includeMatchedRules: { type: "boolean" },
         includeBoxModel: { type: "boolean" },
+        forcePseudoClasses: { type: "array", items: { type: "string" } },
+        persistPseudoState: { type: "boolean" },
         maxRules: { type: "number" },
       },
     },
@@ -4509,6 +4520,14 @@ function registerStandaloneBrowserTools(tools, cdpPort, profileRegistry, default
             found: false,
           };
         }
+        const pseudo = normalizeForcedPseudoClasses(params?.forcePseudoClasses);
+        let forcePseudoState = null;
+        if (pseudo.forced.length) {
+          forcePseudoState = await client.CSS.forcePseudoState({
+            nodeId: query.nodeId,
+            forcedPseudoClasses: pseudo.forced,
+          }).then(() => ({ applied: true })).catch((error) => ({ applied: false, error: String(error?.message || error) }));
+        }
         const [matchedStyles, computedStyle, boxModel] = await Promise.all([
           params?.includeMatchedRules === false
             ? Promise.resolve(null)
@@ -4520,6 +4539,9 @@ function registerStandaloneBrowserTools(tools, cdpPort, profileRegistry, default
             ? Promise.resolve(null)
             : client.DOM.getBoxModel({ nodeId: query.nodeId }).catch((error) => ({ error: String(error?.message || error) })),
         ]);
+        if (pseudo.forced.length && params?.persistPseudoState !== true) {
+          await client.CSS.forcePseudoState({ nodeId: query.nodeId, forcedPseudoClasses: [] }).catch(() => {});
+        }
         await profileRegistry.touchProfile(profile.name, { tabId: target.id });
         return {
           profile: profile.name,
@@ -4527,6 +4549,10 @@ function registerStandaloneBrowserTools(tools, cdpPort, profileRegistry, default
           selector,
           found: true,
           nodeId: query.nodeId,
+          forcedPseudoClasses: pseudo.forced,
+          skippedPseudoClasses: pseudo.skipped,
+          pseudoStatePersisted: Boolean(params?.persistPseudoState && pseudo.forced.length),
+          forcePseudoState,
           matchedStyles: matchedStyles ? {
             inlineStyle: matchedStyles.inlineStyle,
             attributesStyle: matchedStyles.attributesStyle,

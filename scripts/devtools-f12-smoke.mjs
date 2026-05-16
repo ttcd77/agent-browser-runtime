@@ -239,6 +239,7 @@ try {
     <title>source search smoke</title>
     <style>
       #agent-listener-button { color: rgb(12, 34, 56); padding: 7px; border: 1px solid rgb(1, 2, 3); }
+      #agent-listener-button:hover { color: rgb(111, 22, 33); }
     </style>
     <script>
       window.${sourceMarker}="source-search-smoke";function ${sourceMarker.toLowerCase()}(){return window.${sourceMarker};}
@@ -325,6 +326,16 @@ try {
   assert(cssStyles.found === true, "css styles did not find smoke button");
   assert(cssStyles.boxModel?.model, "css styles missing box model");
   assert(cssStyles.computedStyle?.computedStyle?.some((entry) => entry.name === "color"), "css styles missing computed color");
+  const hoverStyles = await callTool(baseUrl, "devtools_css_styles", {
+    profile: "default",
+    selector: "#agent-listener-button",
+    forcePseudoClasses: ["hover"],
+    maxRules: 20,
+  });
+  const hoverColor = hoverStyles.computedStyle?.computedStyle?.find((entry) => entry.name === "color")?.value || "";
+  assert(hoverStyles.forcePseudoState?.applied === true, `css pseudo-state was not applied: ${JSON.stringify(hoverStyles)}`);
+  assert(hoverStyles.forcedPseudoClasses?.includes("hover"), "css styles did not report forced :hover");
+  assert(hoverColor.includes("111") && hoverColor.includes("22") && hoverColor.includes("33"), `forced :hover did not affect computed color: ${hoverColor}`);
   const mutationWatch = await callTool(baseUrl, "devtools_dom_mutation_watch", {
     profile: "default",
     selector: "#agent-listener-button",
