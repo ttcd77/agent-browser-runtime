@@ -676,6 +676,62 @@ function truncateText(text, maxChars = 120000) {
   return { text: value.slice(0, maxChars), truncated: true };
 }
 
+function rangeLength(range = {}) {
+  return Math.max(0, Number(range.endOffset || 0) - Number(range.startOffset || 0));
+}
+
+function summarizeCoverageRanges(functions = []) {
+  const ranges = [];
+  for (const fn of functions || []) {
+    for (const range of fn.ranges || []) {
+      ranges.push({
+        functionName: fn.functionName || "",
+        startOffset: Number(range.startOffset || 0),
+        endOffset: Number(range.endOffset || 0),
+        count: Number(range.count || 0),
+        used: Number(range.count || 0) > 0,
+        bytes: rangeLength(range),
+      });
+    }
+  }
+  ranges.sort((a, b) => a.startOffset - b.startOffset || a.endOffset - b.endOffset);
+  return ranges;
+}
+
+function coverageSnippet(sourceText, range = {}, maxChars = 300) {
+  const text = String(sourceText || "");
+  const start = Math.max(0, Math.min(text.length, Number(range.startOffset || 0)));
+  const end = Math.max(start, Math.min(text.length, Number(range.endOffset || start)));
+  const raw = text.slice(start, end);
+  const limited = truncateText(raw, maxChars);
+  return {
+    startOffset: start,
+    endOffset: end,
+    text: limited.text,
+    truncated: limited.truncated,
+  };
+}
+
+function coverageByteSummary(ranges = [], fallbackTotalBytes = 0) {
+  const totalBytes = Math.max(
+    Number(fallbackTotalBytes || 0),
+    ...ranges.map((range) => Number(range.endOffset || 0)),
+    0,
+  );
+  let usedBytes = 0;
+  let unusedBytes = 0;
+  for (const range of ranges) {
+    if (range.used) usedBytes += range.bytes;
+    else unusedBytes += range.bytes;
+  }
+  return {
+    totalBytes,
+    usedBytes,
+    unusedBytes,
+    usedRatio: totalBytes > 0 ? usedBytes / totalBytes : null,
+  };
+}
+
 function prettyPrintJavaScript(sourceText, options = {}) {
   const text = String(sourceText || "");
   const indentText = typeof options.indent === "string" ? options.indent : "  ";
@@ -3640,6 +3696,75 @@ function registerStandaloneBrowserTools(tools, cdpPort, profileRegistry, default
     },
   });
 
+  tools.set("browser_css_styles", {
+    name: "browser_css_styles",
+    description: "Return DevTools Elements-panel Styles/Computed/Box Model evidence for a selected DOM node.",
+    parameters: {
+      type: "object",
+      properties: {
+        profile: { type: "string" },
+        tabId: { type: "string" },
+        selector: { type: "string" },
+        includeComputed: { type: "boolean" },
+        includeMatchedRules: { type: "boolean" },
+        includeBoxModel: { type: "boolean" },
+        maxRules: { type: "number" },
+      },
+    },
+    async execute(_id, params) {
+      const profile = await resolveProfile(params?.profile);
+      const selector = params?.selector ? String(params.selector) : "body";
+      const maxRules = typeof params?.maxRules === "number" ? params.maxRules : 80;
+      return toolResult(await withPageClient(cdpPort, params?.tabId || profile.tabId, async (client, target) => {
+        await client.DOM.enable();
+        await client.CSS.enable();
+        const documentNode = await client.DOM.getDocument({ depth: -1, pierce: true });
+        const query = await client.DOM.querySelector({ nodeId: documentNode.root.nodeId, selector });
+        if (!query.nodeId) {
+          return {
+            profile: profile.name,
+            tabId: target.id,
+            selector,
+            found: false,
+          };
+        }
+        const [matchedStyles, computedStyle, boxModel] = await Promise.all([
+          params?.includeMatchedRules === false
+            ? Promise.resolve(null)
+            : client.CSS.getMatchedStylesForNode({ nodeId: query.nodeId }).catch((error) => ({ error: String(error?.message || error) })),
+          params?.includeComputed === false
+            ? Promise.resolve(null)
+            : client.CSS.getComputedStyleForNode({ nodeId: query.nodeId }).catch((error) => ({ error: String(error?.message || error) })),
+          params?.includeBoxModel === false
+            ? Promise.resolve(null)
+            : client.DOM.getBoxModel({ nodeId: query.nodeId }).catch((error) => ({ error: String(error?.message || error) })),
+        ]);
+        await profileRegistry.touchProfile(profile.name, { tabId: target.id });
+        return {
+          profile: profile.name,
+          tabId: target.id,
+          selector,
+          found: true,
+          nodeId: query.nodeId,
+          matchedStyles: matchedStyles ? {
+            inlineStyle: matchedStyles.inlineStyle,
+            attributesStyle: matchedStyles.attributesStyle,
+            matchedCSSRules: Array.isArray(matchedStyles.matchedCSSRules) ? matchedStyles.matchedCSSRules.slice(0, maxRules) : matchedStyles.matchedCSSRules,
+            inherited: Array.isArray(matchedStyles.inherited) ? matchedStyles.inherited.slice(0, maxRules) : matchedStyles.inherited,
+            pseudoElements: matchedStyles.pseudoElements,
+            cssKeyframesRules: matchedStyles.cssKeyframesRules,
+            parentLayoutNodeId: matchedStyles.parentLayoutNodeId,
+            positionFallbackRules: matchedStyles.positionFallbackRules,
+            error: matchedStyles.error,
+            truncatedRules: Array.isArray(matchedStyles.matchedCSSRules) && matchedStyles.matchedCSSRules.length > maxRules,
+          } : null,
+          computedStyle,
+          boxModel,
+        };
+      }));
+    },
+  });
+
   tools.set("browser_sources_list", {
     name: "browser_sources_list",
     description: "Return Sources panel-style script metadata for the current profile tab.",
@@ -4462,6 +4587,155 @@ function registerStandaloneBrowserTools(tools, cdpPort, profileRegistry, default
     },
   });
 
+  tools.set("browser_coverage_detail", {
+    name: "browser_coverage_detail",
+    description: "Capture DevTools Coverage-panel drilldown data with raw JavaScript ranges, CSS rule usage, and bounded source snippets.",
+    parameters: {
+      type: "object",
+      properties: {
+        profile: { type: "string" },
+        tabId: { type: "string" },
+        durationMs: { type: "number" },
+        maxEntries: { type: "number" },
+        maxRangesPerEntry: { type: "number" },
+        maxSnippetChars: { type: "number" },
+        includeSource: { type: "boolean" },
+        includeUnused: { type: "boolean" },
+        includeUsed: { type: "boolean" },
+        urlContains: { type: "string" },
+        scriptId: { type: "string" },
+        styleSheetId: { type: "string" },
+        reload: { type: "boolean" },
+        ignoreCache: { type: "boolean" },
+      },
+    },
+    async execute(_id, params) {
+      const profile = await resolveProfile(params?.profile);
+      const durationMs = Math.min(Math.max(typeof params?.durationMs === "number" ? params.durationMs : 1000, 250), 10000);
+      const maxEntries = typeof params?.maxEntries === "number" ? params.maxEntries : 50;
+      const maxRangesPerEntry = typeof params?.maxRangesPerEntry === "number" ? params.maxRangesPerEntry : 20;
+      const maxSnippetChars = typeof params?.maxSnippetChars === "number" ? params.maxSnippetChars : 300;
+      const includeSource = params?.includeSource !== false;
+      const includeUsed = params?.includeUsed !== false;
+      const includeUnused = params?.includeUnused !== false;
+      return toolResult(await withPageClient(cdpPort, params?.tabId || profile.tabId, async (client, target) => {
+        await client.Page.enable().catch(() => {});
+        await client.Debugger.enable().catch(() => {});
+        await client.DOM.enable().catch(() => {});
+        await client.CSS.enable().catch(() => {});
+        await client.Profiler.enable().catch(() => {});
+        await client.Profiler.startPreciseCoverage({ callCount: true, detailed: true });
+        await client.CSS.startRuleUsageTracking().catch(() => {});
+        const startedAt = new Date().toISOString();
+        if (params?.reload) {
+          await client.Page.reload({ ignoreCache: Boolean(params?.ignoreCache) }).catch(() => {});
+        }
+        await sleep(durationMs);
+        const jsCoverage = await client.Profiler.takePreciseCoverage().catch((error) => ({ error: String(error?.message || error), result: [] }));
+        await client.Profiler.stopPreciseCoverage().catch(() => {});
+        const cssCoverage = await client.CSS.stopRuleUsageTracking().catch((error) => ({ error: String(error?.message || error), ruleUsage: [] }));
+        const scriptEntries = [];
+        const scripts = Array.isArray(jsCoverage.result) ? jsCoverage.result : [];
+        for (const script of scripts) {
+          if (params?.scriptId && String(script.scriptId) !== String(params.scriptId)) continue;
+          if (params?.urlContains && !String(script.url || "").toLowerCase().includes(String(params.urlContains).toLowerCase())) continue;
+          const allRanges = summarizeCoverageRanges(script.functions || [])
+            .filter((range) => (range.used ? includeUsed : includeUnused));
+          let sourceText = "";
+          let sourceError = null;
+          if (includeSource) {
+            try {
+              const source = await client.Debugger.getScriptSource({ scriptId: script.scriptId });
+              sourceText = String(source?.scriptSource || "");
+            } catch (err) {
+              sourceError = String(err?.message || err);
+            }
+          }
+          const byteSummary = coverageByteSummary(allRanges, sourceText ? sourceText.length : script.length);
+          scriptEntries.push({
+            scriptId: script.scriptId,
+            url: script.url,
+            functionCount: script.functions?.length || 0,
+            rangeCount: allRanges.length,
+            ...byteSummary,
+            sourceError,
+            ranges: allRanges.slice(0, maxRangesPerEntry).map((range) => ({
+              ...range,
+              ...(includeSource && sourceText ? { snippet: coverageSnippet(sourceText, range, maxSnippetChars) } : {}),
+            })),
+            rangesTruncated: allRanges.length > maxRangesPerEntry,
+          });
+          if (scriptEntries.length >= maxEntries) break;
+        }
+
+        const cssRules = [];
+        const cssRaw = Array.isArray(cssCoverage.ruleUsage) ? cssCoverage.ruleUsage : [];
+        const cssTextCache = new Map();
+        for (const rule of cssRaw) {
+          if (params?.styleSheetId && String(rule.styleSheetId) !== String(params.styleSheetId)) continue;
+          const used = Boolean(rule.used);
+          if (used && !includeUsed) continue;
+          if (!used && !includeUnused) continue;
+          let snippet = null;
+          let sourceError = null;
+          if (includeSource) {
+            try {
+              let text = cssTextCache.get(rule.styleSheetId);
+              if (text === undefined) {
+                const sheet = await client.CSS.getStyleSheetText({ styleSheetId: rule.styleSheetId });
+                text = String(sheet?.text || "");
+                cssTextCache.set(rule.styleSheetId, text);
+              }
+              snippet = coverageSnippet(text, rule, maxSnippetChars);
+            } catch (err) {
+              sourceError = String(err?.message || err);
+            }
+          }
+          cssRules.push({
+            styleSheetId: rule.styleSheetId,
+            startOffset: rule.startOffset,
+            endOffset: rule.endOffset,
+            used,
+            bytes: rangeLength(rule),
+            sourceError,
+            ...(snippet ? { snippet } : {}),
+          });
+          if (cssRules.length >= maxEntries) break;
+        }
+        await profileRegistry.touchProfile(profile.name, { tabId: target.id });
+        return {
+          profile: profile.name,
+          tabId: target.id,
+          startedAt,
+          finishedAt: new Date().toISOString(),
+          durationMs,
+          filters: {
+            urlContains: params?.urlContains || null,
+            scriptId: params?.scriptId || null,
+            styleSheetId: params?.styleSheetId || null,
+            includeUsed,
+            includeUnused,
+            includeSource,
+          },
+          js: {
+            scriptCount: scripts.length,
+            returnedCount: scriptEntries.length,
+            entries: scriptEntries,
+            truncated: scripts.length > scriptEntries.length && scriptEntries.length >= maxEntries,
+            error: jsCoverage.error,
+          },
+          css: {
+            ruleCount: cssRaw.length,
+            returnedCount: cssRules.length,
+            entries: cssRules,
+            truncated: cssRaw.length > cssRules.length && cssRules.length >= maxEntries,
+            error: cssCoverage.error,
+          },
+        };
+      }));
+    },
+  });
+
   tools.set("browser_token_scan", {
     name: "browser_token_scan",
     description: "Scan managed browser Network, storage, and cookies for token-like material. Returns full values in authorized runtime mode.",
@@ -4622,6 +4896,7 @@ function registerStandaloneBrowserTools(tools, cdpPort, profileRegistry, default
   aliasTool("devtools_elements_snapshot", "browser_elements_snapshot", "Unified Agent DevTools API: read Elements panel-style DOM tree, layout boxes, and computed style.");
   aliasTool("devtools_dom_snapshot", "browser_dom_snapshot", "Unified Agent DevTools API: read raw Chrome DOMSnapshot data.");
   aliasTool("devtools_event_listeners", "browser_event_listeners", "Unified Agent DevTools API: read Elements panel event listeners for a selected DOM node.");
+  aliasTool("devtools_css_styles", "browser_css_styles", "Unified Agent DevTools API: read Elements panel Styles/Computed/Box Model evidence for a selected DOM node.");
   aliasTool("devtools_sources_list", "browser_sources_list", "Unified Agent DevTools API: list parsed scripts and source maps.");
   aliasTool("devtools_source_get", "browser_source_get", "Unified Agent DevTools API: read script source by scriptId.");
   aliasTool("devtools_source_pretty_print", "browser_source_pretty_print", "Unified Agent DevTools API: pretty-print parsed JavaScript source.");
@@ -4632,6 +4907,7 @@ function registerStandaloneBrowserTools(tools, cdpPort, profileRegistry, default
   aliasTool("devtools_performance_trace", "browser_performance_trace", "Unified Agent DevTools API: capture navigation/resource/paint/long-task performance data.");
   aliasTool("devtools_chrome_trace", "browser_chrome_trace", "Unified Agent DevTools API: capture Chrome Tracing data and return a summary plus full trace path.");
   aliasTool("devtools_coverage_snapshot", "browser_coverage_snapshot", "Unified Agent DevTools API: capture short JavaScript and CSS coverage data.");
+  aliasTool("devtools_coverage_detail", "browser_coverage_detail", "Unified Agent DevTools API: capture Coverage-panel JavaScript/CSS range drilldown data.");
   aliasTool("devtools_token_scan", "browser_token_scan", "Unified Agent DevTools API: scan headers, payloads, storage, and cookies for token-like material.");
 }
 

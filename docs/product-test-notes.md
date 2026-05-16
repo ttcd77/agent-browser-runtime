@@ -76,8 +76,8 @@ not running, it still validates that Managed Browser exposes the contract.
 
 Current verified contract:
 
-- Managed Browser: 55 `devtools_*` tools.
-- Personal Chrome: 55 `devtools_*` tools.
+- Managed Browser: 56 `devtools_*` tools.
+- Personal Chrome: 56 `devtools_*` tools.
 - Drift: none.
 
 The contract smoke uses an isolated temporary browser profile so it does not
@@ -102,9 +102,10 @@ It starts an isolated temporary managed browser and verifies:
 - Accessibility tree extraction,
 - raw Chrome `DOMSnapshot.captureSnapshot`,
 - selected-node Event Listeners from the Elements panel,
+- selected-node Styles/Computed/Box Model evidence from the Elements panel,
 - Chrome Tracing stream capture and trace file output,
 - Chrome Tracing summary extraction,
-- short JavaScript/CSS coverage snapshot,
+- short JavaScript/CSS coverage snapshot and range drilldown,
 - Sources-panel literal source search, heuristic pretty-print, and source map metadata,
 - global literal search across Network, Sources, and Application evidence,
 - compact F12 evidence bundle export,
@@ -173,6 +174,10 @@ Verified manually during development:
     where available.
   - Personal Chrome: captured JavaScript precise coverage and CSS rule usage
     through `chrome.debugger`.
+- `devtools_coverage_detail`
+  - Managed Browser and Personal Chrome expose raw JavaScript/CSS coverage
+    ranges, byte counts, and bounded source snippets for Coverage-panel
+    drilldown without classifying the result as a vulnerability.
 
 ## Live OpenClaw-Compatible Browser Smoke
 

@@ -206,6 +206,9 @@ try {
   })).toString("base64");
   const sourcePage = `data:text/html;charset=utf-8,${encodeURIComponent(`<!doctype html>
     <title>source search smoke</title>
+    <style>
+      #agent-listener-button { color: rgb(12, 34, 56); padding: 7px; border: 1px solid rgb(1, 2, 3); }
+    </style>
     <script>
       window.${sourceMarker}="source-search-smoke";function ${sourceMarker.toLowerCase()}(){return window.${sourceMarker};}
       console.error("AGENT_CONSOLE_ERROR_MARKER", window.${sourceMarker});
@@ -261,7 +264,7 @@ try {
     scriptId: frame.scriptId,
     lineNumber: frame.lineNumber,
     columnNumber: frame.columnNumber,
-    contextLines: 3,
+    contextLines: 20,
     reload: false,
   });
   assert(consoleSourceContext.lines?.some((line) => line.text.includes("AGENT_CONSOLE_THROW_MARKER")), "console source context missing throw marker");
@@ -270,6 +273,26 @@ try {
     selector: "#agent-listener-button",
   });
   assert(eventListeners.listeners?.some((listener) => listener.type === "click"), `event listeners missing click handler: ${JSON.stringify(eventListeners)}`);
+  const cssStyles = await callTool(baseUrl, "devtools_css_styles", {
+    profile: "default",
+    selector: "#agent-listener-button",
+    maxRules: 20,
+  });
+  assert(cssStyles.found === true, "css styles did not find smoke button");
+  assert(cssStyles.boxModel?.model, "css styles missing box model");
+  assert(cssStyles.computedStyle?.computedStyle?.some((entry) => entry.name === "color"), "css styles missing computed color");
+  const coverageDetail = await callTool(baseUrl, "devtools_coverage_detail", {
+    profile: "default",
+    durationMs: 800,
+    maxEntries: 10,
+    maxRangesPerEntry: 10,
+    maxSnippetChars: 500,
+    includeSource: true,
+    reload: true,
+  });
+  assert(coverageDetail.js?.scriptCount >= 0, "coverage detail JS result missing");
+  assert(coverageDetail.css?.ruleCount >= 0, "coverage detail CSS result missing");
+  assert(JSON.stringify(coverageDetail.js?.entries || []).includes(sourceMarker), "coverage detail did not include source marker snippets");
   const globalSearch = await callTool(baseUrl, "devtools_global_search", {
     profile: "default",
     query: sourceMarker,
@@ -351,6 +374,7 @@ try {
   console.log(`- console exceptions: ${consoleLog.counts.exceptions}`);
   console.log(`- console source context lines: ${consoleSourceContext.lines.length}`);
   console.log(`- event listeners: ${eventListeners.count}`);
+  console.log(`- css matched rules: ${cssStyles.matchedStyles?.matchedCSSRules?.length || 0}`);
   console.log(`- global search matches: ${globalSearch.matchCount}`);
   console.log(`- evidence bundle: ${evidenceBundle.bundlePath}`);
   console.log(`- service worker registrations/caches: ${serviceWorker.registrationCount}/${serviceWorker.cacheCount}`);

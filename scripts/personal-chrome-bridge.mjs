@@ -96,6 +96,7 @@ function normalizeCommand(toolName) {
     devtools_elements_snapshot: "chrome_elements_snapshot",
     devtools_dom_snapshot: "chrome_dom_snapshot",
     devtools_event_listeners: "chrome_event_listeners",
+    devtools_css_styles: "chrome_css_styles",
     devtools_sources_list: "chrome_sources_list",
     devtools_source_get: "chrome_source_get",
     devtools_source_pretty_print: "chrome_source_pretty_print",
@@ -106,6 +107,7 @@ function normalizeCommand(toolName) {
     devtools_performance_trace: "chrome_performance_trace",
     devtools_chrome_trace: "chrome_chrome_trace",
     devtools_coverage_snapshot: "chrome_coverage_snapshot",
+    devtools_coverage_detail: "chrome_coverage_detail",
     devtools_token_scan: "chrome_token_scan",
   };
   if (aliases[toolName]) return aliases[toolName];
@@ -313,6 +315,7 @@ const tools = {
   personal_chrome_elements_snapshot: "Return DOM tree, layout boxes, and computed style for the user's real Chrome tab.",
   personal_chrome_dom_snapshot: "Return Chrome DOMSnapshot.captureSnapshot data from the user's real Chrome tab.",
   personal_chrome_event_listeners: "Return DevTools Elements-panel Event Listeners for a selected DOM node in the user's real Chrome tab.",
+  personal_chrome_css_styles: "Return DevTools Elements-panel Styles/Computed/Box Model evidence for a selected DOM node in the user's real Chrome tab.",
   personal_chrome_sources_list: "Return Sources panel-style script metadata captured through chrome.debugger.",
   personal_chrome_source_get: "Return JavaScript source for a scriptId captured through chrome.debugger.",
   personal_chrome_source_pretty_print: "Return a DevTools-style heuristic pretty-printed JavaScript source from the user's real Chrome tab.",
@@ -323,6 +326,7 @@ const tools = {
   personal_chrome_performance_trace: "Capture a short Performance panel-style snapshot from the user's real Chrome tab.",
   personal_chrome_chrome_trace: "Capture Chrome Tracing data from the user's real Chrome tab and write the full trace locally.",
   personal_chrome_coverage_snapshot: "Capture short JavaScript precise coverage and CSS rule usage from the user's real Chrome tab.",
+  personal_chrome_coverage_detail: "Capture Coverage-panel JavaScript/CSS range drilldown data from the user's real Chrome tab.",
   personal_chrome_token_scan: "Scan Network, storage, and cookies for token-like material. Returns full values after the operator authorizes this local browser backend.",
   devtools_tabs: "Unified Agent DevTools API: list browser tabs.",
   devtools_extension_reload: "Unified Agent DevTools API: reload the unpacked extension service worker after local development changes.",
@@ -368,6 +372,7 @@ const tools = {
   devtools_elements_snapshot: "Unified Agent DevTools API: read Elements panel-style DOM tree, layout boxes, and computed style.",
   devtools_dom_snapshot: "Unified Agent DevTools API: read raw Chrome DOMSnapshot data.",
   devtools_event_listeners: "Unified Agent DevTools API: read Elements panel event listeners for a selected DOM node.",
+  devtools_css_styles: "Unified Agent DevTools API: read Elements panel Styles/Computed/Box Model evidence for a selected DOM node.",
   devtools_sources_list: "Unified Agent DevTools API: list parsed scripts and source maps.",
   devtools_source_get: "Unified Agent DevTools API: read script source by scriptId.",
   devtools_source_pretty_print: "Unified Agent DevTools API: pretty-print parsed JavaScript source.",
@@ -378,6 +383,7 @@ const tools = {
   devtools_performance_trace: "Unified Agent DevTools API: capture navigation/resource/paint/long-task performance data.",
   devtools_chrome_trace: "Unified Agent DevTools API: capture Chrome Tracing data and return a summary plus full trace path.",
   devtools_coverage_snapshot: "Unified Agent DevTools API: capture short JavaScript and CSS coverage data.",
+  devtools_coverage_detail: "Unified Agent DevTools API: capture Coverage-panel JavaScript/CSS range drilldown data.",
   devtools_token_scan: "Unified Agent DevTools API: scan headers, payloads, storage, and cookies for token-like material.",
 };
 

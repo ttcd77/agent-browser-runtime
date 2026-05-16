@@ -46,6 +46,7 @@ Use this for an agent dashboard or a quick diagnosis before drilling down:
 | Inspect iframe/frame tree | `devtools_frame_tree` |
 | Inspect accessibility tree | `devtools_accessibility_snapshot` |
 | Inspect selected node event listeners | `devtools_event_listeners` |
+| Inspect selected node Styles/Computed/Box Model | `devtools_css_styles` |
 | Click/type/scroll | `devtools_click`, `devtools_type`, `devtools_scroll` |
 | Screenshot | `devtools_screenshot` |
 
@@ -86,7 +87,8 @@ original-source tree.
 |---|---|
 | Navigation/resource/paint timing | `devtools_performance_trace` |
 | Chrome trace capture | `devtools_chrome_trace` |
-| JS/CSS coverage | `devtools_coverage_snapshot` |
+| JS/CSS coverage summary | `devtools_coverage_snapshot` |
+| JS/CSS coverage range drilldown | `devtools_coverage_detail` |
 
 `devtools_chrome_trace` saves the full raw trace and returns a first-pass summary
 with top categories, top event names, long events, screenshot events, and

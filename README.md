@@ -187,6 +187,7 @@ Chrome Extension Mode and Managed Browser Mode:
 - `devtools_elements_snapshot`
 - `devtools_dom_snapshot`
 - `devtools_event_listeners`
+- `devtools_css_styles`
 - `devtools_sources_list`
 - `devtools_source_get`
 - `devtools_source_pretty_print`
@@ -197,6 +198,7 @@ Chrome Extension Mode and Managed Browser Mode:
 - `devtools_performance_trace`
 - `devtools_chrome_trace`
 - `devtools_coverage_snapshot`
+- `devtools_coverage_detail`
 - `devtools_token_scan`
 
 See `docs/agent-devtools-api.md`.
@@ -323,6 +325,7 @@ The bridge exposes tools at `http://127.0.0.1:17337`, including:
 - `personal_chrome_elements_snapshot`
 - `personal_chrome_dom_snapshot`
 - `personal_chrome_event_listeners`
+- `personal_chrome_css_styles`
 - `personal_chrome_sources_list`
 - `personal_chrome_source_get`
 - `personal_chrome_source_pretty_print`
@@ -333,6 +336,7 @@ The bridge exposes tools at `http://127.0.0.1:17337`, including:
 - `personal_chrome_performance_trace`
 - `personal_chrome_chrome_trace`
 - `personal_chrome_coverage_snapshot`
+- `personal_chrome_coverage_detail`
 - `personal_chrome_token_scan`
 
 See `docs/personal-chrome-extension.md`.

@@ -216,6 +216,8 @@ async function executeCommand(command, params) {
       return await chromeDomSnapshot(params);
     case "chrome_event_listeners":
       return await chromeEventListeners(params);
+    case "chrome_css_styles":
+      return await chromeCssStyles(params);
     case "chrome_sources_list":
       return await chromeSourcesList(params);
     case "chrome_source_get":
@@ -236,6 +238,8 @@ async function executeCommand(command, params) {
       return await chromeChromeTrace(params);
     case "chrome_coverage_snapshot":
       return await chromeCoverageSnapshot(params);
+    case "chrome_coverage_detail":
+      return await chromeCoverageDetail(params);
     case "chrome_token_scan":
       return await chromeTokenScan(params);
     default:
@@ -2565,6 +2569,55 @@ async function chromeEventListeners(params) {
   };
 }
 
+async function chromeCssStyles(params) {
+  const { tab, target } = await ensureDevtoolsAttached(params);
+  const selector = params.selector ? String(params.selector) : "body";
+  const maxRules = Number(params.maxRules || 80);
+  await chromeDebuggerSendCommand(target, "DOM.enable");
+  await chromeDebuggerSendCommand(target, "CSS.enable");
+  const documentNode = await chromeDebuggerSendCommand(target, "DOM.getDocument", { depth: -1, pierce: true });
+  const query = await chromeDebuggerSendCommand(target, "DOM.querySelector", {
+    nodeId: documentNode.root.nodeId,
+    selector,
+  });
+  if (!query.nodeId) {
+    return {
+      tab: pickTab(tab),
+      selector,
+      found: false,
+    };
+  }
+  const matchedStyles = params.includeMatchedRules === false
+    ? null
+    : await chromeDebuggerSendCommand(target, "CSS.getMatchedStylesForNode", { nodeId: query.nodeId }).catch((error) => ({ error: String(error?.message || error) }));
+  const computedStyle = params.includeComputed === false
+    ? null
+    : await chromeDebuggerSendCommand(target, "CSS.getComputedStyleForNode", { nodeId: query.nodeId }).catch((error) => ({ error: String(error?.message || error) }));
+  const boxModel = params.includeBoxModel === false
+    ? null
+    : await chromeDebuggerSendCommand(target, "DOM.getBoxModel", { nodeId: query.nodeId }).catch((error) => ({ error: String(error?.message || error) }));
+  return {
+    tab: pickTab(tab),
+    selector,
+    found: true,
+    nodeId: query.nodeId,
+    matchedStyles: matchedStyles ? {
+      inlineStyle: matchedStyles.inlineStyle,
+      attributesStyle: matchedStyles.attributesStyle,
+      matchedCSSRules: Array.isArray(matchedStyles.matchedCSSRules) ? matchedStyles.matchedCSSRules.slice(0, maxRules) : matchedStyles.matchedCSSRules,
+      inherited: Array.isArray(matchedStyles.inherited) ? matchedStyles.inherited.slice(0, maxRules) : matchedStyles.inherited,
+      pseudoElements: matchedStyles.pseudoElements,
+      cssKeyframesRules: matchedStyles.cssKeyframesRules,
+      parentLayoutNodeId: matchedStyles.parentLayoutNodeId,
+      positionFallbackRules: matchedStyles.positionFallbackRules,
+      error: matchedStyles.error,
+      truncatedRules: Array.isArray(matchedStyles.matchedCSSRules) && matchedStyles.matchedCSSRules.length > maxRules,
+    } : null,
+    computedStyle,
+    boxModel,
+  };
+}
+
 async function chromeSourcesList(params) {
   const { tab, session } = await ensureDevtoolsAttached(params);
   const limit = Number(params.limit || 200);
@@ -2668,6 +2721,62 @@ function truncateText(text, maxChars = 120000) {
     return { text: value, truncated: false };
   }
   return { text: value.slice(0, maxChars), truncated: true };
+}
+
+function rangeLength(range = {}) {
+  return Math.max(0, Number(range.endOffset || 0) - Number(range.startOffset || 0));
+}
+
+function summarizeCoverageRanges(functions = []) {
+  const ranges = [];
+  for (const fn of functions || []) {
+    for (const range of fn.ranges || []) {
+      ranges.push({
+        functionName: fn.functionName || "",
+        startOffset: Number(range.startOffset || 0),
+        endOffset: Number(range.endOffset || 0),
+        count: Number(range.count || 0),
+        used: Number(range.count || 0) > 0,
+        bytes: rangeLength(range),
+      });
+    }
+  }
+  ranges.sort((a, b) => a.startOffset - b.startOffset || a.endOffset - b.endOffset);
+  return ranges;
+}
+
+function coverageSnippet(sourceText, range = {}, maxChars = 300) {
+  const text = String(sourceText || "");
+  const start = Math.max(0, Math.min(text.length, Number(range.startOffset || 0)));
+  const end = Math.max(start, Math.min(text.length, Number(range.endOffset || start)));
+  const raw = text.slice(start, end);
+  const limited = truncateText(raw, maxChars);
+  return {
+    startOffset: start,
+    endOffset: end,
+    text: limited.text,
+    truncated: limited.truncated,
+  };
+}
+
+function coverageByteSummary(ranges = [], fallbackTotalBytes = 0) {
+  const totalBytes = Math.max(
+    Number(fallbackTotalBytes || 0),
+    ...ranges.map((range) => Number(range.endOffset || 0)),
+    0,
+  );
+  let usedBytes = 0;
+  let unusedBytes = 0;
+  for (const range of ranges) {
+    if (range.used) usedBytes += range.bytes;
+    else unusedBytes += range.bytes;
+  }
+  return {
+    totalBytes,
+    usedBytes,
+    unusedBytes,
+    usedRatio: totalBytes > 0 ? usedBytes / totalBytes : null,
+  };
 }
 
 function prettyPrintJavaScript(sourceText, options = {}) {
@@ -3324,6 +3433,131 @@ async function chromeCoverageSnapshot(params) {
       unusedRuleCount: rules.length - usedCssRules,
       entries: rules.slice(0, maxEntries),
       truncated: rules.length > maxEntries,
+      error: cssCoverage.error,
+    },
+  };
+}
+
+async function chromeCoverageDetail(params) {
+  const { tab, target } = await ensureDevtoolsAttached(params);
+  const durationMs = Math.min(Math.max(Number(params.durationMs || 1000), 250), 10000);
+  const maxEntries = Number(params.maxEntries || 50);
+  const maxRangesPerEntry = Number(params.maxRangesPerEntry || 20);
+  const maxSnippetChars = Number(params.maxSnippetChars || 300);
+  const includeSource = params.includeSource !== false;
+  const includeUsed = params.includeUsed !== false;
+  const includeUnused = params.includeUnused !== false;
+  await chromeDebuggerSendCommand(target, "Page.enable").catch(() => {});
+  await chromeDebuggerSendCommand(target, "Debugger.enable").catch(() => {});
+  await chromeDebuggerSendCommand(target, "DOM.enable").catch(() => {});
+  await chromeDebuggerSendCommand(target, "CSS.enable").catch(() => {});
+  await chromeDebuggerSendCommand(target, "Profiler.enable").catch(() => {});
+  await chromeDebuggerSendCommand(target, "Profiler.startPreciseCoverage", {
+    callCount: true,
+    detailed: true,
+  });
+  await chromeDebuggerSendCommand(target, "CSS.startRuleUsageTracking").catch(() => {});
+  const startedAt = new Date().toISOString();
+  if (params.reload) {
+    await chromeDebuggerSendCommand(target, "Page.reload", { ignoreCache: Boolean(params.ignoreCache) }).catch(() => {});
+  }
+  await delay(durationMs);
+  const jsCoverage = await chromeDebuggerSendCommand(target, "Profiler.takePreciseCoverage").catch((error) => ({ error: String(error?.message || error), result: [] }));
+  await chromeDebuggerSendCommand(target, "Profiler.stopPreciseCoverage").catch(() => {});
+  const cssCoverage = await chromeDebuggerSendCommand(target, "CSS.stopRuleUsageTracking").catch((error) => ({ error: String(error?.message || error), ruleUsage: [] }));
+  const scriptEntries = [];
+  const scripts = Array.isArray(jsCoverage.result) ? jsCoverage.result : [];
+  for (const script of scripts) {
+    if (params.scriptId && String(script.scriptId) !== String(params.scriptId)) continue;
+    if (params.urlContains && !String(script.url || "").toLowerCase().includes(String(params.urlContains).toLowerCase())) continue;
+    const allRanges = summarizeCoverageRanges(script.functions || [])
+      .filter((range) => (range.used ? includeUsed : includeUnused));
+    let sourceText = "";
+    let sourceError = null;
+    if (includeSource) {
+      try {
+        const source = await chromeDebuggerSendCommand(target, "Debugger.getScriptSource", { scriptId: script.scriptId });
+        sourceText = String(source?.scriptSource || "");
+      } catch (err) {
+        sourceError = String(err?.message || err);
+      }
+    }
+    const byteSummary = coverageByteSummary(allRanges, sourceText ? sourceText.length : script.length);
+    scriptEntries.push({
+      scriptId: script.scriptId,
+      url: script.url,
+      functionCount: script.functions?.length || 0,
+      rangeCount: allRanges.length,
+      ...byteSummary,
+      sourceError,
+      ranges: allRanges.slice(0, maxRangesPerEntry).map((range) => ({
+        ...range,
+        ...(includeSource && sourceText ? { snippet: coverageSnippet(sourceText, range, maxSnippetChars) } : {}),
+      })),
+      rangesTruncated: allRanges.length > maxRangesPerEntry,
+    });
+    if (scriptEntries.length >= maxEntries) break;
+  }
+
+  const cssRules = [];
+  const cssRaw = Array.isArray(cssCoverage.ruleUsage) ? cssCoverage.ruleUsage : [];
+  const cssTextCache = new Map();
+  for (const rule of cssRaw) {
+    if (params.styleSheetId && String(rule.styleSheetId) !== String(params.styleSheetId)) continue;
+    const used = Boolean(rule.used);
+    if (used && !includeUsed) continue;
+    if (!used && !includeUnused) continue;
+    let snippet = null;
+    let sourceError = null;
+    if (includeSource) {
+      try {
+        let text = cssTextCache.get(rule.styleSheetId);
+        if (text === undefined) {
+          const sheet = await chromeDebuggerSendCommand(target, "CSS.getStyleSheetText", { styleSheetId: rule.styleSheetId });
+          text = String(sheet?.text || "");
+          cssTextCache.set(rule.styleSheetId, text);
+        }
+        snippet = coverageSnippet(text, rule, maxSnippetChars);
+      } catch (err) {
+        sourceError = String(err?.message || err);
+      }
+    }
+    cssRules.push({
+      styleSheetId: rule.styleSheetId,
+      startOffset: rule.startOffset,
+      endOffset: rule.endOffset,
+      used,
+      bytes: rangeLength(rule),
+      sourceError,
+      ...(snippet ? { snippet } : {}),
+    });
+    if (cssRules.length >= maxEntries) break;
+  }
+  return {
+    tab: pickTab(tab),
+    startedAt,
+    finishedAt: new Date().toISOString(),
+    durationMs,
+    filters: {
+      urlContains: params.urlContains || null,
+      scriptId: params.scriptId || null,
+      styleSheetId: params.styleSheetId || null,
+      includeUsed,
+      includeUnused,
+      includeSource,
+    },
+    js: {
+      scriptCount: scripts.length,
+      returnedCount: scriptEntries.length,
+      entries: scriptEntries,
+      truncated: scripts.length > scriptEntries.length && scriptEntries.length >= maxEntries,
+      error: jsCoverage.error,
+    },
+    css: {
+      ruleCount: cssRaw.length,
+      returnedCount: cssRules.length,
+      entries: cssRules,
+      truncated: cssRaw.length > cssRules.length && cssRules.length >= maxEntries,
       error: cssCoverage.error,
     },
   };
