@@ -182,12 +182,50 @@ function persistChromeTrace(result, params = {}) {
   const path = params.path || join(traceDir, `${Date.now()}-chrome-trace.json`);
   mkdirSync(dirname(path), { recursive: true });
   writeFileSync(path, result.traceText, "utf8");
+  const traceScreenshots = params.saveScreenshots === false
+    ? []
+    : persistTraceScreenshots(result.traceText, params);
   const { traceText, ...rest } = result;
   return {
     ...rest,
     tracePath: path,
     traceTextBytes: Buffer.byteLength(traceText, "utf8"),
+    traceScreenshotCount: traceScreenshots.length,
+    traceScreenshots,
   };
+}
+
+function persistTraceScreenshots(traceText, params = {}) {
+  const maxScreenshots = Math.max(0, Number(params.maxScreenshots || 5));
+  if (!maxScreenshots || !traceText) return [];
+  let trace = null;
+  try {
+    trace = JSON.parse(traceText);
+  } catch {
+    return [];
+  }
+  const events = Array.isArray(trace?.traceEvents) ? trace.traceEvents : [];
+  const directory = params.screenshotDir || join(traceDir, "screenshots");
+  mkdirSync(directory, { recursive: true });
+  const frames = [];
+  for (const event of events) {
+    if (frames.length >= maxScreenshots) break;
+    const name = String(event?.name || "");
+    const snapshot = event?.args?.snapshot;
+    if (!name.toLowerCase().includes("screenshot") || typeof snapshot !== "string" || !snapshot) continue;
+    const safeTs = String(event.ts || Date.now()).replace(/[^a-zA-Z0-9_.-]/g, "_");
+    const screenshotPath = join(directory, `${safeTs}-trace-screenshot.jpg`);
+    const bytes = Buffer.from(snapshot, "base64");
+    writeFileSync(screenshotPath, bytes);
+    frames.push({
+      path: screenshotPath,
+      bytes: bytes.length,
+      mimeType: "image/jpeg",
+      ts: event.ts,
+      name,
+    });
+  }
+  return frames;
 }
 
 function persistCpuProfile(result, params = {}) {

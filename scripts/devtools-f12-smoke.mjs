@@ -202,12 +202,14 @@ try {
     profile: "default",
     durationMs: 500,
     maxEvents: 5,
+    maxScreenshots: 3,
   });
   assert(trace.traceTextBytes > 0, "Chrome trace was empty");
   assert(trace.tracePath, "Chrome trace path missing");
   assert(trace.traceSummary?.eventCount > 0, "Chrome trace summary missing events");
   assert(Array.isArray(trace.traceSummary?.durationByPhase), "Chrome trace summary missing durationByPhase");
   assert(Array.isArray(trace.traceSummary?.topDurations), "Chrome trace summary missing topDurations");
+  assert(Array.isArray(trace.traceScreenshots), "Chrome trace did not return screenshot frame evidence array");
 
   const cpuProfile = await callTool(baseUrl, "devtools_cpu_profile", {
     profile: "default",
@@ -544,6 +546,7 @@ try {
   console.log(`- Chrome trace bytes: ${trace.traceTextBytes}`);
   console.log(`- Chrome trace summary events: ${trace.traceSummary.eventCount}`);
   console.log(`- Chrome trace phase buckets/top durations: ${trace.traceSummary.durationByPhase.length}/${trace.traceSummary.topDurations.length}`);
+  console.log(`- Chrome trace screenshot frames: ${trace.traceScreenshotCount}`);
   console.log(`- Chrome trace path: ${trace.tracePath}`);
   console.log(`- coverage scripts/rules: ${coverage.js.scriptCount}/${coverage.css.ruleCount}`);
   console.log(`- source search matches: ${sourceSearch.matchCount}`);

@@ -672,6 +672,31 @@ function summarizeTraceEvents(events = [], limit = 10) {
   };
 }
 
+function extractTraceScreenshots(events = [], directory, options = {}) {
+  const maxScreenshots = Math.max(0, Number(options.maxScreenshots || 5));
+  if (!maxScreenshots || !directory) return [];
+  mkdirSync(directory, { recursive: true });
+  const frames = [];
+  for (const event of events) {
+    if (frames.length >= maxScreenshots) break;
+    const name = String(event?.name || "");
+    const snapshot = event?.args?.snapshot;
+    if (!name.toLowerCase().includes("screenshot") || typeof snapshot !== "string" || !snapshot) continue;
+    const safeTs = String(event.ts || Date.now()).replace(/[^a-zA-Z0-9_.-]/g, "_");
+    const path = join(directory, `${safeTs}-trace-screenshot.jpg`);
+    const bytes = Buffer.from(snapshot, "base64");
+    writeFileSync(path, bytes);
+    frames.push({
+      path,
+      bytes: bytes.length,
+      mimeType: "image/jpeg",
+      ts: event.ts,
+      name,
+    });
+  }
+  return frames;
+}
+
 function summarizeCpuProfile(profile = {}, limit = 20) {
   const nodes = Array.isArray(profile.nodes) ? profile.nodes : [];
   const samples = Array.isArray(profile.samples) ? profile.samples : [];
@@ -5606,6 +5631,8 @@ function registerStandaloneBrowserTools(tools, cdpPort, profileRegistry, default
         durationMs: { type: "number" },
         categories: { type: "array", items: { type: "string" } },
         maxEvents: { type: "number" },
+        maxScreenshots: { type: "number" },
+        saveScreenshots: { type: "boolean" },
       },
     },
     async execute(_id, params) {
@@ -5660,6 +5687,9 @@ function registerStandaloneBrowserTools(tools, cdpPort, profileRegistry, default
         const tracePath = join(profile.evidenceDir, "traces", `${Date.now()}-chrome-trace.json`);
         mkdirSync(dirname(tracePath), { recursive: true });
         writeFileSync(tracePath, traceText, "utf8");
+        const traceScreenshots = params?.saveScreenshots === false
+          ? []
+          : extractTraceScreenshots(events, join(profile.evidenceDir, "traces", "screenshots"), { maxScreenshots: params?.maxScreenshots });
         await profileRegistry.touchProfile(profile.name, { tabId: target.id });
         return {
           profile: profile.name,
@@ -5672,6 +5702,8 @@ function registerStandaloneBrowserTools(tools, cdpPort, profileRegistry, default
           traceTextBytes: traceText.length,
           traceEventCount: events.length,
           traceSummary: summarizeTraceEvents(events, maxEvents),
+          traceScreenshotCount: traceScreenshots.length,
+          traceScreenshots,
           traceEvents: events.slice(0, maxEvents),
           truncated: events.length > maxEvents,
           parseError,
