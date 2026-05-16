@@ -169,6 +169,8 @@ try {
     requestId: detailRequest,
   });
   assert(requestDetail.detail?.requestId === detailRequest, "request detail did not return the requested entry");
+  assert("initiatorSummary" in requestDetail.detail, "request detail missing initiator summary");
+  assert(requestDetail.detail?.lifecycleFlags && typeof requestDetail.detail.lifecycleFlags === "object", "request detail missing lifecycle flags");
   assert(requestDetail.detail?.requestHeaders && typeof requestDetail.detail.requestHeaders === "object", "request detail missing headers");
   const issuesLog = await callTool(baseUrl, "devtools_issues_log", {
     profile: "default",
