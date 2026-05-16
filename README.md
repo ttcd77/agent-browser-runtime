@@ -188,6 +188,7 @@ Chrome Extension Mode and Managed Browser Mode:
 - `devtools_dom_snapshot`
 - `devtools_event_listeners`
 - `devtools_css_styles`
+- `devtools_dom_mutation_watch`
 - `devtools_sources_list`
 - `devtools_source_get`
 - `devtools_source_pretty_print`
@@ -326,6 +327,7 @@ The bridge exposes tools at `http://127.0.0.1:17337`, including:
 - `personal_chrome_dom_snapshot`
 - `personal_chrome_event_listeners`
 - `personal_chrome_css_styles`
+- `personal_chrome_dom_mutation_watch`
 - `personal_chrome_sources_list`
 - `personal_chrome_source_get`
 - `personal_chrome_source_pretty_print`

@@ -47,6 +47,7 @@ Use this for an agent dashboard or a quick diagnosis before drilling down:
 | Inspect accessibility tree | `devtools_accessibility_snapshot` |
 | Inspect selected node event listeners | `devtools_event_listeners` |
 | Inspect selected node Styles/Computed/Box Model | `devtools_css_styles` |
+| Watch selected-node DOM mutations | `devtools_dom_mutation_watch` |
 | Click/type/scroll | `devtools_click`, `devtools_type`, `devtools_scroll` |
 | Screenshot | `devtools_screenshot` |
 

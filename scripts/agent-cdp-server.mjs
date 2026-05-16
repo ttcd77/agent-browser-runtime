@@ -732,6 +732,135 @@ function coverageByteSummary(ranges = [], fallbackTotalBytes = 0) {
   };
 }
 
+function domMutationWatchPageFunction(options) {
+  const startedAt = new Date().toISOString();
+  const selector = String(options.selector || "");
+  const node = document.querySelector(selector);
+  const maxEvents = Math.max(1, Number(options.maxEvents || 100));
+  const durationMs = Math.max(100, Number(options.durationMs || 1000));
+  function describeNode(target) {
+    if (!target) return null;
+    if (target.nodeType === Node.TEXT_NODE) {
+      return {
+        nodeType: "text",
+        text: String(target.textContent || "").slice(0, 200),
+        parent: describeNode(target.parentElement),
+      };
+    }
+    if (!(target instanceof Element)) {
+      return {
+        nodeType: target.nodeType,
+        nodeName: target.nodeName,
+      };
+    }
+    return {
+      nodeType: "element",
+      tagName: target.tagName.toLowerCase(),
+      id: target.id || "",
+      className: typeof target.className === "string" ? target.className : "",
+      text: String(target.textContent || "").trim().slice(0, 200),
+    };
+  }
+  function pathFor(target) {
+    if (!(target instanceof Element)) return "";
+    const parts = [];
+    let current = target;
+    while (current && current.nodeType === Node.ELEMENT_NODE && parts.length < 8) {
+      let part = current.tagName.toLowerCase();
+      if (current.id) {
+        part += `#${current.id}`;
+        parts.unshift(part);
+        break;
+      }
+      const parent = current.parentElement;
+      if (parent) {
+        const sameTag = [...parent.children].filter((child) => child.tagName === current.tagName);
+        if (sameTag.length > 1) part += `:nth-of-type(${sameTag.indexOf(current) + 1})`;
+      }
+      parts.unshift(part);
+      current = parent;
+    }
+    return parts.join(" > ");
+  }
+  return new Promise((resolve) => {
+    if (!node) {
+      resolve({
+        found: false,
+        selector,
+        startedAt,
+        finishedAt: new Date().toISOString(),
+        durationMs,
+        eventCount: 0,
+        events: [],
+      });
+      return;
+    }
+    const events = [];
+    const observer = new MutationObserver((mutations) => {
+      for (const mutation of mutations) {
+        if (events.length >= maxEvents) break;
+        events.push({
+          timestamp: new Date().toISOString(),
+          type: mutation.type,
+          target: describeNode(mutation.target),
+          targetPath: pathFor(mutation.target),
+          attributeName: mutation.attributeName || null,
+          attributeNamespace: mutation.attributeNamespace || null,
+          oldValue: mutation.oldValue ?? null,
+          addedNodes: [...mutation.addedNodes].slice(0, 10).map(describeNode),
+          removedNodes: [...mutation.removedNodes].slice(0, 10).map(describeNode),
+          addedNodeCount: mutation.addedNodes.length,
+          removedNodeCount: mutation.removedNodes.length,
+        });
+      }
+    });
+    observer.observe(node, {
+      subtree: options.subtree !== false,
+      childList: options.childList !== false,
+      attributes: options.attributes !== false,
+      characterData: Boolean(options.characterData),
+      attributeOldValue: options.attributeOldValue !== false,
+      characterDataOldValue: Boolean(options.characterDataOldValue),
+    });
+    let triggerError = null;
+    if (options.triggerExpression) {
+      try {
+        const fn = new Function(String(options.triggerExpression));
+        setTimeout(() => {
+          try { fn(); }
+          catch (error) { triggerError = String(error?.message || error); }
+        }, 0);
+      } catch (error) {
+        triggerError = String(error?.message || error);
+      }
+    }
+    setTimeout(() => {
+      observer.disconnect();
+      resolve({
+        found: true,
+        selector,
+        startedAt,
+        finishedAt: new Date().toISOString(),
+        durationMs,
+        target: describeNode(node),
+        targetPath: pathFor(node),
+        observerOptions: {
+          subtree: options.subtree !== false,
+          childList: options.childList !== false,
+          attributes: options.attributes !== false,
+          characterData: Boolean(options.characterData),
+          attributeOldValue: options.attributeOldValue !== false,
+          characterDataOldValue: Boolean(options.characterDataOldValue),
+        },
+        triggerError,
+        eventCount: events.length,
+        events,
+        truncated: events.length >= maxEvents,
+      });
+    }, durationMs);
+  });
+}
+
 function prettyPrintJavaScript(sourceText, options = {}) {
   const text = String(sourceText || "");
   const indentText = typeof options.indent === "string" ? options.indent : "  ";
@@ -3765,6 +3894,64 @@ function registerStandaloneBrowserTools(tools, cdpPort, profileRegistry, default
     },
   });
 
+  tools.set("browser_dom_mutation_watch", {
+    name: "browser_dom_mutation_watch",
+    description: "Watch DOM mutations for a selector, similar to DevTools Elements DOM-breakpoint evidence without pausing JavaScript.",
+    parameters: {
+      type: "object",
+      properties: {
+        profile: { type: "string" },
+        tabId: { type: "string" },
+        selector: { type: "string" },
+        durationMs: { type: "number" },
+        maxEvents: { type: "number" },
+        subtree: { type: "boolean" },
+        childList: { type: "boolean" },
+        attributes: { type: "boolean" },
+        characterData: { type: "boolean" },
+        attributeOldValue: { type: "boolean" },
+        characterDataOldValue: { type: "boolean" },
+        triggerExpression: { type: "string" },
+      },
+      required: ["selector"],
+    },
+    async execute(_id, params) {
+      const profile = await resolveProfile(params?.profile);
+      const selector = String(params?.selector || "");
+      const durationMs = Math.min(Math.max(typeof params?.durationMs === "number" ? params.durationMs : 1000, 100), 10000);
+      const maxEvents = typeof params?.maxEvents === "number" ? params.maxEvents : 100;
+      return toolResult(await withPageClient(cdpPort, params?.tabId || profile.tabId, async (client, target) => {
+        await client.Runtime.enable().catch(() => {});
+        const expression = `(${domMutationWatchPageFunction.toString()})(${JSON.stringify({
+          selector,
+          durationMs,
+          maxEvents,
+          subtree: params?.subtree !== false,
+          childList: params?.childList !== false,
+          attributes: params?.attributes !== false,
+          characterData: Boolean(params?.characterData),
+          attributeOldValue: params?.attributeOldValue !== false,
+          characterDataOldValue: Boolean(params?.characterDataOldValue),
+          triggerExpression: params?.triggerExpression ? String(params.triggerExpression) : "",
+        })})`;
+        const result = await client.Runtime.evaluate({
+          expression,
+          awaitPromise: true,
+          returnByValue: true,
+        });
+        if (result.exceptionDetails) {
+          throw new Error(result.exceptionDetails.text || "DOM mutation watch failed");
+        }
+        await profileRegistry.touchProfile(profile.name, { tabId: target.id });
+        return {
+          profile: profile.name,
+          tabId: target.id,
+          ...(result.result?.value || {}),
+        };
+      }));
+    },
+  });
+
   tools.set("browser_sources_list", {
     name: "browser_sources_list",
     description: "Return Sources panel-style script metadata for the current profile tab.",
@@ -4897,6 +5084,7 @@ function registerStandaloneBrowserTools(tools, cdpPort, profileRegistry, default
   aliasTool("devtools_dom_snapshot", "browser_dom_snapshot", "Unified Agent DevTools API: read raw Chrome DOMSnapshot data.");
   aliasTool("devtools_event_listeners", "browser_event_listeners", "Unified Agent DevTools API: read Elements panel event listeners for a selected DOM node.");
   aliasTool("devtools_css_styles", "browser_css_styles", "Unified Agent DevTools API: read Elements panel Styles/Computed/Box Model evidence for a selected DOM node.");
+  aliasTool("devtools_dom_mutation_watch", "browser_dom_mutation_watch", "Unified Agent DevTools API: watch selected-node DOM mutations as Elements-panel breakpoint evidence.");
   aliasTool("devtools_sources_list", "browser_sources_list", "Unified Agent DevTools API: list parsed scripts and source maps.");
   aliasTool("devtools_source_get", "browser_source_get", "Unified Agent DevTools API: read script source by scriptId.");
   aliasTool("devtools_source_pretty_print", "browser_source_pretty_print", "Unified Agent DevTools API: pretty-print parsed JavaScript source.");

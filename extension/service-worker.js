@@ -218,6 +218,8 @@ async function executeCommand(command, params) {
       return await chromeEventListeners(params);
     case "chrome_css_styles":
       return await chromeCssStyles(params);
+    case "chrome_dom_mutation_watch":
+      return await chromeDomMutationWatch(params);
     case "chrome_sources_list":
       return await chromeSourcesList(params);
     case "chrome_source_get":
@@ -2618,6 +2620,38 @@ async function chromeCssStyles(params) {
   };
 }
 
+async function chromeDomMutationWatch(params) {
+  if (!params.selector) throw new Error("selector is required");
+  const { tab, target } = await ensureDevtoolsAttached(params);
+  const durationMs = Math.min(Math.max(Number(params.durationMs || 1000), 100), 10000);
+  const maxEvents = Number(params.maxEvents || 100);
+  await chromeDebuggerSendCommand(target, "Runtime.enable").catch(() => {});
+  const expression = `(${domMutationWatchPageFunction.toString()})(${JSON.stringify({
+    selector: String(params.selector || ""),
+    durationMs,
+    maxEvents,
+    subtree: params.subtree !== false,
+    childList: params.childList !== false,
+    attributes: params.attributes !== false,
+    characterData: Boolean(params.characterData),
+    attributeOldValue: params.attributeOldValue !== false,
+    characterDataOldValue: Boolean(params.characterDataOldValue),
+    triggerExpression: params.triggerExpression ? String(params.triggerExpression) : "",
+  })})`;
+  const result = await chromeDebuggerSendCommand(target, "Runtime.evaluate", {
+    expression,
+    awaitPromise: true,
+    returnByValue: true,
+  });
+  if (result.exceptionDetails) {
+    throw new Error(result.exceptionDetails.text || "DOM mutation watch failed");
+  }
+  return {
+    tab: pickTab(tab),
+    ...(result.result?.value || {}),
+  };
+}
+
 async function chromeSourcesList(params) {
   const { tab, session } = await ensureDevtoolsAttached(params);
   const limit = Number(params.limit || 200);
@@ -2777,6 +2811,135 @@ function coverageByteSummary(ranges = [], fallbackTotalBytes = 0) {
     unusedBytes,
     usedRatio: totalBytes > 0 ? usedBytes / totalBytes : null,
   };
+}
+
+function domMutationWatchPageFunction(options) {
+  const startedAt = new Date().toISOString();
+  const selector = String(options.selector || "");
+  const node = document.querySelector(selector);
+  const maxEvents = Math.max(1, Number(options.maxEvents || 100));
+  const durationMs = Math.max(100, Number(options.durationMs || 1000));
+  function describeNode(target) {
+    if (!target) return null;
+    if (target.nodeType === Node.TEXT_NODE) {
+      return {
+        nodeType: "text",
+        text: String(target.textContent || "").slice(0, 200),
+        parent: describeNode(target.parentElement),
+      };
+    }
+    if (!(target instanceof Element)) {
+      return {
+        nodeType: target.nodeType,
+        nodeName: target.nodeName,
+      };
+    }
+    return {
+      nodeType: "element",
+      tagName: target.tagName.toLowerCase(),
+      id: target.id || "",
+      className: typeof target.className === "string" ? target.className : "",
+      text: String(target.textContent || "").trim().slice(0, 200),
+    };
+  }
+  function pathFor(target) {
+    if (!(target instanceof Element)) return "";
+    const parts = [];
+    let current = target;
+    while (current && current.nodeType === Node.ELEMENT_NODE && parts.length < 8) {
+      let part = current.tagName.toLowerCase();
+      if (current.id) {
+        part += `#${current.id}`;
+        parts.unshift(part);
+        break;
+      }
+      const parent = current.parentElement;
+      if (parent) {
+        const sameTag = [...parent.children].filter((child) => child.tagName === current.tagName);
+        if (sameTag.length > 1) part += `:nth-of-type(${sameTag.indexOf(current) + 1})`;
+      }
+      parts.unshift(part);
+      current = parent;
+    }
+    return parts.join(" > ");
+  }
+  return new Promise((resolve) => {
+    if (!node) {
+      resolve({
+        found: false,
+        selector,
+        startedAt,
+        finishedAt: new Date().toISOString(),
+        durationMs,
+        eventCount: 0,
+        events: [],
+      });
+      return;
+    }
+    const events = [];
+    const observer = new MutationObserver((mutations) => {
+      for (const mutation of mutations) {
+        if (events.length >= maxEvents) break;
+        events.push({
+          timestamp: new Date().toISOString(),
+          type: mutation.type,
+          target: describeNode(mutation.target),
+          targetPath: pathFor(mutation.target),
+          attributeName: mutation.attributeName || null,
+          attributeNamespace: mutation.attributeNamespace || null,
+          oldValue: mutation.oldValue ?? null,
+          addedNodes: [...mutation.addedNodes].slice(0, 10).map(describeNode),
+          removedNodes: [...mutation.removedNodes].slice(0, 10).map(describeNode),
+          addedNodeCount: mutation.addedNodes.length,
+          removedNodeCount: mutation.removedNodes.length,
+        });
+      }
+    });
+    observer.observe(node, {
+      subtree: options.subtree !== false,
+      childList: options.childList !== false,
+      attributes: options.attributes !== false,
+      characterData: Boolean(options.characterData),
+      attributeOldValue: options.attributeOldValue !== false,
+      characterDataOldValue: Boolean(options.characterDataOldValue),
+    });
+    let triggerError = null;
+    if (options.triggerExpression) {
+      try {
+        const fn = new Function(String(options.triggerExpression));
+        setTimeout(() => {
+          try { fn(); }
+          catch (error) { triggerError = String(error?.message || error); }
+        }, 0);
+      } catch (error) {
+        triggerError = String(error?.message || error);
+      }
+    }
+    setTimeout(() => {
+      observer.disconnect();
+      resolve({
+        found: true,
+        selector,
+        startedAt,
+        finishedAt: new Date().toISOString(),
+        durationMs,
+        target: describeNode(node),
+        targetPath: pathFor(node),
+        observerOptions: {
+          subtree: options.subtree !== false,
+          childList: options.childList !== false,
+          attributes: options.attributes !== false,
+          characterData: Boolean(options.characterData),
+          attributeOldValue: options.attributeOldValue !== false,
+          characterDataOldValue: Boolean(options.characterDataOldValue),
+        },
+        triggerError,
+        eventCount: events.length,
+        events,
+        truncated: events.length >= maxEvents,
+      });
+    }, durationMs);
+  });
 }
 
 function prettyPrintJavaScript(sourceText, options = {}) {

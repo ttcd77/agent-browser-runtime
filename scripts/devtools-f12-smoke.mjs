@@ -281,6 +281,15 @@ try {
   assert(cssStyles.found === true, "css styles did not find smoke button");
   assert(cssStyles.boxModel?.model, "css styles missing box model");
   assert(cssStyles.computedStyle?.computedStyle?.some((entry) => entry.name === "color"), "css styles missing computed color");
+  const mutationWatch = await callTool(baseUrl, "devtools_dom_mutation_watch", {
+    profile: "default",
+    selector: "#agent-listener-button",
+    durationMs: 300,
+    maxEvents: 10,
+    triggerExpression: "document.querySelector('#agent-listener-button').setAttribute('data-agent-watch', 'changed'); document.querySelector('#agent-listener-button').appendChild(document.createElement('span')).textContent = ' mutation';",
+  });
+  assert(mutationWatch.found === true, "DOM mutation watch did not find smoke button");
+  assert(mutationWatch.eventCount >= 2, `DOM mutation watch missed attribute/child mutations: ${JSON.stringify(mutationWatch)}`);
   const coverageDetail = await callTool(baseUrl, "devtools_coverage_detail", {
     profile: "default",
     durationMs: 800,

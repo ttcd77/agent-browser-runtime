@@ -104,6 +104,7 @@ DevTools/F12 data layer:
 - `devtools_dom_snapshot`
 - `devtools_event_listeners`
 - `devtools_css_styles`
+- `devtools_dom_mutation_watch`
 - `devtools_sources_list`
 - `devtools_source_get`
 - `devtools_source_pretty_print`
@@ -125,7 +126,7 @@ return a successful structured no-op with `notApplicable: true`, not disappear.
 
 Implemented:
 
-- Elements/Page snapshot: visible text, controls, screenshots, click/type/scroll, DOM tree, selected element inspection, layout boxes, key computed styles, raw Chrome DOMSnapshot data, Elements-panel Event Listeners, and Styles/Computed/Box Model evidence for selected DOM nodes.
+- Elements/Page snapshot: visible text, controls, screenshots, click/type/scroll, DOM tree, selected element inspection, layout boxes, key computed styles, raw Chrome DOMSnapshot data, Elements-panel Event Listeners, Styles/Computed/Box Model evidence, and selected-node DOM mutation watch for breakpoint-style evidence.
 - Sources/Search: parsed script metadata, source map URL metadata, module flag, script source by script id, heuristic pretty-printing, inline/external source map metadata, literal source search, global literal search across Network/Sources/Application evidence, and compact F12 evidence bundle export.
 - Performance: navigation timing, resource timing, paint timing, marks/measures, long-task entries, Chrome Tracing capture with full trace file output, trace event summaries, short JS/CSS coverage snapshots, and Coverage-panel range drilldown with bounded source snippets.
 - Network: request URL, method, headers, status, response headers, request-detail evidence including cookies and ExtraInfo events, initiator, Timing/Initiator-style rows, frame id, redirect chain, cache/service-worker flags, TLS details where exposed, WebSocket lifecycle and frames, request replay/edit-and-resend, HAR-like object export, HAR file save, and low-token summary for dashboards/triage.
