@@ -861,6 +861,85 @@ function domMutationWatchPageFunction(options) {
   });
 }
 
+function domSearchAttributes(attributes = []) {
+  const result = {};
+  for (let index = 0; index < attributes.length; index += 2) {
+    result[String(attributes[index])] = String(attributes[index + 1] ?? "");
+  }
+  return result;
+}
+
+function domSearchNodeSummary(node = {}, outerHTMLResult = null, maxOuterHTMLChars = 1200) {
+  const outer = outerHTMLResult?.outerHTML ? truncateText(outerHTMLResult.outerHTML, maxOuterHTMLChars) : null;
+  return {
+    nodeId: node.nodeId,
+    backendNodeId: node.backendNodeId,
+    nodeType: node.nodeType,
+    nodeName: node.nodeName,
+    localName: node.localName,
+    nodeValue: node.nodeValue,
+    attributes: domSearchAttributes(node.attributes || []),
+    childNodeCount: node.childNodeCount || 0,
+    frameId: node.frameId || null,
+    shadowRootType: node.shadowRootType || null,
+    outerHTML: outer?.text || "",
+    outerHTMLTruncated: Boolean(outer?.truncated),
+  };
+}
+
+function domSearchFallbackPageFunction(options) {
+  const query = String(options.query || "");
+  const maxResults = Math.max(0, Number(options.maxResults || 20));
+  const maxOuterHTMLChars = Math.max(0, Number(options.maxOuterHTMLChars || 1200));
+  const seen = new Set();
+  const results = [];
+  function push(element, source) {
+    if (!element || !(element instanceof Element) || seen.has(element) || results.length >= maxResults) return;
+    seen.add(element);
+    const outerHTML = String(element.outerHTML || "");
+    results.push({
+      source,
+      nodeType: element.nodeType,
+      nodeName: element.nodeName,
+      localName: element.localName,
+      attributes: Object.fromEntries([...element.attributes].map((attr) => [attr.name, attr.value])),
+      text: String(element.textContent || "").trim().slice(0, 300),
+      outerHTML: outerHTML.slice(0, maxOuterHTMLChars),
+      outerHTMLTruncated: outerHTML.length > maxOuterHTMLChars,
+    });
+  }
+  try {
+    document.querySelectorAll(query).forEach((element) => push(element, "querySelectorAll"));
+  } catch {
+    // Not a CSS selector; text and XPath passes below can still match.
+  }
+  try {
+    const xpath = document.evaluate(query, document, null, XPathResult.ORDERED_NODE_ITERATOR_TYPE, null);
+    let node = xpath.iterateNext();
+    while (node && results.length < maxResults) {
+      push(node.nodeType === Node.ELEMENT_NODE ? node : node.parentElement, "xpath");
+      node = xpath.iterateNext();
+    }
+  } catch {
+    // Not an XPath expression.
+  }
+  const needle = query.toLowerCase();
+  if (needle) {
+    const walker = document.createTreeWalker(document.documentElement, NodeFilter.SHOW_ELEMENT);
+    let node = walker.currentNode;
+    while (node && results.length < maxResults) {
+      const haystack = `${node.id || ""} ${node.className || ""} ${node.getAttribute?.("name") || ""} ${node.getAttribute?.("aria-label") || ""} ${node.textContent || ""} ${node.outerHTML || ""}`.toLowerCase();
+      if (haystack.includes(needle)) push(node, "text");
+      node = walker.nextNode();
+    }
+  }
+  return {
+    query,
+    returnedCount: results.length,
+    results,
+  };
+}
+
 function prettyPrintJavaScript(sourceText, options = {}) {
   const text = String(sourceText || "");
   const indentText = typeof options.indent === "string" ? options.indent : "  ";
@@ -3744,6 +3823,81 @@ function registerStandaloneBrowserTools(tools, cdpPort, profileRegistry, default
     },
   });
 
+  tools.set("browser_dom_search", {
+    name: "browser_dom_search",
+    description: "Search the live DOM using Chrome DevTools DOM.performSearch, like Elements panel search.",
+    parameters: {
+      type: "object",
+      properties: {
+        profile: { type: "string" },
+        tabId: { type: "string" },
+        query: { type: "string" },
+        includeUserAgentShadowDOM: { type: "boolean" },
+        maxResults: { type: "number" },
+        maxOuterHTMLChars: { type: "number" },
+      },
+      required: ["query"],
+    },
+    async execute(_id, params) {
+      const profile = await resolveProfile(params?.profile);
+      const query = String(params?.query || "");
+      const maxResults = typeof params?.maxResults === "number" ? params.maxResults : 20;
+      const maxOuterHTMLChars = typeof params?.maxOuterHTMLChars === "number" ? params.maxOuterHTMLChars : 1200;
+      return toolResult(await withPageClient(cdpPort, params?.tabId || profile.tabId, async (client, target) => {
+        await client.DOM.enable().catch(() => {});
+        const search = await client.DOM.performSearch({
+          query,
+          includeUserAgentShadowDOM: Boolean(params?.includeUserAgentShadowDOM),
+        });
+        const count = Number(search.resultCount || 0);
+        const endIndex = Math.min(count, Math.max(0, maxResults));
+        const ids = endIndex > 0
+          ? await client.DOM.getSearchResults({ searchId: search.searchId, fromIndex: 0, toIndex: endIndex })
+          : { nodeIds: [] };
+        const results = [];
+        for (const nodeId of ids.nodeIds || []) {
+          const described = await client.DOM.describeNode({ nodeId, depth: 1, pierce: true }).catch((error) => ({ error: String(error?.message || error), node: { nodeId } }));
+          const outer = await client.DOM.getOuterHTML({ nodeId }).catch((error) => ({ error: String(error?.message || error), outerHTML: "" }));
+          results.push({
+            source: "cdp",
+            ...domSearchNodeSummary(described.node || { nodeId }, outer, maxOuterHTMLChars),
+            describeError: described.error,
+            outerHTMLError: outer.error,
+          });
+        }
+        await client.DOM.discardSearchResults({ searchId: search.searchId }).catch(() => {});
+        const validResultCount = results.filter((entry) => entry.outerHTML || entry.nodeName || entry.localName).length;
+        let fallback = null;
+        if (validResultCount < Math.min(count, maxResults)) {
+          const fallbackResult = await client.Runtime.evaluate({
+            expression: `(${domSearchFallbackPageFunction.toString()})(${JSON.stringify({ query, maxResults, maxOuterHTMLChars })})`,
+            awaitPromise: true,
+            returnByValue: true,
+          }).catch((error) => ({ error: String(error?.message || error) }));
+          fallback = fallbackResult.error ? { error: fallbackResult.error, results: [] } : fallbackResult.result?.value;
+        }
+        const fallbackResults = Array.isArray(fallback?.results) ? fallback.results : [];
+        const merged = [
+          ...results.filter((entry) => entry.outerHTML || entry.nodeName || entry.localName),
+          ...fallbackResults,
+        ].slice(0, maxResults);
+        await profileRegistry.touchProfile(profile.name, { tabId: target.id });
+        return {
+          profile: profile.name,
+          tabId: target.id,
+          query,
+          includeUserAgentShadowDOM: Boolean(params?.includeUserAgentShadowDOM),
+          resultCount: count,
+          returnedCount: merged.length,
+          truncated: count > merged.length,
+          fallbackUsed: Boolean(fallbackResults.length || fallback?.error),
+          fallbackError: fallback?.error,
+          results: merged,
+        };
+      }));
+    },
+  });
+
   tools.set("browser_event_listeners", {
     name: "browser_event_listeners",
     description: "Return DevTools Elements-panel Event Listeners for a selected DOM node.",
@@ -5146,6 +5300,7 @@ function registerStandaloneBrowserTools(tools, cdpPort, profileRegistry, default
   aliasTool("devtools_cache_entry_get", "browser_cache_entry_get", "Unified Agent DevTools API: read a CacheStorage response by cache name and URL.");
   aliasTool("devtools_elements_snapshot", "browser_elements_snapshot", "Unified Agent DevTools API: read Elements panel-style DOM tree, layout boxes, and computed style.");
   aliasTool("devtools_dom_snapshot", "browser_dom_snapshot", "Unified Agent DevTools API: read raw Chrome DOMSnapshot data.");
+  aliasTool("devtools_dom_search", "browser_dom_search", "Unified Agent DevTools API: search the live DOM like Elements panel search.");
   aliasTool("devtools_event_listeners", "browser_event_listeners", "Unified Agent DevTools API: read Elements panel event listeners for a selected DOM node.");
   aliasTool("devtools_css_styles", "browser_css_styles", "Unified Agent DevTools API: read Elements panel Styles/Computed/Box Model evidence for a selected DOM node.");
   aliasTool("devtools_dom_mutation_watch", "browser_dom_mutation_watch", "Unified Agent DevTools API: watch selected-node DOM mutations as Elements-panel breakpoint evidence.");

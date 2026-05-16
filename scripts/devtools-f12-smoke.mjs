@@ -177,6 +177,13 @@ try {
   });
   assert(domSnapshot.documentCount > 0, "DOMSnapshot returned no documents");
   assert(domSnapshot.stringCount > 0, "DOMSnapshot returned no string table");
+  const domSearch = await callTool(baseUrl, "devtools_dom_search", {
+    profile: "default",
+    query: "Example Domain",
+    maxResults: 5,
+  });
+  assert(domSearch.resultCount > 0, "DOM search did not find Example Domain");
+  assert(domSearch.results?.some((entry) => String(entry.outerHTML || "").includes("Example Domain")), "DOM search result missing expected outerHTML");
 
   const trace = await callTool(baseUrl, "devtools_chrome_trace", {
     profile: "default",

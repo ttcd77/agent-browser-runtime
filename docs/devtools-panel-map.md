@@ -43,6 +43,7 @@ Use this for an agent dashboard or a quick diagnosis before drilling down:
 | Inspect visible page state | `devtools_snapshot` |
 | Inspect DOM tree and styles | `devtools_elements_snapshot` |
 | Capture raw DOMSnapshot | `devtools_dom_snapshot` |
+| Search live DOM | `devtools_dom_search` |
 | Inspect iframe/frame tree | `devtools_frame_tree` |
 | Inspect accessibility tree | `devtools_accessibility_snapshot` |
 | Inspect selected node event listeners | `devtools_event_listeners` |

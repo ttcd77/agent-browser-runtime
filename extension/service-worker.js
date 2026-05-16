@@ -214,6 +214,8 @@ async function executeCommand(command, params) {
       return await chromeElementsSnapshot(params);
     case "chrome_dom_snapshot":
       return await chromeDomSnapshot(params);
+    case "chrome_dom_search":
+      return await chromeDomSearch(params);
     case "chrome_event_listeners":
       return await chromeEventListeners(params);
     case "chrome_css_styles":
@@ -2517,6 +2519,64 @@ async function chromeDomSnapshot(params) {
   };
 }
 
+async function chromeDomSearch(params) {
+  if (!params.query) throw new Error("query is required");
+  const { tab, target } = await ensureDevtoolsAttached(params);
+  const query = String(params.query || "");
+  const maxResults = Number(params.maxResults || 20);
+  const maxOuterHTMLChars = Number(params.maxOuterHTMLChars || 1200);
+  await chromeDebuggerSendCommand(target, "DOM.enable").catch(() => {});
+  const search = await chromeDebuggerSendCommand(target, "DOM.performSearch", {
+    query,
+    includeUserAgentShadowDOM: Boolean(params.includeUserAgentShadowDOM),
+  });
+  const count = Number(search.resultCount || 0);
+  const endIndex = Math.min(count, Math.max(0, maxResults));
+  const ids = endIndex > 0
+    ? await chromeDebuggerSendCommand(target, "DOM.getSearchResults", { searchId: search.searchId, fromIndex: 0, toIndex: endIndex })
+    : { nodeIds: [] };
+  const results = [];
+  for (const nodeId of ids.nodeIds || []) {
+    const described = await chromeDebuggerSendCommand(target, "DOM.describeNode", { nodeId, depth: 1, pierce: true })
+      .catch((error) => ({ error: String(error?.message || error), node: { nodeId } }));
+    const outer = await chromeDebuggerSendCommand(target, "DOM.getOuterHTML", { nodeId })
+      .catch((error) => ({ error: String(error?.message || error), outerHTML: "" }));
+    results.push({
+      source: "cdp",
+      ...domSearchNodeSummary(described.node || { nodeId }, outer, maxOuterHTMLChars),
+      describeError: described.error,
+      outerHTMLError: outer.error,
+    });
+  }
+  await chromeDebuggerSendCommand(target, "DOM.discardSearchResults", { searchId: search.searchId }).catch(() => {});
+  const validResultCount = results.filter((entry) => entry.outerHTML || entry.nodeName || entry.localName).length;
+  let fallback = null;
+  if (validResultCount < Math.min(count, maxResults)) {
+    const fallbackResult = await chromeDebuggerSendCommand(target, "Runtime.evaluate", {
+      expression: `(${domSearchFallbackPageFunction.toString()})(${JSON.stringify({ query, maxResults, maxOuterHTMLChars })})`,
+      awaitPromise: true,
+      returnByValue: true,
+    }).catch((error) => ({ error: String(error?.message || error) }));
+    fallback = fallbackResult.error ? { error: fallbackResult.error, results: [] } : fallbackResult.result?.value;
+  }
+  const fallbackResults = Array.isArray(fallback?.results) ? fallback.results : [];
+  const merged = [
+    ...results.filter((entry) => entry.outerHTML || entry.nodeName || entry.localName),
+    ...fallbackResults,
+  ].slice(0, maxResults);
+  return {
+    tab: pickTab(tab),
+    query,
+    includeUserAgentShadowDOM: Boolean(params.includeUserAgentShadowDOM),
+    resultCount: count,
+    returnedCount: merged.length,
+    truncated: count > merged.length,
+    fallbackUsed: Boolean(fallbackResults.length || fallback?.error),
+    fallbackError: fallback?.error,
+    results: merged,
+  };
+}
+
 async function chromeEventListeners(params) {
   const { tab, target } = await ensureDevtoolsAttached(params);
   const selector = params.selector ? String(params.selector) : "document";
@@ -2975,6 +3035,85 @@ function domMutationWatchPageFunction(options) {
       });
     }, durationMs);
   });
+}
+
+function domSearchAttributes(attributes = []) {
+  const result = {};
+  for (let index = 0; index < attributes.length; index += 2) {
+    result[String(attributes[index])] = String(attributes[index + 1] ?? "");
+  }
+  return result;
+}
+
+function domSearchNodeSummary(node = {}, outerHTMLResult = null, maxOuterHTMLChars = 1200) {
+  const outer = outerHTMLResult?.outerHTML ? truncateText(outerHTMLResult.outerHTML, maxOuterHTMLChars) : null;
+  return {
+    nodeId: node.nodeId,
+    backendNodeId: node.backendNodeId,
+    nodeType: node.nodeType,
+    nodeName: node.nodeName,
+    localName: node.localName,
+    nodeValue: node.nodeValue,
+    attributes: domSearchAttributes(node.attributes || []),
+    childNodeCount: node.childNodeCount || 0,
+    frameId: node.frameId || null,
+    shadowRootType: node.shadowRootType || null,
+    outerHTML: outer?.text || "",
+    outerHTMLTruncated: Boolean(outer?.truncated),
+  };
+}
+
+function domSearchFallbackPageFunction(options) {
+  const query = String(options.query || "");
+  const maxResults = Math.max(0, Number(options.maxResults || 20));
+  const maxOuterHTMLChars = Math.max(0, Number(options.maxOuterHTMLChars || 1200));
+  const seen = new Set();
+  const results = [];
+  function push(element, source) {
+    if (!element || !(element instanceof Element) || seen.has(element) || results.length >= maxResults) return;
+    seen.add(element);
+    const outerHTML = String(element.outerHTML || "");
+    results.push({
+      source,
+      nodeType: element.nodeType,
+      nodeName: element.nodeName,
+      localName: element.localName,
+      attributes: Object.fromEntries([...element.attributes].map((attr) => [attr.name, attr.value])),
+      text: String(element.textContent || "").trim().slice(0, 300),
+      outerHTML: outerHTML.slice(0, maxOuterHTMLChars),
+      outerHTMLTruncated: outerHTML.length > maxOuterHTMLChars,
+    });
+  }
+  try {
+    document.querySelectorAll(query).forEach((element) => push(element, "querySelectorAll"));
+  } catch {
+    // Not a CSS selector; text and XPath passes below can still match.
+  }
+  try {
+    const xpath = document.evaluate(query, document, null, XPathResult.ORDERED_NODE_ITERATOR_TYPE, null);
+    let node = xpath.iterateNext();
+    while (node && results.length < maxResults) {
+      push(node.nodeType === Node.ELEMENT_NODE ? node : node.parentElement, "xpath");
+      node = xpath.iterateNext();
+    }
+  } catch {
+    // Not an XPath expression.
+  }
+  const needle = query.toLowerCase();
+  if (needle) {
+    const walker = document.createTreeWalker(document.documentElement, NodeFilter.SHOW_ELEMENT);
+    let node = walker.currentNode;
+    while (node && results.length < maxResults) {
+      const haystack = `${node.id || ""} ${node.className || ""} ${node.getAttribute?.("name") || ""} ${node.getAttribute?.("aria-label") || ""} ${node.textContent || ""} ${node.outerHTML || ""}`.toLowerCase();
+      if (haystack.includes(needle)) push(node, "text");
+      node = walker.nextNode();
+    }
+  }
+  return {
+    query,
+    returnedCount: results.length,
+    results,
+  };
 }
 
 function prettyPrintJavaScript(sourceText, options = {}) {

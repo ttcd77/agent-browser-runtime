@@ -101,6 +101,7 @@ It starts an isolated temporary managed browser and verifies:
   ExtraInfo fields where Chrome exposes them,
 - Accessibility tree extraction,
 - raw Chrome `DOMSnapshot.captureSnapshot`,
+- live DOM search through Chrome `DOM.performSearch`,
 - selected-node Event Listeners from the Elements panel,
 - selected-node Styles/Computed/Box Model evidence from the Elements panel,
 - selected-node DOM mutation watch for Elements breakpoint-style evidence,
