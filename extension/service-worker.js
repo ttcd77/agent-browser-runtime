@@ -220,6 +220,8 @@ async function executeCommand(command, params) {
       return await chromeCssStyles(params);
     case "chrome_dom_mutation_watch":
       return await chromeDomMutationWatch(params);
+    case "chrome_cdp_command":
+      return await chromeCdpCommand(params);
     case "chrome_sources_list":
       return await chromeSourcesList(params);
     case "chrome_source_get":
@@ -2649,6 +2651,20 @@ async function chromeDomMutationWatch(params) {
   return {
     tab: pickTab(tab),
     ...(result.result?.value || {}),
+  };
+}
+
+async function chromeCdpCommand(params) {
+  const method = String(params.method || "").trim();
+  if (!/^[A-Za-z0-9_.]+$/.test(method) || !method.includes(".")) {
+    throw new Error("method must be a Chrome DevTools Protocol method like Runtime.evaluate");
+  }
+  const { tab, target } = await ensureDevtoolsAttached(params);
+  const result = await chromeDebuggerSendCommand(target, method, params.params && typeof params.params === "object" ? params.params : {});
+  return {
+    tab: pickTab(tab),
+    method,
+    result,
   };
 }
 

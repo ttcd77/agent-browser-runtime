@@ -105,6 +105,7 @@ DevTools/F12 data layer:
 - `devtools_event_listeners`
 - `devtools_css_styles`
 - `devtools_dom_mutation_watch`
+- `devtools_cdp_command`
 - `devtools_sources_list`
 - `devtools_source_get`
 - `devtools_source_pretty_print`
@@ -121,6 +122,11 @@ DevTools/F12 data layer:
 Backend compatibility rule: every runtime should expose this full `devtools_*`
 set. If a tool is meaningful only in one backend, the other backend should still
 return a successful structured no-op with `notApplicable: true`, not disappear.
+
+`devtools_cdp_command` is the escape hatch for F12 parity: when Chrome exposes a
+DevTools Protocol method that does not yet have a friendly wrapper, agents can
+call that CDP method directly against the selected tab and still keep the same
+Managed/Personal backend contract.
 
 ## Current F12 Coverage
 

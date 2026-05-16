@@ -290,6 +290,15 @@ try {
   });
   assert(mutationWatch.found === true, "DOM mutation watch did not find smoke button");
   assert(mutationWatch.eventCount >= 2, `DOM mutation watch missed attribute/child mutations: ${JSON.stringify(mutationWatch)}`);
+  const rawCdp = await callTool(baseUrl, "devtools_cdp_command", {
+    profile: "default",
+    method: "Runtime.evaluate",
+    params: {
+      expression: "window.AGENT_SOURCE_SEARCH_MARKER",
+      returnByValue: true,
+    },
+  });
+  assert(rawCdp.result?.result?.value === "source-search-smoke", `raw CDP command did not return marker: ${JSON.stringify(rawCdp)}`);
   const coverageDetail = await callTool(baseUrl, "devtools_coverage_detail", {
     profile: "default",
     durationMs: 800,
