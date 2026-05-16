@@ -76,8 +76,8 @@ not running, it still validates that Managed Browser exposes the contract.
 
 Current verified contract:
 
-- Managed Browser: 54 `devtools_*` tools.
-- Personal Chrome: 54 `devtools_*` tools.
+- Managed Browser: 55 `devtools_*` tools.
+- Personal Chrome: 55 `devtools_*` tools.
 - Drift: none.
 
 The contract smoke uses an isolated temporary browser profile so it does not
@@ -101,6 +101,7 @@ It starts an isolated temporary managed browser and verifies:
   ExtraInfo fields where Chrome exposes them,
 - Accessibility tree extraction,
 - raw Chrome `DOMSnapshot.captureSnapshot`,
+- selected-node Event Listeners from the Elements panel,
 - Chrome Tracing stream capture and trace file output,
 - Chrome Tracing summary extraction,
 - short JavaScript/CSS coverage snapshot,

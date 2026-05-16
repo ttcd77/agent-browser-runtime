@@ -214,6 +214,8 @@ async function executeCommand(command, params) {
       return await chromeElementsSnapshot(params);
     case "chrome_dom_snapshot":
       return await chromeDomSnapshot(params);
+    case "chrome_event_listeners":
+      return await chromeEventListeners(params);
     case "chrome_sources_list":
       return await chromeSourcesList(params);
     case "chrome_source_get":
@@ -2502,6 +2504,64 @@ async function chromeDomSnapshot(params) {
     documentCount: Array.isArray(snapshot.documents) ? snapshot.documents.length : 0,
     stringCount: Array.isArray(snapshot.strings) ? snapshot.strings.length : 0,
     snapshot,
+  };
+}
+
+async function chromeEventListeners(params) {
+  const { tab, target } = await ensureDevtoolsAttached(params);
+  const selector = params.selector ? String(params.selector) : "document";
+  const expression = selector === "document" ? "document" : `document.querySelector(${JSON.stringify(selector)})`;
+  const node = await chromeDebuggerSendCommand(target, "Runtime.evaluate", {
+    expression,
+    objectGroup: "agent-browser-runtime-event-listeners",
+    returnByValue: false,
+  });
+  const objectId = node.result?.objectId;
+  if (!objectId) {
+    return {
+      tab: pickTab(tab),
+      selector,
+      found: false,
+      listeners: [],
+      count: 0,
+    };
+  }
+  const result = await chromeDebuggerSendCommand(target, "DOMDebugger.getEventListeners", {
+    objectId,
+    depth: typeof params.depth === "number" ? params.depth : -1,
+    pierce: params.pierce !== false,
+  });
+  await chromeDebuggerSendCommand(target, "Runtime.releaseObjectGroup", { objectGroup: "agent-browser-runtime-event-listeners" }).catch(() => {});
+  const listeners = (result.listeners || []).map((listener) => ({
+    type: listener.type,
+    useCapture: listener.useCapture,
+    passive: listener.passive,
+    once: listener.once,
+    scriptId: listener.scriptId,
+    lineNumber: listener.lineNumber,
+    columnNumber: listener.columnNumber,
+    handler: listener.handler ? {
+      type: listener.handler.type,
+      subtype: listener.handler.subtype,
+      className: listener.handler.className,
+      description: listener.handler.description,
+      objectId: listener.handler.objectId,
+    } : null,
+    originalHandler: listener.originalHandler ? {
+      type: listener.originalHandler.type,
+      subtype: listener.originalHandler.subtype,
+      className: listener.originalHandler.className,
+      description: listener.originalHandler.description,
+      objectId: listener.originalHandler.objectId,
+    } : null,
+    backendNodeId: listener.backendNodeId,
+  }));
+  return {
+    tab: pickTab(tab),
+    selector,
+    found: true,
+    count: listeners.length,
+    listeners,
   };
 }
 

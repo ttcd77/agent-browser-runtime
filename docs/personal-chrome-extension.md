@@ -108,6 +108,7 @@ Unified Agent DevTools tools:
 - `devtools_cache_entry_get`
 - `devtools_elements_snapshot`
 - `devtools_dom_snapshot`
+- `devtools_event_listeners`
 - `devtools_sources_list`
 - `devtools_source_get`
 - `devtools_source_pretty_print`
@@ -165,6 +166,7 @@ Backend-specific aliases:
 - `personal_chrome_cache_entry_get`
 - `personal_chrome_elements_snapshot`
 - `personal_chrome_dom_snapshot`
+- `personal_chrome_event_listeners`
 - `personal_chrome_sources_list`
 - `personal_chrome_source_get`
 - `personal_chrome_source_pretty_print`

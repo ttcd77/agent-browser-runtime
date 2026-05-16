@@ -45,6 +45,7 @@ Use this for an agent dashboard or a quick diagnosis before drilling down:
 | Capture raw DOMSnapshot | `devtools_dom_snapshot` |
 | Inspect iframe/frame tree | `devtools_frame_tree` |
 | Inspect accessibility tree | `devtools_accessibility_snapshot` |
+| Inspect selected node event listeners | `devtools_event_listeners` |
 | Click/type/scroll | `devtools_click`, `devtools_type`, `devtools_scroll` |
 | Screenshot | `devtools_screenshot` |
 

@@ -3559,6 +3559,87 @@ function registerStandaloneBrowserTools(tools, cdpPort, profileRegistry, default
     },
   });
 
+  tools.set("browser_event_listeners", {
+    name: "browser_event_listeners",
+    description: "Return DevTools Elements-panel Event Listeners for a selected DOM node.",
+    parameters: {
+      type: "object",
+      properties: {
+        profile: { type: "string" },
+        tabId: { type: "string" },
+        selector: { type: "string" },
+        depth: { type: "number" },
+        pierce: { type: "boolean" },
+      },
+    },
+    async execute(_id, params) {
+      const profile = await resolveProfile(params?.profile);
+      const selector = params?.selector ? String(params.selector) : "document";
+      return toolResult(await withPageClient(cdpPort, params?.tabId || profile.tabId, async (client, target) => {
+        await client.Runtime.enable();
+        await client.DOMDebugger.enable?.().catch(() => {});
+        const expression = selector === "document"
+          ? "document"
+          : `document.querySelector(${JSON.stringify(selector)})`;
+        const node = await client.Runtime.evaluate({
+          expression,
+          objectGroup: "agent-browser-runtime-event-listeners",
+          returnByValue: false,
+        });
+        const objectId = node.result?.objectId;
+        if (!objectId) {
+          return {
+            profile: profile.name,
+            tabId: target.id,
+            selector,
+            found: false,
+            listeners: [],
+            count: 0,
+          };
+        }
+        const result = await client.DOMDebugger.getEventListeners({
+          objectId,
+          depth: typeof params?.depth === "number" ? params.depth : -1,
+          pierce: params?.pierce !== false,
+        });
+        await client.Runtime.releaseObjectGroup({ objectGroup: "agent-browser-runtime-event-listeners" }).catch(() => {});
+        await profileRegistry.touchProfile(profile.name, { tabId: target.id });
+        const listeners = (result.listeners || []).map((listener) => ({
+          type: listener.type,
+          useCapture: listener.useCapture,
+          passive: listener.passive,
+          once: listener.once,
+          scriptId: listener.scriptId,
+          lineNumber: listener.lineNumber,
+          columnNumber: listener.columnNumber,
+          handler: listener.handler ? {
+            type: listener.handler.type,
+            subtype: listener.handler.subtype,
+            className: listener.handler.className,
+            description: listener.handler.description,
+            objectId: listener.handler.objectId,
+          } : null,
+          originalHandler: listener.originalHandler ? {
+            type: listener.originalHandler.type,
+            subtype: listener.originalHandler.subtype,
+            className: listener.originalHandler.className,
+            description: listener.originalHandler.description,
+            objectId: listener.originalHandler.objectId,
+          } : null,
+          backendNodeId: listener.backendNodeId,
+        }));
+        return {
+          profile: profile.name,
+          tabId: target.id,
+          selector,
+          found: true,
+          count: listeners.length,
+          listeners,
+        };
+      }));
+    },
+  });
+
   tools.set("browser_sources_list", {
     name: "browser_sources_list",
     description: "Return Sources panel-style script metadata for the current profile tab.",
@@ -4540,6 +4621,7 @@ function registerStandaloneBrowserTools(tools, cdpPort, profileRegistry, default
   aliasTool("devtools_cache_entry_get", "browser_cache_entry_get", "Unified Agent DevTools API: read a CacheStorage response by cache name and URL.");
   aliasTool("devtools_elements_snapshot", "browser_elements_snapshot", "Unified Agent DevTools API: read Elements panel-style DOM tree, layout boxes, and computed style.");
   aliasTool("devtools_dom_snapshot", "browser_dom_snapshot", "Unified Agent DevTools API: read raw Chrome DOMSnapshot data.");
+  aliasTool("devtools_event_listeners", "browser_event_listeners", "Unified Agent DevTools API: read Elements panel event listeners for a selected DOM node.");
   aliasTool("devtools_sources_list", "browser_sources_list", "Unified Agent DevTools API: list parsed scripts and source maps.");
   aliasTool("devtools_source_get", "browser_source_get", "Unified Agent DevTools API: read script source by scriptId.");
   aliasTool("devtools_source_pretty_print", "browser_source_pretty_print", "Unified Agent DevTools API: pretty-print parsed JavaScript source.");

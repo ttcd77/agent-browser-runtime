@@ -210,9 +210,15 @@ try {
       window.${sourceMarker}="source-search-smoke";function ${sourceMarker.toLowerCase()}(){return window.${sourceMarker};}
       console.error("AGENT_CONSOLE_ERROR_MARKER", window.${sourceMarker});
       setTimeout(() => { throw new Error("AGENT_CONSOLE_THROW_MARKER " + window.${sourceMarker}); }, 0);
+      addEventListener("DOMContentLoaded", () => {
+        document.getElementById("agent-listener-button").addEventListener("click", function agentListenerSmoke() {
+          window.AGENT_EVENT_LISTENER_MARKER = true;
+        });
+      });
       //# sourceMappingURL=data:application/json;base64,${sourceMap}
     </script>
-    <h1>Source Search Smoke</h1>`)}`;
+    <h1>Source Search Smoke</h1>
+    <button id="agent-listener-button">Listener Smoke</button>`)}`;
   await callTool(baseUrl, "browser_navigate", {
     profile: "default",
     url: sourcePage,
@@ -259,6 +265,11 @@ try {
     reload: false,
   });
   assert(consoleSourceContext.lines?.some((line) => line.text.includes("AGENT_CONSOLE_THROW_MARKER")), "console source context missing throw marker");
+  const eventListeners = await callTool(baseUrl, "devtools_event_listeners", {
+    profile: "default",
+    selector: "#agent-listener-button",
+  });
+  assert(eventListeners.listeners?.some((listener) => listener.type === "click"), `event listeners missing click handler: ${JSON.stringify(eventListeners)}`);
   const globalSearch = await callTool(baseUrl, "devtools_global_search", {
     profile: "default",
     query: sourceMarker,
@@ -339,6 +350,7 @@ try {
   console.log(`- source map results: ${sourceMapMetadata.count}`);
   console.log(`- console exceptions: ${consoleLog.counts.exceptions}`);
   console.log(`- console source context lines: ${consoleSourceContext.lines.length}`);
+  console.log(`- event listeners: ${eventListeners.count}`);
   console.log(`- global search matches: ${globalSearch.matchCount}`);
   console.log(`- evidence bundle: ${evidenceBundle.bundlePath}`);
   console.log(`- service worker registrations/caches: ${serviceWorker.registrationCount}/${serviceWorker.cacheCount}`);

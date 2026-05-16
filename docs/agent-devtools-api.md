@@ -102,6 +102,7 @@ DevTools/F12 data layer:
 - `devtools_cache_entry_get`
 - `devtools_elements_snapshot`
 - `devtools_dom_snapshot`
+- `devtools_event_listeners`
 - `devtools_sources_list`
 - `devtools_source_get`
 - `devtools_source_pretty_print`
@@ -122,7 +123,7 @@ return a successful structured no-op with `notApplicable: true`, not disappear.
 
 Implemented:
 
-- Elements/Page snapshot: visible text, controls, screenshots, click/type/scroll, DOM tree, selected element inspection, layout boxes, key computed styles, and raw Chrome DOMSnapshot data.
+- Elements/Page snapshot: visible text, controls, screenshots, click/type/scroll, DOM tree, selected element inspection, layout boxes, key computed styles, raw Chrome DOMSnapshot data, and Elements-panel Event Listeners for selected DOM nodes.
 - Sources/Search: parsed script metadata, source map URL metadata, module flag, script source by script id, heuristic pretty-printing, inline/external source map metadata, literal source search, global literal search across Network/Sources/Application evidence, and compact F12 evidence bundle export.
 - Performance: navigation timing, resource timing, paint timing, marks/measures, long-task entries, Chrome Tracing capture with full trace file output, trace event summaries, and short JS/CSS coverage snapshots.
 - Network: request URL, method, headers, status, response headers, request-detail evidence including cookies and ExtraInfo events, initiator, Timing/Initiator-style rows, frame id, redirect chain, cache/service-worker flags, TLS details where exposed, WebSocket lifecycle and frames, request replay/edit-and-resend, HAR-like object export, HAR file save, and low-token summary for dashboards/triage.
