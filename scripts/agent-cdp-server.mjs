@@ -4858,6 +4858,137 @@ function registerStandaloneBrowserTools(tools, cdpPort, profileRegistry, default
     },
   });
 
+  tools.set("agent_inspect", {
+    name: "agent_inspect",
+    description: "Agent-facing F12 router. Pick a focus and get the right DevTools evidence without choosing from dozens of low-level tools.",
+    parameters: {
+      type: "object",
+      properties: {
+        profile: { type: "string" },
+        tabId: { type: "string" },
+        focus: {
+          type: "string",
+          enum: ["overview", "network", "storage", "console", "dom", "sources", "performance", "search", "evidence", "debug"],
+        },
+        query: { type: "string" },
+        selector: { type: "string" },
+        requestId: { type: "string" },
+        includeHeavy: { type: "boolean" },
+        save: { type: "boolean" },
+        limit: { type: "number" },
+      },
+    },
+    async execute(id, params) {
+      const profile = await resolveProfile(params?.profile);
+      const focus = String(params?.focus || "overview");
+      const limit = typeof params?.limit === "number" ? params.limit : 20;
+      const base = { profile: profile.name, tabId: params?.tabId };
+      const readPayload = (result) => JSON.parse(result.content?.[0]?.text || "{}");
+      const call = async (name, extra = {}) => readPayload(await tools.get(name).execute(id, { ...base, ...extra }));
+      const safeCall = async (name, extra = {}) => {
+        try {
+          return await call(name, extra);
+        } catch (error) {
+          return { unavailable: true, tool: name, error: String(error?.message || error) };
+        }
+      };
+      const safeProfileCall = async (name, extra = {}) => {
+        try {
+          return readPayload(await tools.get(name).execute(id, { profile: profile.name, ...extra }));
+        } catch (error) {
+          return { unavailable: true, tool: name, error: String(error?.message || error) };
+        }
+      };
+      const objectiveSignals = (payload) => {
+        if (!payload || typeof payload !== "object") return payload;
+        const { riskCount, findings, ...rest } = payload;
+        return rest;
+      };
+      const out = {
+        backend: "managed-cdp",
+        profile: profile.name,
+        focus,
+        generatedAt: new Date().toISOString(),
+        summary: "",
+        evidence: {},
+        nextTools: [],
+      };
+
+      if (focus === "overview") {
+        out.evidence.diagnostics = await safeCall("browser_page_diagnostics", { limit });
+        out.evidence.signals = objectiveSignals(await safeCall("browser_risk_summary", { limit, includeTokenScan: false }));
+        out.evidence.network = await safeProfileCall("profile_traffic_summary", { limit });
+        out.evidence.console = await safeCall("browser_console_log", { reload: false, waitMs: 100, limit });
+        out.summary = "Objective first pass across page, network, console, storage, and browser signals. This does not decide vulnerability impact.";
+        out.nextTools = ["agent_inspect focus=network", "agent_inspect focus=storage", "agent_inspect focus=console", "agent_inspect focus=dom", "agent_inspect focus=evidence"];
+      } else if (focus === "network") {
+        out.evidence.summary = await safeProfileCall("profile_traffic_summary", { limit: 1000000 });
+        out.evidence.timeline = await safeProfileCall("profile_network_timeline", { limit });
+        out.evidence.requests = await safeProfileCall("profile_traffic_query", { limit });
+        if (params?.requestId) {
+          out.evidence.requestDetail = await safeProfileCall("profile_request_detail", { requestId: params.requestId });
+          out.evidence.requestBody = await safeProfileCall("profile_traffic_get", { requestId: params.requestId });
+        }
+        out.summary = "Network panel route: summary, timing/initiator rows, captured requests, and optional request drill-down.";
+        out.nextTools = ["Use requestId with focus=network", "devtools_request_replay", "devtools_save_har", "agent_inspect focus=search query=<token/url/header>"];
+      } else if (focus === "storage") {
+        out.evidence.origin = await safeCall("browser_storage_origin_summary");
+        out.evidence.cookies = await safeCall("browser_cookie_summary");
+        out.evidence.serviceWorkers = await safeCall("browser_service_worker_summary");
+        if (params?.includeHeavy) out.evidence.storage = await safeCall("browser_storage_snapshot");
+        out.summary = "Application panel route: origin/quota, cookies, service workers, and optional full storage snapshot.";
+        out.nextTools = ["devtools_application_export", "devtools_indexeddb_read", "devtools_cache_entry_get", "agent_inspect focus=search query=<key/value>"];
+      } else if (focus === "console") {
+        out.evidence.console = await safeCall("browser_console_log", { reload: false, waitMs: 300, limit });
+        out.evidence.issues = await safeCall("browser_issues_log", { reload: false, waitMs: 100, limit });
+        out.summary = "Console and Issues route: runtime logs, exceptions, security messages, and DevTools issue events.";
+        out.nextTools = ["devtools_console_source_context", "agent_inspect focus=sources query=<stack marker>", "agent_inspect focus=debug"];
+      } else if (focus === "dom") {
+        out.evidence.elements = await safeCall("browser_elements_snapshot", { selector: params?.selector, maxNodes: limit * 10 });
+        if (params?.query) out.evidence.search = await safeCall("browser_dom_search", { query: params.query, maxResults: limit });
+        if (params?.selector) {
+          out.evidence.styles = await safeCall("browser_css_styles", { selector: params.selector, maxRules: limit });
+          out.evidence.listeners = await safeCall("browser_event_listeners", { selector: params.selector });
+        }
+        out.summary = "Elements panel route: DOM tree, optional live DOM search, selected-node styles, box model, and event listeners.";
+        out.nextTools = ["Pass selector for styles/listeners", "Pass query for DOM search", "devtools_dom_mutation_watch"];
+      } else if (focus === "sources") {
+        out.evidence.sources = await safeCall("browser_sources_list", { limit: limit * 5 });
+        if (params?.query) out.evidence.search = await safeCall("browser_sources_search", { query: params.query, maxMatches: limit });
+        out.summary = "Sources panel route: parsed scripts, source maps, literal source search, and debugger drill-down.";
+        out.nextTools = ["devtools_source_get", "devtools_source_pretty_print", "devtools_source_map_metadata", "agent_inspect focus=debug"];
+      } else if (focus === "performance") {
+        out.evidence.memory = await safeCall("browser_memory_snapshot");
+        out.evidence.performance = await safeCall("browser_performance_trace");
+        if (params?.includeHeavy) out.evidence.cpuProfile = await safeCall("browser_cpu_profile", { durationMs: 500, maxNodes: limit });
+        out.summary = "Performance route: memory/performance monitor snapshot, with optional heavier CPU profiling.";
+        out.nextTools = ["devtools_chrome_trace", "devtools_cpu_profile", "devtools_coverage_detail"];
+      } else if (focus === "search") {
+        if (!params?.query) throw new Error("query is required for focus=search");
+        out.evidence.search = await safeCall("browser_global_search", { query: params.query, maxMatches: limit });
+        out.summary = "Global search route: literal search across currently available F12 evidence surfaces.";
+        out.nextTools = ["agent_inspect focus=network query=<...>", "agent_inspect focus=storage query=<...>", "agent_inspect focus=sources query=<...>"];
+      } else if (focus === "evidence") {
+        out.evidence.bundle = await safeCall("browser_evidence_bundle", { save: params?.save !== false, networkLimit: limit, sourceLimit: limit * 5 });
+        out.summary = "Evidence route: compact export bundle for handoff, report writing, or later Agent review.";
+        out.nextTools = ["Open bundlePath", "agent_inspect focus=overview", "agent_inspect focus=search query=<hypothesis>"];
+      } else if (focus === "debug") {
+        out.evidence.debugger = await safeCall("browser_debugger_control", {
+          action: params?.query ? "pauseOnExpression" : "snapshot",
+          expression: params?.query || undefined,
+          waitMs: 500,
+          autoResume: true,
+          maxFrames: limit,
+        });
+        out.summary = "Debugger route: paused-frame/scope snapshot or expression-triggered pause. Use low-level debugger tool for precise breakpoints.";
+        out.nextTools = ["Use query as pauseOnExpression", "devtools_debugger_control action=setBreakpointByUrl", "devtools_source_get"];
+      } else {
+        throw new Error(`unsupported agent_inspect focus: ${focus}`);
+      }
+      return toolResult(out);
+    },
+  });
+
   tools.set("browser_evidence_bundle", {
     name: "browser_evidence_bundle",
     description: "Export a compact objective F12 evidence bundle for the current profile: diagnostics, Network summary, Issues, Security, Storage summary, and Sources list.",

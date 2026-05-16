@@ -400,6 +400,23 @@ try {
   assert(signalSummary.signalCount >= 1, `signal summary did not report any signals: ${JSON.stringify(signalSummary)}`);
   assert(signalSummary.signals.some((finding) => String(finding.id).startsWith("cookie.")), `signal summary missing cookie signal: ${JSON.stringify(signalSummary)}`);
 
+  const agentOverview = await callTool(baseUrl, "agent_inspect", {
+    profile: "default",
+    focus: "overview",
+    limit: 5,
+  });
+  assert(agentOverview.backend === "managed-cdp", `agent_inspect reported wrong backend: ${JSON.stringify(agentOverview)}`);
+  assert(agentOverview.evidence?.diagnostics, "agent_inspect overview missing diagnostics evidence");
+  assert(Array.isArray(agentOverview.nextTools) && agentOverview.nextTools.length >= 1, "agent_inspect overview missing nextTools");
+
+  const agentSearch = await callTool(baseUrl, "agent_inspect", {
+    profile: "default",
+    focus: "search",
+    query: sourceMarker,
+    limit: 10,
+  });
+  assert(agentSearch.evidence?.search?.matchCount > 0, `agent_inspect search did not find marker: ${JSON.stringify(agentSearch)}`);
+
   const savedHar = await callTool(baseUrl, "devtools_save_har", {
     profile: "default",
     limit: 20,
@@ -434,6 +451,7 @@ try {
   console.log(`- cookie summary count/script-readable: ${cookieSummary.summary.cookieCount}/${cookieSummary.summary.scriptReadableCount}`);
   console.log(`- storage origin frames/cookies: ${storageOrigin.frames.length}/${storageOrigin.cookieCount}`);
   console.log(`- signal summary signals/high-priority/medium: ${signalSummary.signalCount}/${signalSummary.highCount}/${signalSummary.mediumCount}`);
+  console.log(`- agent router focus/search matches: ${agentOverview.focus}/${agentSearch.evidence.search.matchCount}`);
   console.log(`- saved HAR entries/bytes: ${savedHar.entryCount}/${savedHar.harBytes}`);
 } finally {
   await fetch(`http://127.0.0.1:${serverPort}/shutdown`, { method: "POST" }).catch(() => {});

@@ -249,6 +249,139 @@ function persistEvidenceBundle(result, params = {}) {
   };
 }
 
+function postProcessToolResult(toolName, result, params = {}) {
+  if (toolName === "personal_chrome_screenshot" || toolName === "devtools_screenshot") {
+    return persistScreenshot(result, params);
+  }
+  if (toolName === "personal_chrome_request_body" || toolName === "devtools_request_body") {
+    return persistResponseBody(result, params);
+  }
+  if (toolName === "personal_chrome_chrome_trace" || toolName === "devtools_chrome_trace") {
+    return persistChromeTrace(result, params);
+  }
+  if (toolName === "personal_chrome_cpu_profile" || toolName === "devtools_cpu_profile") {
+    return persistCpuProfile(result, params);
+  }
+  if (toolName === "personal_chrome_save_har" || toolName === "devtools_save_har") {
+    return persistHar(result, params);
+  }
+  if (toolName === "personal_chrome_application_export" || toolName === "devtools_application_export") {
+    return persistApplicationExport(result, params);
+  }
+  if (toolName === "personal_chrome_evidence_bundle" || toolName === "devtools_evidence_bundle") {
+    return persistEvidenceBundle(result, params);
+  }
+  return result;
+}
+
+async function callBridgeTool(toolName, params = {}) {
+  const command = normalizeCommand(toolName);
+  const result = await callExtension(command, params);
+  return postProcessToolResult(toolName, result, params);
+}
+
+async function safeBridgeTool(toolName, params = {}) {
+  try {
+    return await callBridgeTool(toolName, params);
+  } catch (error) {
+    return { unavailable: true, tool: toolName, error: String(error?.message || error) };
+  }
+}
+
+async function runAgentInspect(params = {}) {
+  const focus = String(params.focus || "overview");
+  const limit = typeof params.limit === "number" ? params.limit : 20;
+  const base = { tabId: params.tabId };
+  const withBase = (extra = {}) => ({ ...base, ...extra });
+  const objectiveSignals = (payload) => {
+    if (!payload || typeof payload !== "object") return payload;
+    const { riskCount, findings, ...rest } = payload;
+    return rest;
+  };
+  const out = {
+    backend: "personal-chrome",
+    focus,
+    generatedAt: new Date().toISOString(),
+    summary: "",
+    evidence: {},
+    nextTools: [],
+  };
+
+  if (focus === "overview") {
+    out.evidence.diagnostics = await safeBridgeTool("devtools_page_diagnostics", withBase({ limit }));
+    out.evidence.signals = objectiveSignals(await safeBridgeTool("devtools_signal_summary", withBase({ limit, includeTokenScan: false })));
+    out.evidence.network = await safeBridgeTool("devtools_network_summary", withBase({ limit }));
+    out.evidence.console = await safeBridgeTool("devtools_console_log", withBase({ reload: false, waitMs: 100, limit }));
+    out.summary = "Objective first pass across page, network, console, storage, and browser signals. This does not decide vulnerability impact.";
+    out.nextTools = ["agent_inspect focus=network", "agent_inspect focus=storage", "agent_inspect focus=console", "agent_inspect focus=dom", "agent_inspect focus=evidence"];
+  } else if (focus === "network") {
+    out.evidence.summary = await safeBridgeTool("devtools_network_summary", withBase({ limit: 1000000 }));
+    out.evidence.timeline = await safeBridgeTool("devtools_network_timeline", withBase({ limit }));
+    out.evidence.requests = await safeBridgeTool("devtools_network_log", withBase({ limit }));
+    if (params.requestId) {
+      out.evidence.requestDetail = await safeBridgeTool("devtools_request_detail", withBase({ requestId: params.requestId }));
+      out.evidence.requestBody = await safeBridgeTool("devtools_request_body", withBase({ requestId: params.requestId }));
+    }
+    out.summary = "Network panel route: summary, timing/initiator rows, captured requests, and optional request drill-down.";
+    out.nextTools = ["Use requestId with focus=network", "devtools_request_replay", "devtools_save_har", "agent_inspect focus=search query=<token/url/header>"];
+  } else if (focus === "storage") {
+    out.evidence.origin = await safeBridgeTool("devtools_storage_origin_summary", base);
+    out.evidence.cookies = await safeBridgeTool("devtools_cookie_summary", base);
+    out.evidence.serviceWorkers = await safeBridgeTool("devtools_service_worker_summary", base);
+    if (params.includeHeavy) out.evidence.storage = await safeBridgeTool("devtools_storage_snapshot", base);
+    out.summary = "Application panel route: origin/quota, cookies, service workers, and optional full storage snapshot.";
+    out.nextTools = ["devtools_application_export", "devtools_indexeddb_read", "devtools_cache_entry_get", "agent_inspect focus=search query=<key/value>"];
+  } else if (focus === "console") {
+    out.evidence.console = await safeBridgeTool("devtools_console_log", withBase({ reload: false, waitMs: 300, limit }));
+    out.evidence.issues = await safeBridgeTool("devtools_issues_log", withBase({ reload: false, waitMs: 100, limit }));
+    out.summary = "Console and Issues route: runtime logs, exceptions, security messages, and DevTools issue events.";
+    out.nextTools = ["devtools_console_source_context", "agent_inspect focus=sources query=<stack marker>", "agent_inspect focus=debug"];
+  } else if (focus === "dom") {
+    out.evidence.elements = await safeBridgeTool("devtools_elements_snapshot", withBase({ selector: params.selector, maxNodes: limit * 10 }));
+    if (params.query) out.evidence.search = await safeBridgeTool("devtools_dom_search", withBase({ query: params.query, maxResults: limit }));
+    if (params.selector) {
+      out.evidence.styles = await safeBridgeTool("devtools_css_styles", withBase({ selector: params.selector, maxRules: limit }));
+      out.evidence.listeners = await safeBridgeTool("devtools_event_listeners", withBase({ selector: params.selector }));
+    }
+    out.summary = "Elements panel route: DOM tree, optional live DOM search, selected-node styles, box model, and event listeners.";
+    out.nextTools = ["Pass selector for styles/listeners", "Pass query for DOM search", "devtools_dom_mutation_watch"];
+  } else if (focus === "sources") {
+    out.evidence.sources = await safeBridgeTool("devtools_sources_list", withBase({ limit: limit * 5 }));
+    if (params.query) out.evidence.search = await safeBridgeTool("devtools_sources_search", withBase({ query: params.query, maxMatches: limit }));
+    out.summary = "Sources panel route: parsed scripts, source maps, literal source search, and debugger drill-down.";
+    out.nextTools = ["devtools_source_get", "devtools_source_pretty_print", "devtools_source_map_metadata", "agent_inspect focus=debug"];
+  } else if (focus === "performance") {
+    out.evidence.memory = await safeBridgeTool("devtools_memory_snapshot", base);
+    out.evidence.performance = await safeBridgeTool("devtools_performance_trace", base);
+    if (params.includeHeavy) out.evidence.cpuProfile = await safeBridgeTool("devtools_cpu_profile", withBase({ durationMs: 500, maxNodes: limit }));
+    out.summary = "Performance route: memory/performance monitor snapshot, with optional heavier CPU profiling.";
+    out.nextTools = ["devtools_chrome_trace", "devtools_cpu_profile", "devtools_coverage_detail"];
+  } else if (focus === "search") {
+    if (!params.query) throw new Error("query is required for focus=search");
+    out.evidence.search = await safeBridgeTool("devtools_global_search", withBase({ query: params.query, maxMatches: limit }));
+    out.summary = "Global search route: literal search across currently available F12 evidence surfaces.";
+    out.nextTools = ["agent_inspect focus=network query=<...>", "agent_inspect focus=storage query=<...>", "agent_inspect focus=sources query=<...>"];
+  } else if (focus === "evidence") {
+    out.evidence.bundle = await safeBridgeTool("devtools_evidence_bundle", withBase({ save: params.save !== false, networkLimit: limit, sourceLimit: limit * 5 }));
+    out.summary = "Evidence route: compact export bundle for handoff, report writing, or later Agent review.";
+    out.nextTools = ["Open bundlePath", "agent_inspect focus=overview", "agent_inspect focus=search query=<hypothesis>"];
+  } else if (focus === "debug") {
+    out.evidence.debugger = await safeBridgeTool("devtools_debugger_control", withBase({
+      action: params.query ? "pauseOnExpression" : "snapshot",
+      expression: params.query || undefined,
+      waitMs: 500,
+      autoResume: true,
+      maxFrames: limit,
+    }));
+    out.summary = "Debugger route: paused-frame/scope snapshot or expression-triggered pause. Use low-level debugger tool for precise breakpoints.";
+    out.nextTools = ["Use query as pauseOnExpression", "devtools_debugger_control action=setBreakpointByUrl", "devtools_source_get"];
+  } else {
+    throw new Error(`unsupported agent_inspect focus: ${focus}`);
+  }
+
+  return out;
+}
+
 const wss = new WebSocketServer({ port: wsPort, host: "127.0.0.1", path: "/extension" });
 wss.on("connection", (ws) => {
   const id = randomUUID();
@@ -291,6 +424,7 @@ wss.on("connection", (ws) => {
 });
 
 const tools = {
+  agent_inspect: "Agent-facing F12 router. Pick a focus and get the right DevTools evidence without choosing from dozens of low-level tools.",
   personal_chrome_status: "Check whether the real Chrome extension is connected.",
   personal_chrome_extension_reload: "Reload the unpacked extension service worker after local development changes.",
   personal_chrome_tabs: "List tabs from the user's real Chrome.",
@@ -444,29 +578,9 @@ const httpServer = http.createServer(async (req, res) => {
         return;
       }
       const params = await readJson(req);
-      const command = normalizeCommand(toolName);
-      let result = await callExtension(command, params);
-      if (toolName === "personal_chrome_screenshot" || toolName === "devtools_screenshot") {
-        result = persistScreenshot(result, params);
-      }
-      if (toolName === "personal_chrome_request_body" || toolName === "devtools_request_body") {
-        result = persistResponseBody(result, params);
-      }
-      if (toolName === "personal_chrome_chrome_trace" || toolName === "devtools_chrome_trace") {
-        result = persistChromeTrace(result, params);
-      }
-      if (toolName === "personal_chrome_cpu_profile" || toolName === "devtools_cpu_profile") {
-        result = persistCpuProfile(result, params);
-      }
-      if (toolName === "personal_chrome_save_har" || toolName === "devtools_save_har") {
-        result = persistHar(result, params);
-      }
-      if (toolName === "personal_chrome_application_export" || toolName === "devtools_application_export") {
-        result = persistApplicationExport(result, params);
-      }
-      if (toolName === "personal_chrome_evidence_bundle" || toolName === "devtools_evidence_bundle") {
-        result = persistEvidenceBundle(result, params);
-      }
+      const result = toolName === "agent_inspect"
+        ? await runAgentInspect(params)
+        : await callBridgeTool(toolName, params);
       sendJson(res, 200, result);
       return;
     }

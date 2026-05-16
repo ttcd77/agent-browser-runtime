@@ -52,6 +52,33 @@ The goal is F12 parity for agents:
 - reload with cache disabled when necessary,
 - preserve evidence in a structured form.
 
+## Agent Router
+
+For most agents, start with one tool:
+
+```text
+agent_inspect
+```
+
+It is a thin router over the F12 tools, not a separate analysis engine. The
+agent chooses a `focus`:
+
+- `overview`: page diagnostics, objective browser signals, Network summary, Console.
+- `network`: request summary, timing/initiator rows, captured requests, optional request body/detail.
+- `storage`: Application panel origin, cookies, Service Workers, optional full storage.
+- `console`: Console messages and DevTools Issues.
+- `dom`: Elements snapshot, optional DOM search, styles, box model, listeners.
+- `sources`: parsed scripts, source-map metadata path, optional source search.
+- `performance`: memory/performance monitor, optional heavier CPU profile.
+- `search`: literal search across currently available F12 evidence.
+- `evidence`: compact export bundle.
+- `debug`: paused-frame/scope snapshot or expression-triggered pause.
+
+The response includes `summary`, `evidence`, and `nextTools`. This keeps the
+agent from choosing blindly among dozens of low-level tools while preserving the
+raw tools for drill-down. The router is deliberately objective: it does not
+decide whether a signal is a vulnerability.
+
 ## Unified Tools
 
 Page operation:

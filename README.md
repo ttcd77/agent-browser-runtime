@@ -136,7 +136,26 @@ Use `devtools_capture_start` before the activity you want to record, or use
 `devtools_hard_reload` when you want a clean F12-style reload capture. If capture
 is off, browser action tools still work, but they do not write a traffic journal.
 
+Agent shortcut:
+
+```bash
+curl -X POST http://127.0.0.1:17335/tool/agent_inspect \
+  -H "content-type: application/json" \
+  -d "{\"profile\":\"researcher\",\"focus\":\"overview\",\"limit\":10}"
+```
+
+`agent_inspect` is the agent-facing router. It does not replace the low-level
+F12 tools; it chooses the first useful evidence set for `overview`, `network`,
+`storage`, `console`, `dom`, `sources`, `performance`, `search`, `evidence`, or
+`debug`, then returns `nextTools` for drill-down. It is intentionally objective:
+it organizes browser evidence but does not decide whether something is a
+vulnerability.
+
 ## Tools
+
+### Agent Router
+
+- `agent_inspect`
 
 ### Unified Agent DevTools API
 
