@@ -105,6 +105,7 @@ It starts an isolated temporary managed browser and verifies:
 - selected-node Styles/Computed/Box Model evidence from the Elements panel,
 - selected-node DOM mutation watch for Elements breakpoint-style evidence,
 - raw CDP command escape hatch for F12 features not yet wrapped,
+- JS heap, DOM counters, and Performance Monitor metrics,
 - Chrome Tracing stream capture and trace file output,
 - Chrome Tracing summary extraction,
 - short JavaScript/CSS coverage snapshot and range drilldown,

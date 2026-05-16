@@ -299,6 +299,12 @@ try {
     },
   });
   assert(rawCdp.result?.result?.value === "source-search-smoke", `raw CDP command did not return marker: ${JSON.stringify(rawCdp)}`);
+  const memorySnapshot = await callTool(baseUrl, "devtools_memory_snapshot", {
+    profile: "default",
+  });
+  assert(memorySnapshot.heap?.usedSize >= 0 || memorySnapshot.heap?.error, "memory snapshot missing heap usage or explicit heap error");
+  assert(memorySnapshot.domCounters?.nodes >= 0 || memorySnapshot.domCounters?.error, "memory snapshot missing DOM counters or explicit DOM counter error");
+  assert(Array.isArray(memorySnapshot.performanceMetrics), "memory snapshot missing performance metrics array");
   const coverageDetail = await callTool(baseUrl, "devtools_coverage_detail", {
     profile: "default",
     durationMs: 800,

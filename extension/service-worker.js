@@ -222,6 +222,8 @@ async function executeCommand(command, params) {
       return await chromeDomMutationWatch(params);
     case "chrome_cdp_command":
       return await chromeCdpCommand(params);
+    case "chrome_memory_snapshot":
+      return await chromeMemorySnapshot(params);
     case "chrome_sources_list":
       return await chromeSourcesList(params);
     case "chrome_source_get":
@@ -2665,6 +2667,23 @@ async function chromeCdpCommand(params) {
     tab: pickTab(tab),
     method,
     result,
+  };
+}
+
+async function chromeMemorySnapshot(params) {
+  const { tab, target } = await ensureDevtoolsAttached(params);
+  await chromeDebuggerSendCommand(target, "Runtime.enable").catch(() => {});
+  await chromeDebuggerSendCommand(target, "Performance.enable").catch(() => {});
+  const heap = await chromeDebuggerSendCommand(target, "Runtime.getHeapUsage").catch((error) => ({ error: String(error?.message || error) }));
+  const domCounters = await chromeDebuggerSendCommand(target, "Memory.getDOMCounters").catch((error) => ({ error: String(error?.message || error) }));
+  const metrics = await chromeDebuggerSendCommand(target, "Performance.getMetrics").catch((error) => ({ error: String(error?.message || error), metrics: [] }));
+  return {
+    tab: pickTab(tab),
+    timestamp: new Date().toISOString(),
+    heap,
+    domCounters,
+    performanceMetrics: Array.isArray(metrics.metrics) ? metrics.metrics : [],
+    performanceError: metrics.error,
   };
 }
 

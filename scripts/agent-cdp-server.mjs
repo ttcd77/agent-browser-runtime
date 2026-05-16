@@ -3984,6 +3984,38 @@ function registerStandaloneBrowserTools(tools, cdpPort, profileRegistry, default
     },
   });
 
+  tools.set("browser_memory_snapshot", {
+    name: "browser_memory_snapshot",
+    description: "Return DevTools Memory/Performance Monitor-style counters: JS heap usage, DOM counters, and performance metrics.",
+    parameters: {
+      type: "object",
+      properties: {
+        profile: { type: "string" },
+        tabId: { type: "string" },
+      },
+    },
+    async execute(_id, params) {
+      const profile = await resolveProfile(params?.profile);
+      return toolResult(await withPageClient(cdpPort, params?.tabId || profile.tabId, async (client, target) => {
+        await client.Runtime.enable().catch(() => {});
+        await client.Performance.enable().catch(() => {});
+        const heap = await client.Runtime.getHeapUsage().catch((error) => ({ error: String(error?.message || error) }));
+        const domCounters = await client.Memory.getDOMCounters().catch((error) => ({ error: String(error?.message || error) }));
+        const metrics = await client.Performance.getMetrics().catch((error) => ({ error: String(error?.message || error), metrics: [] }));
+        await profileRegistry.touchProfile(profile.name, { tabId: target.id });
+        return {
+          profile: profile.name,
+          tabId: target.id,
+          timestamp: new Date().toISOString(),
+          heap,
+          domCounters,
+          performanceMetrics: Array.isArray(metrics.metrics) ? metrics.metrics : [],
+          performanceError: metrics.error,
+        };
+      }));
+    },
+  });
+
   tools.set("browser_sources_list", {
     name: "browser_sources_list",
     description: "Return Sources panel-style script metadata for the current profile tab.",
@@ -5118,6 +5150,7 @@ function registerStandaloneBrowserTools(tools, cdpPort, profileRegistry, default
   aliasTool("devtools_css_styles", "browser_css_styles", "Unified Agent DevTools API: read Elements panel Styles/Computed/Box Model evidence for a selected DOM node.");
   aliasTool("devtools_dom_mutation_watch", "browser_dom_mutation_watch", "Unified Agent DevTools API: watch selected-node DOM mutations as Elements-panel breakpoint evidence.");
   aliasTool("devtools_cdp_command", "browser_cdp_command", "Unified Agent DevTools API: run a raw Chrome DevTools Protocol command for unwrapped F12 features.");
+  aliasTool("devtools_memory_snapshot", "browser_memory_snapshot", "Unified Agent DevTools API: read Memory/Performance Monitor counters.");
   aliasTool("devtools_sources_list", "browser_sources_list", "Unified Agent DevTools API: list parsed scripts and source maps.");
   aliasTool("devtools_source_get", "browser_source_get", "Unified Agent DevTools API: read script source by scriptId.");
   aliasTool("devtools_source_pretty_print", "browser_source_pretty_print", "Unified Agent DevTools API: pretty-print parsed JavaScript source.");

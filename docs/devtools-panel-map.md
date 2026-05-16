@@ -91,6 +91,7 @@ original-source tree.
 | Chrome trace capture | `devtools_chrome_trace` |
 | JS/CSS coverage summary | `devtools_coverage_snapshot` |
 | JS/CSS coverage range drilldown | `devtools_coverage_detail` |
+| Memory/Performance Monitor counters | `devtools_memory_snapshot` |
 
 `devtools_chrome_trace` saves the full raw trace and returns a first-pass summary
 with top categories, top event names, long events, screenshot events, and

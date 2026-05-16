@@ -112,6 +112,7 @@ Unified Agent DevTools tools:
 - `devtools_css_styles`
 - `devtools_dom_mutation_watch`
 - `devtools_cdp_command`
+- `devtools_memory_snapshot`
 - `devtools_sources_list`
 - `devtools_source_get`
 - `devtools_source_pretty_print`
@@ -174,6 +175,7 @@ Backend-specific aliases:
 - `personal_chrome_css_styles`
 - `personal_chrome_dom_mutation_watch`
 - `personal_chrome_cdp_command`
+- `personal_chrome_memory_snapshot`
 - `personal_chrome_sources_list`
 - `personal_chrome_source_get`
 - `personal_chrome_source_pretty_print`
