@@ -155,9 +155,9 @@ curl -X POST http://127.0.0.1:17335/tool/agent_inspect \
 `agent_inspect` is the agent-facing router. It does not replace the low-level
 F12 tools; it chooses the first useful evidence set for `overview`, `network`,
 `storage`, `console`, `dom`, `sources`, `performance`, `search`, `evidence`, or
-`debug`, then returns `nextTools` for drill-down. It is intentionally objective:
-it organizes browser evidence but does not decide whether something is a
-vulnerability.
+`debug`, then returns `nextTools` and a `toolPlan` for drill-down. It is
+intentionally objective: it organizes browser evidence but does not decide
+whether something is a vulnerability.
 
 ## Tools
 
@@ -194,6 +194,7 @@ Chrome Extension Mode and Managed Browser Mode:
 - `devtools_request_detail`
 - `devtools_request_payload`
 - `devtools_request_replay`
+- `devtools_request_replay_batch`
 - `devtools_console_log`
 - `devtools_console_source_context`
 - `devtools_security_summary`
@@ -220,6 +221,7 @@ Chrome Extension Mode and Managed Browser Mode:
 - `devtools_dom_mutation_watch`
 - `devtools_cdp_command`
 - `devtools_debugger_control`
+- `devtools_token_flow_trace`
 - `devtools_memory_snapshot`
 - `devtools_sources_list`
 - `devtools_source_get`

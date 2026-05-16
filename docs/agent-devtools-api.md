@@ -61,7 +61,9 @@ agent_inspect
 ```
 
 It is a thin router over the F12 tools, not a separate analysis engine. The
-agent chooses a `focus`:
+agent chooses a `focus`. The response includes `nextTools` plus `toolPlan`,
+which gives the agent a short first-pass/drill-down path so it does not need to
+choose blindly from the full tool list.
 
 - `overview`: page diagnostics, objective browser signals, Network summary, Console.
 - `network`: request summary, timing/initiator rows, captured requests, optional request body/detail.

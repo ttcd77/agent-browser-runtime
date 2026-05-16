@@ -866,6 +866,85 @@ function summarizeEvidenceCompleteness(evidence = {}) {
   };
 }
 
+function buildAgentInspectToolPlan(focus, options = {}) {
+  const base = {
+    intent: "Use agent_inspect as the first-screen router; call low-level devtools_* tools only for drill-down.",
+    escapeHatch: "devtools_cdp_command",
+  };
+  if (focus === "network") {
+    return {
+      ...base,
+      firstPass: ["devtools_network_summary", "devtools_network_timeline", "devtools_network_log"],
+      drillDown: options.requestId
+        ? ["devtools_request_detail", "devtools_request_body", "devtools_request_payload", "devtools_request_replay", "devtools_request_replay_batch"]
+        : ["pick a requestId, then rerun agent_inspect focus=network requestId=<id>"],
+      captureHint: "If request rows are missing, run devtools_capture_start and devtools_hard_reload before repeating the user action.",
+      objectiveBoundary: "Replay diffs compare observed browser fetch results; they do not prove exploitability by themselves.",
+    };
+  }
+  if (focus === "storage") {
+    return {
+      ...base,
+      firstPass: ["devtools_storage_origin_summary", "devtools_cookie_summary", "devtools_service_worker_summary"],
+      drillDown: ["devtools_application_export", "devtools_indexeddb_read", "devtools_cache_entry_get"],
+      captureHint: "Storage is current-state evidence. Use Application export for handoff and repeatability.",
+      objectiveBoundary: "Partition metadata is reported only when Chrome exposes it for the current page.",
+    };
+  }
+  if (focus === "dom") {
+    return {
+      ...base,
+      firstPass: ["devtools_elements_snapshot", options.query ? "devtools_dom_search" : "pass query for DOM search"],
+      drillDown: options.selector ? ["devtools_css_styles", "devtools_event_listeners", "devtools_dom_mutation_watch"] : ["pass selector for selected-node evidence"],
+      captureHint: "Use framePath or frameIndexes when evidence is inside a same-origin iframe.",
+      objectiveBoundary: "Cross-origin frame internals remain inaccessible unless the browser grants that access.",
+    };
+  }
+  if (focus === "sources" || focus === "debug") {
+    return {
+      ...base,
+      firstPass: ["devtools_sources_list", options.query ? "devtools_sources_search" : "pass query for source search"],
+      drillDown: ["devtools_source_get", "devtools_source_pretty_print", "devtools_source_map_metadata", "devtools_debugger_control"],
+      captureHint: "Use debugger controls for live runtime state; source text alone is not runtime proof.",
+      objectiveBoundary: "Heap/closure-only values are visible only when the debugger pauses in the right execution context.",
+    };
+  }
+  if (focus === "performance") {
+    return {
+      ...base,
+      firstPass: ["devtools_memory_snapshot", "devtools_performance_trace"],
+      drillDown: ["devtools_chrome_trace", "devtools_cpu_profile", "devtools_coverage_detail"],
+      captureHint: "Use heavier traces only around the smallest reproducible action.",
+      objectiveBoundary: "Trace summaries expose timing evidence, not root-cause conclusions.",
+    };
+  }
+  if (focus === "search") {
+    return {
+      ...base,
+      firstPass: options.query ? ["devtools_global_search"] : ["provide query"],
+      drillDown: ["agent_inspect focus=network", "agent_inspect focus=storage", "agent_inspect focus=sources"],
+      captureHint: "Search only covers evidence currently captured or readable from the page.",
+      objectiveBoundary: "No match means no match in current evidence, not proof that the value never existed.",
+    };
+  }
+  if (focus === "evidence") {
+    return {
+      ...base,
+      firstPass: ["devtools_evidence_bundle"],
+      drillDown: ["devtools_save_har", "devtools_application_export", "agent_inspect focus=search query=<hypothesis>"],
+      captureHint: "Save bundles after the relevant action has been reproduced with capture enabled.",
+      objectiveBoundary: "Bundles preserve evidence for review; interpretation remains the Agent or human's job.",
+    };
+  }
+  return {
+    ...base,
+    firstPass: ["agent_inspect focus=overview"],
+    drillDown: ["agent_inspect focus=network", "agent_inspect focus=storage", "agent_inspect focus=console", "agent_inspect focus=dom", "agent_inspect focus=evidence"],
+    captureHint: "Start capture before reproducing behavior you want Network/Console evidence for.",
+    objectiveBoundary: "Overview organizes signals; it does not decide whether a finding is a vulnerability.",
+  };
+}
+
 function summarizeCpuProfile(profile = {}, limit = 20) {
   const nodes = Array.isArray(profile.nodes) ? profile.nodes : [];
   const samples = Array.isArray(profile.samples) ? profile.samples : [];
@@ -6052,6 +6131,12 @@ function registerStandaloneBrowserTools(tools, cdpPort, profileRegistry, default
         summary: "",
         evidence: {},
         nextTools: [],
+        toolPlan: buildAgentInspectToolPlan(focus, {
+          requestId: Boolean(params?.requestId),
+          query: Boolean(params?.query),
+          selector: Boolean(params?.selector),
+          includeHeavy: Boolean(params?.includeHeavy),
+        }),
       };
 
       if (focus === "overview") {
@@ -6070,7 +6155,7 @@ function registerStandaloneBrowserTools(tools, cdpPort, profileRegistry, default
           out.evidence.requestBody = await safeProfileCall("profile_traffic_get", { requestId: params.requestId });
         }
         out.summary = "Network panel route: summary, timing/initiator rows, captured requests, and optional request drill-down.";
-        out.nextTools = ["Use requestId with focus=network", "devtools_request_replay", "devtools_save_har", "agent_inspect focus=search query=<token/url/header>"];
+        out.nextTools = ["Use requestId with focus=network", "devtools_request_replay", "devtools_request_replay_batch", "devtools_save_har", "agent_inspect focus=search query=<token/url/header>"];
       } else if (focus === "storage") {
         out.evidence.origin = await safeCall("browser_storage_origin_summary");
         out.evidence.cookies = await safeCall("browser_cookie_summary");

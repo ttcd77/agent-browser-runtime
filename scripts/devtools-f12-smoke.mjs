@@ -594,6 +594,7 @@ try {
   assert(agentOverview.backend === "managed-cdp", `agent_inspect reported wrong backend: ${JSON.stringify(agentOverview)}`);
   assert(agentOverview.evidence?.diagnostics, "agent_inspect overview missing diagnostics evidence");
   assert(Array.isArray(agentOverview.nextTools) && agentOverview.nextTools.length >= 1, "agent_inspect overview missing nextTools");
+  assert(agentOverview.toolPlan?.firstPass?.length >= 1, "agent_inspect overview missing toolPlan");
   assert(agentOverview.completeness?.status, "agent_inspect overview missing completeness status");
 
   const agentSearch = await callTool(baseUrl, "agent_inspect", {
