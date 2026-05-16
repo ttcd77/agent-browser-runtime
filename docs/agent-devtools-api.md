@@ -241,7 +241,9 @@ When the agent needs a complete capture, it should:
 3. call `devtools_hard_reload` with cache disabled and service worker bypass,
 4. call `devtools_network_log`,
 5. call `devtools_request_detail` for request headers/cookies/timing/initiator,
-6. call `devtools_request_body` for specific response bodies.
+6. call `devtools_request_body` for specific response bodies, or
+   `devtools_export_har` / `devtools_save_har` with `includeBodies: true` when
+   a bounded HAR body export is needed.
 
 Capture is explicit. If capture is not enabled, page operation tools may still
 work, but background Network/Console/Frame evidence should not be treated as a

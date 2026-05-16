@@ -424,6 +424,15 @@ try {
   assert(savedHar.harPath, "saved HAR path missing");
   assert(savedHar.harBytes > 0, "saved HAR was empty");
 
+  const harWithBodies = await callTool(baseUrl, "devtools_export_har", {
+    profile: "default",
+    limit: 20,
+    includeBodies: true,
+    maxBodyBytes: 2000,
+  });
+  const bodyEntries = harWithBodies.har?.log?.entries?.filter((entry) => entry.response?.content?._bodyIncluded) || [];
+  assert(bodyEntries.length >= 1, `HAR body export did not include any response bodies: ${JSON.stringify(harWithBodies.har?.log?.entries || [])}`);
+
   console.log("F12 smoke passed:");
   console.log(`- security page: ${security.page.url}`);
   console.log(`- diagnostics page: ${diagnostics.page.url}`);
@@ -453,6 +462,7 @@ try {
   console.log(`- signal summary signals/high-priority/medium: ${signalSummary.signalCount}/${signalSummary.highCount}/${signalSummary.mediumCount}`);
   console.log(`- agent router focus/search matches: ${agentOverview.focus}/${agentSearch.evidence.search.matchCount}`);
   console.log(`- saved HAR entries/bytes: ${savedHar.entryCount}/${savedHar.harBytes}`);
+  console.log(`- HAR entries with bodies: ${bodyEntries.length}`);
 } finally {
   await fetch(`http://127.0.0.1:${serverPort}/shutdown`, { method: "POST" }).catch(() => {});
   await new Promise((resolve) => appServer.close(resolve));

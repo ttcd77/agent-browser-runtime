@@ -2352,11 +2352,56 @@ function registerStandaloneBrowserTools(tools, cdpPort, profileRegistry, default
       properties: {
         profile: { type: "string" },
         limit: { type: "number" },
+        includeBodies: { type: "boolean" },
+        maxBodyBytes: { type: "number" },
       },
     },
     async execute(_id, params) {
       const profile = await resolveProfile(params?.profile);
       const rows = profileRegistry.queryTraffic(profile.name, { limit: typeof params?.limit === "number" ? params.limit : 1000 });
+      const includeBodies = params?.includeBodies === true;
+      const maxBodyBytes = typeof params?.maxBodyBytes === "number" ? params.maxBodyBytes : 200000;
+      const responseContent = (request) => {
+        const content = {
+          size: request.encodedDataLength ?? request.bodyBytes ?? -1,
+          mimeType: request.mimeType || "",
+        };
+        if (!includeBodies) return content;
+        if (typeof request.bodyText === "string") {
+          const text = request.bodyText.slice(0, maxBodyBytes);
+          return {
+            ...content,
+            text,
+            _bodyIncluded: true,
+            _bodyTruncated: Buffer.byteLength(request.bodyText, "utf8") > maxBodyBytes,
+          };
+        }
+        if (request.bodyPath) {
+          try {
+            const body = readFileSync(request.bodyPath);
+            const limited = body.subarray(0, maxBodyBytes);
+            return {
+              ...content,
+              text: limited.toString("base64"),
+              encoding: "base64",
+              _bodyIncluded: true,
+              _bodyPath: request.bodyPath,
+              _bodyTruncated: body.length > maxBodyBytes,
+            };
+          } catch (error) {
+            return {
+              ...content,
+              _bodyIncluded: false,
+              _bodyError: String(error?.message || error),
+            };
+          }
+        }
+        return {
+          ...content,
+          _bodyIncluded: false,
+          _bodyUnavailable: true,
+        };
+      };
       const entries = rows.map((request) => ({
         startedDateTime: request.timestamp,
         time: -1,
@@ -2380,11 +2425,7 @@ function registerStandaloneBrowserTools(tools, cdpPort, profileRegistry, default
           httpVersion: request.protocol || "",
           headers: Object.entries(request.responseHeaders || {}).map(([name, value]) => ({ name, value: String(value) })),
           cookies: [],
-          content: {
-            size: request.encodedDataLength ?? request.bodyBytes ?? -1,
-            mimeType: request.mimeType || "",
-            ...(request.bodyText ? { text: request.bodyText } : {}),
-          },
+          content: responseContent(request),
           redirectURL: request.responseHeaders?.location || request.responseHeaders?.Location || "",
           headersSize: -1,
           bodySize: request.encodedDataLength ?? request.bodyBytes ?? -1,
@@ -2407,9 +2448,12 @@ function registerStandaloneBrowserTools(tools, cdpPort, profileRegistry, default
         _frameId: request.frameId,
         _initiator: request.initiator,
         _securityDetails: request.securityDetails,
+        _bodyReadable: Boolean(request.bodyReadable || request.bodyText || request.bodyPath),
       }));
       return toolResult({
         profile: profile.name,
+        includeBodies,
+        maxBodyBytes,
         har: {
           log: {
             version: "1.2",
@@ -2431,6 +2475,8 @@ function registerStandaloneBrowserTools(tools, cdpPort, profileRegistry, default
         profile: { type: "string" },
         limit: { type: "number" },
         path: { type: "string" },
+        includeBodies: { type: "boolean" },
+        maxBodyBytes: { type: "number" },
       },
     },
     async execute(id, params) {

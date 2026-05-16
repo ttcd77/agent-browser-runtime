@@ -127,6 +127,10 @@ curl -X POST http://127.0.0.1:17335/tool/browser_snapshot \
 curl -X POST http://127.0.0.1:17335/tool/profile_traffic_query \
   -H "content-type: application/json" \
   -d "{\"profile\":\"researcher\",\"limit\":20}"
+
+curl -X POST http://127.0.0.1:17335/tool/devtools_save_har \
+  -H "content-type: application/json" \
+  -d "{\"profile\":\"researcher\",\"includeBodies\":true,\"maxBodyBytes\":200000}"
 ```
 
 If `profile` is omitted, browser tools use the server default profile. The default is `default`, or `CDP_AGENT_PROFILE` if set.

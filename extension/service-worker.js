@@ -1419,9 +1419,52 @@ async function chromeNetworkTimeline(params) {
 }
 
 async function chromeExportHar(params) {
-  const { tab, session } = await ensureDevtoolsAttached(params);
-  const requests = [...session.requests.values()];
-  const entries = requests.map((request) => ({
+  const { tab, target, session } = await ensureDevtoolsAttached(params);
+  const limit = Number.isFinite(Number(params.limit)) ? Number(params.limit) : 1000;
+  const includeBodies = params.includeBodies === true;
+  const maxBodyBytes = Number.isFinite(Number(params.maxBodyBytes)) ? Number(params.maxBodyBytes) : 200000;
+  const requests = [...session.requests.values()].slice(0, limit);
+  async function responseContent(request) {
+    const content = {
+      size: request.encodedDataLength ?? -1,
+      mimeType: request.mimeType || "",
+    };
+    if (!includeBodies) return content;
+    try {
+      const body = await chromeDebuggerSendCommand(target, "Network.getResponseBody", {
+        requestId: String(request.requestId),
+      });
+      if (body.base64Encoded) {
+        const binary = atob(body.body || "");
+        const bytes = Uint8Array.from(binary, (ch) => ch.charCodeAt(0));
+        const limited = bytes.slice(0, maxBodyBytes);
+        let raw = "";
+        for (const byte of limited) raw += String.fromCharCode(byte);
+        return {
+          ...content,
+          text: btoa(raw),
+          encoding: "base64",
+          _bodyIncluded: true,
+          _bodyTruncated: bytes.length > maxBodyBytes,
+        };
+      }
+      const text = String(body.body || "");
+      return {
+        ...content,
+        text: text.slice(0, maxBodyBytes),
+        _bodyIncluded: true,
+        _bodyTruncated: text.length > maxBodyBytes,
+      };
+    } catch (error) {
+      return {
+        ...content,
+        _bodyIncluded: false,
+        _bodyUnavailable: true,
+        _bodyError: String(error?.message || error),
+      };
+    }
+  }
+  const entries = await Promise.all(requests.map(async (request) => ({
     startedDateTime: request.timestamp,
     time: -1,
     request: {
@@ -1444,10 +1487,7 @@ async function chromeExportHar(params) {
       httpVersion: request.protocol || "",
       headers: Object.entries(request.responseHeaders || {}).map(([name, value]) => ({ name, value: String(value) })),
       cookies: [],
-      content: {
-        size: request.encodedDataLength ?? -1,
-        mimeType: request.mimeType || "",
-      },
+      content: await responseContent(request),
       redirectURL: request.responseHeaders?.location || request.responseHeaders?.Location || "",
       headersSize: -1,
       bodySize: request.encodedDataLength ?? -1,
@@ -1470,9 +1510,12 @@ async function chromeExportHar(params) {
     _frameId: request.frameId,
     _initiator: request.initiator,
     _securityDetails: request.securityDetails,
-  }));
+    _bodyReadable: Boolean(request.bodyReadable),
+  })));
   return {
     tab: pickTab(tab),
+    includeBodies,
+    maxBodyBytes,
     har: {
       log: {
         version: "1.2",
