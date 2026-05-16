@@ -461,9 +461,15 @@ try {
     profile: "default",
     sourceLimit: 10,
     networkLimit: 5,
+    includeHar: true,
+    includeTokenScan: true,
+    includeTokenFlow: true,
+    tokenFlowTriggerExpression: "fetch('data:text/plain,token=bundle_flow_1234567890', { headers: { Authorization: 'Bearer bundle_flow_header_1234567890' } }).catch(() => {});",
   });
   assert(evidenceBundle.bundlePath, "evidence bundle path missing");
   assert(evidenceBundle.summary?.sourceCount >= 0, "evidence bundle summary missing source count");
+  assert(evidenceBundle.summary?.harEntryCount >= 1, "evidence bundle missing HAR entries");
+  assert(evidenceBundle.summary?.tokenFlowTokenLikeEventCount >= 1, "evidence bundle missing token flow evidence");
 
   await callTool(baseUrl, "browser_navigate", {
     profile: "default",

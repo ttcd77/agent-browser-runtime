@@ -4520,6 +4520,21 @@ async function chromeEvidenceBundle(params) {
     storage: await chromeStorageSnapshot({ ...params, tabId: tab.id }),
     sources: await chromeSourcesList({ ...params, tabId: tab.id, limit: params.sourceLimit || 100 }),
   };
+  if (params.includeHar) {
+    bundle.har = await chromeExportHar({ ...params, tabId: tab.id, limit: params.networkLimit || 100, includeBodies: false });
+  }
+  if (params.includeTokenScan) {
+    bundle.tokenScan = await chromeTokenScan({ ...params, tabId: tab.id });
+  }
+  if (params.includeTokenFlow) {
+    bundle.tokenFlow = await chromeTokenFlowTrace({
+      ...params,
+      tabId: tab.id,
+      durationMs: 800,
+      maxEvents: 50,
+      triggerExpression: params.tokenFlowTriggerExpression || "",
+    });
+  }
   return {
     summary: {
       url: bundle.tab?.url || "",
@@ -4527,6 +4542,10 @@ async function chromeEvidenceBundle(params) {
       issueCount: bundle.issues?.issueCount || 0,
       cookieCount: Array.isArray(bundle.storage?.cookies) ? bundle.storage.cookies.length : 0,
       sourceCount: bundle.sources?.count || 0,
+      harEntryCount: bundle.har?.har?.log?.entries?.length || 0,
+      tokenFindingCount: bundle.tokenScan?.findingCount || bundle.tokenScan?.findings?.length || 0,
+      tokenFlowEventCount: bundle.tokenFlow?.trace?.eventCount || 0,
+      tokenFlowTokenLikeEventCount: bundle.tokenFlow?.trace?.tokenLikeEventCount || 0,
     },
     bundle,
   };

@@ -5880,6 +5880,10 @@ function registerStandaloneBrowserTools(tools, cdpPort, profileRegistry, default
         save: { type: "boolean" },
         sourceLimit: { type: "number" },
         networkLimit: { type: "number" },
+        includeHar: { type: "boolean" },
+        includeTokenScan: { type: "boolean" },
+        includeTokenFlow: { type: "boolean" },
+        tokenFlowTriggerExpression: { type: "string" },
       },
     },
     async execute(id, params) {
@@ -5897,12 +5901,34 @@ function registerStandaloneBrowserTools(tools, cdpPort, profileRegistry, default
         storage: readPayload(await tools.get("browser_storage_snapshot").execute(id, toolParams)),
         sources: readPayload(await tools.get("browser_sources_list").execute(id, { ...toolParams, limit: params?.sourceLimit || 100 })),
       };
+      if (params?.includeHar) {
+        bundle.har = readPayload(await tools.get("profile_export_har").execute(id, {
+          profile: profile.name,
+          limit: params?.networkLimit || 100,
+          includeBodies: false,
+        }));
+      }
+      if (params?.includeTokenScan) {
+        bundle.tokenScan = readPayload(await tools.get("browser_token_scan").execute(id, toolParams));
+      }
+      if (params?.includeTokenFlow) {
+        bundle.tokenFlow = readPayload(await tools.get("browser_token_flow_trace").execute(id, {
+          ...toolParams,
+          durationMs: 800,
+          maxEvents: 50,
+          triggerExpression: params?.tokenFlowTriggerExpression || "",
+        }));
+      }
       const summary = {
         url: bundle.diagnostics?.page?.url || bundle.security?.page?.url || "",
         requestCount: bundle.networkSummary?.requestCount || 0,
         issueCount: bundle.issues?.issueCount || 0,
         cookieCount: bundle.storage?.cookies?.length || 0,
         sourceCount: bundle.sources?.count || 0,
+        harEntryCount: bundle.har?.har?.log?.entries?.length || 0,
+        tokenFindingCount: bundle.tokenScan?.findingCount || bundle.tokenScan?.findings?.length || 0,
+        tokenFlowEventCount: bundle.tokenFlow?.trace?.eventCount || 0,
+        tokenFlowTokenLikeEventCount: bundle.tokenFlow?.trace?.tokenLikeEventCount || 0,
       };
       let bundlePath = null;
       if (params?.save !== false) {
