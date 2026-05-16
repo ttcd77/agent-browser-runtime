@@ -302,6 +302,11 @@ try {
   });
   assert(cookieSummary.summary?.cookieCount >= 1, `cookie summary missing test cookie: ${JSON.stringify(cookieSummary)}`);
   assert(cookieSummary.summary?.scriptReadableCount >= 1, `cookie summary missing script-readable count: ${JSON.stringify(cookieSummary)}`);
+  const storageOrigin = await callTool(baseUrl, "devtools_storage_origin_summary", {
+    profile: "default",
+  });
+  assert(storageOrigin.page?.origin === `http://127.0.0.1:${appPort}`, `storage origin mismatch: ${JSON.stringify(storageOrigin.page)}`);
+  assert(Array.isArray(storageOrigin.frames) && storageOrigin.frames.length >= 1, "storage origin summary missing frames");
 
   const signalSummary = await callTool(baseUrl, "devtools_signal_summary", {
     profile: "default",
@@ -339,6 +344,7 @@ try {
   console.log(`- service worker registrations/caches: ${serviceWorker.registrationCount}/${serviceWorker.cacheCount}`);
   console.log(`- application export dbs/caches/bytes: ${applicationExport.indexedDbDatabaseCount}/${applicationExport.cacheCount}/${applicationExport.exportBytes}`);
   console.log(`- cookie summary count/script-readable: ${cookieSummary.summary.cookieCount}/${cookieSummary.summary.scriptReadableCount}`);
+  console.log(`- storage origin frames/cookies: ${storageOrigin.frames.length}/${storageOrigin.cookieCount}`);
   console.log(`- signal summary signals/high-priority/medium: ${signalSummary.signalCount}/${signalSummary.highCount}/${signalSummary.mediumCount}`);
   console.log(`- saved HAR entries/bytes: ${savedHar.entryCount}/${savedHar.harBytes}`);
 } finally {

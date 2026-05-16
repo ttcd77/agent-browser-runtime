@@ -2865,6 +2865,90 @@ function registerStandaloneBrowserTools(tools, cdpPort, profileRegistry, default
     },
   });
 
+  tools.set("browser_storage_origin_summary", {
+    name: "browser_storage_origin_summary",
+    description: "Return Application-panel origin evidence: frame origins, storage keys, usage/quota, and cookie partition metadata where Chrome exposes it.",
+    parameters: {
+      type: "object",
+      properties: {
+        profile: { type: "string" },
+        tabId: { type: "string" },
+      },
+    },
+    async execute(_id, params) {
+      const profile = await resolveProfile(params?.profile);
+      return toolResult(await withPageClient(cdpPort, params?.tabId || profile.tabId, async (client, target) => {
+        await client.Page.enable().catch(() => {});
+        await client.Storage?.enable?.().catch(() => {});
+        const page = await client.Runtime.evaluate({
+          expression: `({
+            url: location.href,
+            origin: location.origin,
+            protocol: location.protocol,
+            host: location.host,
+            storageEstimateSupported: Boolean(navigator.storage?.estimate),
+            cookieEnabled: navigator.cookieEnabled,
+          })`,
+          returnByValue: true,
+        });
+        const frameTree = await client.Page.getFrameTree().catch(() => null);
+        const frames = [];
+        function walkFrame(node, parentId = null) {
+          if (!node?.frame) return;
+          frames.push({
+            id: node.frame.id,
+            parentId,
+            url: node.frame.url,
+            origin: (() => {
+              try { return new URL(node.frame.url).origin; } catch { return ""; }
+            })(),
+            name: node.frame.name,
+            securityOrigin: node.frame.securityOrigin,
+            mimeType: node.frame.mimeType,
+          });
+          for (const child of node.childFrames || []) walkFrame(child, node.frame.id);
+        }
+        walkFrame(frameTree?.frameTree);
+        const framesWithStorage = [];
+        for (const frame of frames) {
+          let storageKey = null;
+          try {
+            storageKey = (await client.Storage.getStorageKeyForFrame({ frameId: frame.id })).storageKey;
+          } catch {
+            storageKey = null;
+          }
+          let usageAndQuota = null;
+          if (frame.origin && frame.origin !== "null") {
+            usageAndQuota = await client.Storage.getUsageAndQuota({ origin: frame.origin }).catch((error) => ({ error: String(error?.message || error) }));
+          }
+          framesWithStorage.push({ ...frame, storageKey, usageAndQuota });
+        }
+        const cookiesResult = await client.Network.getCookies().catch(() => ({ cookies: [] }));
+        const cookies = Array.isArray(cookiesResult.cookies) ? cookiesResult.cookies : [];
+        await profileRegistry.touchProfile(profile.name, { tabId: target.id });
+        return {
+          profile: profile.name,
+          tabId: target.id,
+          page: page.result?.value,
+          frames: framesWithStorage,
+          cookieCount: cookies.length,
+          cookiePartitions: cookies.map((cookie) => ({
+            name: cookie.name,
+            domain: cookie.domain,
+            path: cookie.path,
+            sameSite: cookie.sameSite,
+            secure: cookie.secure,
+            httpOnly: cookie.httpOnly,
+            partitionKey: cookie.partitionKey,
+            partitionKeyOpaque: cookie.partitionKeyOpaque,
+            sourceScheme: cookie.sourceScheme,
+            sourcePort: cookie.sourcePort,
+          })),
+        };
+      }));
+    },
+  });
+
   tools.set("browser_cookie_summary", {
     name: "browser_cookie_summary",
     description: "Summarize browser cookies for the current profile tab, including SameSite, Secure, HttpOnly, expiry, and risk hints.",
@@ -4448,6 +4532,7 @@ function registerStandaloneBrowserTools(tools, cdpPort, profileRegistry, default
   aliasTool("devtools_frame_tree", "browser_frame_tree", "Unified Agent DevTools API: read frame/iframe tree.");
   aliasTool("devtools_hard_reload", "browser_hard_reload", "Unified Agent DevTools API: disable cache, bypass service worker, and reload.");
   aliasTool("devtools_storage_snapshot", "browser_storage_snapshot", "Unified Agent DevTools API: read storage and cookies.");
+  aliasTool("devtools_storage_origin_summary", "browser_storage_origin_summary", "Unified Agent DevTools API: read Application-panel origin, storage key, quota, and cookie partition evidence.");
   aliasTool("devtools_cookie_summary", "browser_cookie_summary", "Unified Agent DevTools API: summarize cookie security attributes and risk hints.");
   aliasTool("devtools_service_worker_summary", "browser_service_worker_summary", "Unified Agent DevTools API: summarize Service Worker registrations and CacheStorage state.");
   aliasTool("devtools_application_export", "browser_application_export", "Unified Agent DevTools API: export Application panel data to a JSON file.");

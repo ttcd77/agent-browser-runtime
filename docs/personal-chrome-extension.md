@@ -100,6 +100,7 @@ Unified Agent DevTools tools:
 - `devtools_frame_tree`
 - `devtools_hard_reload`
 - `devtools_storage_snapshot`
+- `devtools_storage_origin_summary`
 - `devtools_cookie_summary`
 - `devtools_service_worker_summary`
 - `devtools_application_export`
@@ -156,6 +157,7 @@ Backend-specific aliases:
 - `personal_chrome_frame_tree`
 - `personal_chrome_hard_reload`
 - `personal_chrome_storage_snapshot`
+- `personal_chrome_storage_origin_summary`
 - `personal_chrome_cookie_summary`
 - `personal_chrome_service_worker_summary`
 - `personal_chrome_application_export`

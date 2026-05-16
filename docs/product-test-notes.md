@@ -76,8 +76,8 @@ not running, it still validates that Managed Browser exposes the contract.
 
 Current verified contract:
 
-- Managed Browser: 53 `devtools_*` tools.
-- Personal Chrome: 53 `devtools_*` tools.
+- Managed Browser: 54 `devtools_*` tools.
+- Personal Chrome: 54 `devtools_*` tools.
 - Drift: none.
 
 The contract smoke uses an isolated temporary browser profile so it does not
@@ -113,6 +113,7 @@ It starts an isolated temporary managed browser and verifies:
 - Application panel export to JSON, including IndexedDB and CacheStorage data.
 - Cookie security summary, including Secure, HttpOnly, SameSite, session vs
   persistent, and risk hints.
+- Origin/storage-key/quota and cookie partition evidence where Chrome exposes it.
 - Cross-panel signal summary that points agents to the next drill-down tools
   without claiming a vulnerability.
 - Chrome DevTools Issues-panel event access.

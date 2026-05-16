@@ -71,6 +71,7 @@ original-source tree.
 | Human F12 action | Agent tool |
 |---|---|
 | Inspect cookies/storage/cache/service workers | `devtools_storage_snapshot` |
+| Inspect origin, storage key, quota, and cookie partition metadata | `devtools_storage_origin_summary` |
 | Summarize cookie security attributes | `devtools_cookie_summary` |
 | Summarize Service Worker and cache state | `devtools_service_worker_summary` |
 | Export Application panel data | `devtools_application_export` |

@@ -198,6 +198,8 @@ async function executeCommand(command, params) {
       return await chromeHardReload(params);
     case "chrome_storage_snapshot":
       return await chromeStorageSnapshot(params);
+    case "chrome_storage_origin_summary":
+      return await chromeStorageOriginSummary(params);
     case "chrome_cookie_summary":
       return await chromeCookieSummary(params);
     case "chrome_service_worker_summary":
@@ -1966,6 +1968,64 @@ async function chromeStorageSnapshot(params) {
     error: String(error.message || error),
   }));
   return { tab: pickTab(tab), page, cookies };
+}
+
+async function chromeStorageOriginSummary(params) {
+  const { tab, target } = await ensureDevtoolsAttached(params);
+  await chromeDebuggerSendCommand(target, "Storage.enable").catch(() => {});
+  const page = await runInTab(tab.id, async () => ({
+    url: location.href,
+    origin: location.origin,
+    protocol: location.protocol,
+    host: location.host,
+    storageEstimateSupported: Boolean(navigator.storage?.estimate),
+    storageEstimate: navigator.storage?.estimate ? await navigator.storage.estimate().catch((error) => ({ error: String(error?.message || error) })) : null,
+    cookieEnabled: navigator.cookieEnabled,
+  }));
+  const frameTree = await chromeDebuggerSendCommand(target, "Page.getFrameTree").catch(() => null);
+  const frames = [];
+  function walkFrame(node, parentId = null) {
+    if (!node?.frame) return;
+    let origin = "";
+    try { origin = new URL(node.frame.url).origin; } catch {}
+    frames.push({
+      id: node.frame.id,
+      parentId,
+      url: node.frame.url,
+      origin,
+      name: node.frame.name,
+      securityOrigin: node.frame.securityOrigin,
+      mimeType: node.frame.mimeType,
+    });
+    for (const child of node.childFrames || []) walkFrame(child, node.frame.id);
+  }
+  walkFrame(frameTree?.frameTree);
+  const framesWithStorage = [];
+  for (const frame of frames) {
+    const storageKeyResult = await chromeDebuggerSendCommand(target, "Storage.getStorageKeyForFrame", { frameId: frame.id }).catch(() => null);
+    const usageAndQuota = frame.origin && frame.origin !== "null"
+      ? await chromeDebuggerSendCommand(target, "Storage.getUsageAndQuota", { origin: frame.origin }).catch((error) => ({ error: String(error?.message || error) }))
+      : null;
+    framesWithStorage.push({ ...frame, storageKey: storageKeyResult?.storageKey || null, usageAndQuota });
+  }
+  const cookies = await chrome.cookies.getAll({ url: tab.url }).catch(() => []);
+  return {
+    tab: pickTab(tab),
+    page,
+    frames: framesWithStorage,
+    cookieCount: Array.isArray(cookies) ? cookies.length : 0,
+    cookiePartitions: Array.isArray(cookies) ? cookies.map((cookie) => ({
+      name: cookie.name,
+      domain: cookie.domain,
+      path: cookie.path,
+      sameSite: cookie.sameSite,
+      secure: cookie.secure,
+      httpOnly: cookie.httpOnly,
+      partitionKey: cookie.partitionKey,
+      partitionKeyOpaque: cookie.partitionKeyOpaque,
+      storeId: cookie.storeId,
+    })) : cookies,
+  };
 }
 
 async function chromeCookieSummary(params) {
