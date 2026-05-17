@@ -5890,7 +5890,7 @@ async function chromeGlobalSearch(params) {
     maxMatches,
   };
   const results = [];
-  const searched = { networkRecords: 0, scripts: 0, storage: false };
+  const searched = { networkRecords: 0, scripts: 0, storage: false, applicationExport: false };
 
   if (params.includeNetwork !== false) {
     const records = [...session.requests.values()].slice(-(Number(params.maxNetworkRecords || 1000)));
@@ -5985,6 +5985,29 @@ async function chromeGlobalSearch(params) {
       query,
       options,
     });
+    if (results.length < maxMatches) {
+      try {
+        const application = await chromeApplicationExport({
+          ...params,
+          tabId: tab.id,
+          maxIndexedDbRecords: Number(params.maxIndexedDbRecords || 50),
+          maxCacheEntries: Number(params.maxCacheEntries || 50),
+          includeCacheBodies: params.includeCacheBodies !== false,
+          maxCacheBodyChars: Number(params.maxCacheBodyChars || 50000),
+        });
+        searched.applicationExport = true;
+        pushTextSearchMatches(results, {
+          category: "application",
+          source: "application-export",
+          locator: { url: application.export?.url, field: "application-export-json" },
+          text: JSON.stringify(application.export || {}),
+          query,
+          options,
+        });
+      } catch (error) {
+        searched.applicationExportError = String(error?.message || error);
+      }
+    }
   }
 
   return {

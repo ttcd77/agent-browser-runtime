@@ -145,6 +145,14 @@
 
 ## 执行记录
 
+### 2026-05-17: Global Search 深搜 Application 证据
+
+已经完成:
+
+- `devtools_global_search` 的 Application 搜索从轻量 storage metadata 扩展到 bounded Application export。
+- Agent 现在可以直接搜索 IndexedDB record value 和 CacheStorage response body 中的文本，不需要先知道 database/store/cache URL。
+- 搜索会返回 `application-export` 证据来源和本地 export path，仍然只是文本匹配，不判断安全含义。
+
 ### 2026-05-17: 请求关联图增强
 
 已经完成:

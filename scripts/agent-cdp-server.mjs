@@ -8665,6 +8665,10 @@ function registerStandaloneBrowserTools(tools, cdpPort, profileRegistry, default
         maxMatches: { type: "number" },
         maxScripts: { type: "number" },
         maxNetworkRecords: { type: "number" },
+        maxIndexedDbRecords: { type: "number" },
+        maxCacheEntries: { type: "number" },
+        includeCacheBodies: { type: "boolean" },
+        maxCacheBodyChars: { type: "number" },
         includeNetwork: { type: "boolean" },
         includeSources: { type: "boolean" },
         includeStorage: { type: "boolean" },
@@ -8685,7 +8689,7 @@ function registerStandaloneBrowserTools(tools, cdpPort, profileRegistry, default
         maxMatches,
       };
       const results = [];
-      const searched = { networkRecords: 0, scripts: 0, storage: false };
+      const searched = { networkRecords: 0, scripts: 0, storage: false, applicationExport: false, applicationExportPath: null };
 
       if (params?.includeNetwork !== false) {
         const records = profileRegistry.queryTraffic(profile.name, { limit: typeof params?.maxNetworkRecords === "number" ? params.maxNetworkRecords : 1000 });
@@ -8811,6 +8815,32 @@ function registerStandaloneBrowserTools(tools, cdpPort, profileRegistry, default
           });
           await profileRegistry.touchProfile(profile.name, { tabId: target.id });
         });
+        if (results.length < maxMatches) {
+          try {
+            const exportResult = await tools.get("browser_application_export").execute(_id, {
+              profile: profile.name,
+              tabId: params?.tabId,
+              maxIndexedDbRecords: typeof params?.maxIndexedDbRecords === "number" ? params.maxIndexedDbRecords : 50,
+              maxCacheEntries: typeof params?.maxCacheEntries === "number" ? params.maxCacheEntries : 50,
+              includeCacheBodies: params?.includeCacheBodies !== false,
+              maxCacheBodyChars: typeof params?.maxCacheBodyChars === "number" ? params.maxCacheBodyChars : 50000,
+            });
+            const exportPayload = JSON.parse(exportResult.content?.[0]?.text || "{}");
+            searched.applicationExport = true;
+            searched.applicationExportPath = exportPayload.exportPath || null;
+            const applicationExport = exportPayload.exportPath ? readJsonFile(exportPayload.exportPath) : exportPayload;
+            pushTextSearchMatches(results, {
+              category: "application",
+              source: "application-export",
+              locator: { url: applicationExport.url, field: "application-export-json", exportPath: exportPayload.exportPath || null },
+              text: JSON.stringify(applicationExport || {}),
+              query,
+              options,
+            });
+          } catch (error) {
+            searched.applicationExportError = String(error?.message || error);
+          }
+        }
       }
 
       return toolResult({

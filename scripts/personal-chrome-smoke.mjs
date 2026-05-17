@@ -298,6 +298,14 @@ const cacheEntry = await callTool("devtools_cache_entry_get", {
 });
 assert(cacheEntry.page?.ok === true, `Personal CacheStorage entry read failed: ${JSON.stringify(cacheEntry)}`);
 assert(String(cacheEntry.page?.bodyText || "").includes("personal cached smoke"), `Personal CacheStorage body missing smoke text: ${JSON.stringify(cacheEntry)}`);
+const applicationSearch = await callTool("devtools_global_search", {
+  query: "personal indexeddb smoke",
+  includeNetwork: false,
+  includeSources: false,
+  includeStorage: true,
+  maxMatches: 10,
+});
+assert(applicationSearch.results?.some((entry) => entry.category === "application" && entry.source === "application-export"), `Personal global search did not inspect Application export records: ${JSON.stringify(applicationSearch)}`);
 
 const performanceInsights = await callTool("devtools_performance_insights", {
   durationMs: 250,

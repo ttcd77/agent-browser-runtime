@@ -913,6 +913,15 @@ try {
   });
   assert(cacheEntry.page?.ok === true, `Cache entry read failed: ${JSON.stringify(cacheEntry)}`);
   assert(String(cacheEntry.page?.bodyText || "").includes("cached smoke"), `Cache entry body missing smoke text: ${JSON.stringify(cacheEntry)}`);
+  const applicationSearch = await callTool(baseUrl, "devtools_global_search", {
+    profile: "default",
+    query: "indexeddb smoke",
+    includeNetwork: false,
+    includeSources: false,
+    includeStorage: true,
+    maxMatches: 10,
+  });
+  assert(applicationSearch.results?.some((entry) => entry.category === "application" && entry.source === "application-export"), `global search did not inspect Application export records: ${JSON.stringify(applicationSearch)}`);
 
   const cookieSummary = await callTool(baseUrl, "devtools_cookie_summary", {
     profile: "default",
