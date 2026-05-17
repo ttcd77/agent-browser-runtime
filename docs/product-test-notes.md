@@ -159,6 +159,7 @@ It starts an isolated temporary managed browser and verifies:
 - Cookie security summary, including Secure, HttpOnly, SameSite, session vs
   persistent, and objective attribute signals.
 - Origin/storage-key/quota evidence, quota usage breakdown, Storage Buckets support/bucket summary, and cookie partition evidence where Chrome exposes it.
+- Local storage fixture now records document-visible cookie names alongside backend cookie metadata so agents can see browser/API visibility differences.
 - Cross-panel signal summary that points agents to the next drill-down tools
   without claiming a vulnerability.
 - Chrome DevTools Issues-panel event access.

@@ -5830,6 +5830,8 @@ function registerStandaloneBrowserTools(tools, cdpPort, profileRegistry, default
               origin: location.origin,
               protocol: location.protocol,
               host: location.host,
+              documentCookieBytes: document.cookie?.length || 0,
+              documentCookieNames: String(document.cookie || "").split(";").map((part) => part.trim().split("=")[0]).filter(Boolean),
               storageEstimateSupported: Boolean(navigator.storage?.estimate),
               storageBuckets,
               cookieEnabled: navigator.cookieEnabled,

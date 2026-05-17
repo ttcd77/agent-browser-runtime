@@ -37,6 +37,12 @@ async function startFixtureServer() {
         window.AGENT_PERSONAL_SMOKE_MARKER = "fixture-ready";
         localStorage.setItem("agent-personal-smoke-local", "local-fixture-value");
         sessionStorage.setItem("agent-personal-smoke-session", "session-fixture-value");
+        document.cookie = "agent_personal_chips=partitioned; path=/; Secure; SameSite=None; Partitioned";
+        window.__chipsCookieAttempt = {
+          name: "agent_personal_chips",
+          attempted: true,
+          documentCookieVisible: document.cookie.includes("agent_personal_chips="),
+        };
         window.__idbReady = new Promise((resolve) => {
           const open = indexedDB.open("agent-personal-smoke-db", 1);
           open.onupgradeneeded = () => open.result.createObjectStore("records", { keyPath: "id" });
@@ -174,6 +180,22 @@ assert(storage.storageBoundarySummary?.quotaByOrigin && typeof storage.storageBo
 assert(typeof storage.storageBucketSummary?.supported === "boolean", `storage bucket summary missing support flag: ${JSON.stringify(storage)}`);
 assert(typeof storage.storageBucketSummary?.bucketCount === "number", `storage bucket summary missing bucket count: ${JSON.stringify(storage)}`);
 assert(Array.isArray(storage.captureBoundaries), `storage origin summary missing capture boundaries: ${JSON.stringify(storage)}`);
+assert(storage.cookiePartitionSummary?.cookieCount >= 1, `Personal cookie partition summary missing cookie count: ${JSON.stringify(storage)}`);
+assert(typeof storage.cookiePartitionSummary?.partitionMetadataExposed === "boolean", `Personal cookie partition summary missing metadata flag: ${JSON.stringify(storage)}`);
+const chipsAttempt = await callTool("devtools_cdp_command", {
+  method: "Runtime.evaluate",
+  params: {
+    expression: "window.__chipsCookieAttempt",
+    returnByValue: true,
+  },
+});
+const chipsAttemptValue = chipsAttempt.result?.result?.value || chipsAttempt.result?.value || chipsAttempt.result;
+assert(chipsAttemptValue?.attempted === true, `Personal CHIPS fixture did not attempt cookie write: ${JSON.stringify(chipsAttempt)}`);
+assert(storage.page?.documentCookieNames?.includes("agent_personal_chips") === Boolean(chipsAttemptValue?.documentCookieVisible), `Personal document cookie names do not match fixture visibility: ${JSON.stringify(storage.page)}`);
+const chipsCookie = storage.cookiePartitions?.find((cookie) => cookie.name === "agent_personal_chips");
+if (chipsCookie) {
+  assert(chipsCookie?.name === "agent_personal_chips", `Personal CHIPS cookie was visible to document.cookie but missing from backend cookie evidence: ${JSON.stringify(storage.cookiePartitions)}`);
+}
 const indexedDbRead = await callTool("devtools_indexeddb_read", {
   database: "agent-personal-smoke-db",
   store: "records",

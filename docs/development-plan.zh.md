@@ -89,7 +89,7 @@
 - HAR 导出继续接近 DevTools: 更完整 timing、body handle、redirect/body 证据。第一步先落地 `devtools_har_completeness`，让 Agent 知道当前 HAR 证据完整到什么程度。
 - Sources/Debugger: source map 原始文件导航已补 `devtools_source_map_source_get`；breakpoint probe 已并入 `devtools_debugger_control action=probeBreakpointByUrl`；paused scope 表达式求值已补 `evaluateExpressions`。
 - Performance: trace event 已补 `renderingTimeline`，按 loading/scripting/rendering/painting/screenshot 做时间线分组，不做性能风险判断，只做证据整理。
-- Application: storage boundary 已补 quota usage breakdown、Storage Buckets support/bucket summary、cookie partition metadata；Cache/IndexedDB drill-down 已加入 Managed/Personal smoke；下一步继续 CHIPS / partitioned cookie 写入 fixture。
+- Application: storage boundary 已补 quota usage breakdown、Storage Buckets support/bucket summary、cookie partition metadata；Cache/IndexedDB drill-down 已加入 Managed/Personal smoke；本地分区 cookie 写入 fixture 已覆盖 Managed/Personal，并记录 document-visible cookie names 与后端 cookie metadata 的可见性差异。
 - Replay: 更明确 forbidden header、browser fetch replay 与 raw socket-level replay 边界。
 
 验收:

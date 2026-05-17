@@ -1048,6 +1048,28 @@ function hostnameForUrl(url) {
   }
 }
 
+async function chromeCookiesForTab(tab) {
+  const byKey = new Map();
+  const addCookies = (cookies) => {
+    if (!Array.isArray(cookies)) return;
+    for (const cookie of cookies) {
+      const key = [
+        cookie.storeId || "",
+        cookie.name || "",
+        cookie.domain || "",
+        cookie.path || "",
+        cookie.partitionKey ? JSON.stringify(cookie.partitionKey) : "",
+        cookie.partitionKeyOpaque ? "opaque" : "",
+      ].join("\u0000");
+      byKey.set(key, cookie);
+    }
+  };
+  addCookies(await chrome.cookies.getAll({ url: tab.url }).catch(() => []));
+  const host = hostnameForUrl(tab.url);
+  if (host) addCookies(await chrome.cookies.getAll({ domain: host }).catch(() => []));
+  return [...byKey.values()];
+}
+
 function summarizeNetworkRecords(requests, websockets = [], limit = 10) {
   const byStatus = {};
   const byHost = {};
@@ -2696,7 +2718,7 @@ async function chromePageDiagnostics(params) {
       serviceWorkerRegistrations: serviceWorkers.length || 0,
     };
   });
-  const cookies = await chrome.cookies.getAll({ url: tab.url }).catch(() => []);
+  const cookies = await chromeCookiesForTab(tab);
   let accessibility = null;
   try {
     await chromeDebuggerSendCommand(target, "Accessibility.enable").catch(() => {});
@@ -2980,7 +3002,7 @@ async function chromeStorageSnapshot(params) {
       serviceWorker: serviceWorkerSnapshot,
     };
   }, [{ maxIndexedDbRecords, maxCacheEntries }]);
-  const cookies = await chrome.cookies.getAll({ url: tab.url }).catch((error) => ({
+  const cookies = await chromeCookiesForTab(tab).catch((error) => ({
     error: String(error.message || error),
   }));
   return { tab: pickTab(tab), page, cookies };
@@ -2994,6 +3016,8 @@ async function chromeStorageOriginSummary(params) {
     origin: location.origin,
     protocol: location.protocol,
     host: location.host,
+    documentCookieBytes: document.cookie?.length || 0,
+    documentCookieNames: String(document.cookie || "").split(";").map((part) => part.trim().split("=")[0]).filter(Boolean),
     storageEstimateSupported: Boolean(navigator.storage?.estimate),
     storageEstimate: navigator.storage?.estimate ? await navigator.storage.estimate().catch((error) => ({ error: String(error?.message || error) })) : null,
     storageBuckets: await (async () => {
@@ -3054,7 +3078,7 @@ async function chromeStorageOriginSummary(params) {
       : null;
     framesWithStorage.push({ ...frame, storageKey: storageKeyResult?.storageKey || null, storageKeyError, usageAndQuota });
   }
-  const cookies = await chrome.cookies.getAll({ url: tab.url }).catch(() => []);
+  const cookies = await chromeCookiesForTab(tab);
   const cookieList = Array.isArray(cookies) ? cookies : [];
   return {
     tab: pickTab(tab),
@@ -3085,7 +3109,7 @@ async function chromeStorageOriginSummary(params) {
 
 async function chromeCookieSummary(params) {
   const tab = await getTargetTab(params);
-  const cookies = await chrome.cookies.getAll({ url: tab.url }).catch((error) => ({
+  const cookies = await chromeCookiesForTab(tab).catch((error) => ({
     error: String(error.message || error),
   }));
   return {
@@ -3457,7 +3481,7 @@ async function chromeApplicationExport(params) {
       serviceWorker: serviceWorkerExport,
     };
   }, [{ maxIndexedDbRecords, maxCacheEntries, includeCacheBodies, maxCacheBodyChars }]);
-  const cookies = await chrome.cookies.getAll({ url: tab.url }).catch((error) => ({
+  const cookies = await chromeCookiesForTab(tab).catch((error) => ({
     error: String(error.message || error),
   }));
   return {

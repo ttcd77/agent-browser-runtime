@@ -103,6 +103,12 @@ const appServer = http.createServer(async (req, res) => {
       localStorage.setItem('agent-f12-local', 'local-value');
       sessionStorage.setItem('agent-f12-session', 'session-value');
       document.cookie = 'agent_f12_cookie=plain; path=/; SameSite=Lax';
+      document.cookie = 'agent_f12_chips=partitioned; path=/; Secure; SameSite=None; Partitioned';
+      window.__chipsCookieAttempt = {
+        name: 'agent_f12_chips',
+        attempted: true,
+        documentCookieVisible: document.cookie.includes('agent_f12_chips='),
+      };
       window.__idbReady = new Promise((resolve) => {
         const open = indexedDB.open('agent-f12-smoke-db', 1);
         open.onupgradeneeded = () => open.result.createObjectStore('records', { keyPath: 'id' });
@@ -827,6 +833,18 @@ try {
   assert(Array.isArray(storageOrigin.captureBoundaries), `storage origin summary missing capture boundaries: ${JSON.stringify(storageOrigin)}`);
   assert(storageOrigin.cookiePartitionSummary?.cookieCount >= 1, `cookie partition summary missing cookie count: ${JSON.stringify(storageOrigin)}`);
   assert(typeof storageOrigin.cookiePartitionSummary?.partitionMetadataExposed === "boolean", `cookie partition summary missing metadata flag: ${JSON.stringify(storageOrigin)}`);
+  const chipsAttempt = await callTool(baseUrl, "devtools_eval", {
+    profile: "default",
+    expression: "window.__chipsCookieAttempt",
+    returnByValue: true,
+  });
+  const chipsAttemptValue = chipsAttempt.result?.result?.value || chipsAttempt.result?.value || chipsAttempt.result;
+  assert(chipsAttemptValue?.attempted === true, `CHIPS fixture did not attempt cookie write: ${JSON.stringify(chipsAttempt)}`);
+  assert(storageOrigin.page?.documentCookieNames?.includes("agent_f12_chips") === Boolean(chipsAttemptValue?.documentCookieVisible), `document cookie names do not match CHIPS fixture visibility: ${JSON.stringify(storageOrigin.page)}`);
+  const chipsCookie = storageOrigin.cookiePartitions?.find((cookie) => cookie.name === "agent_f12_chips");
+  if (chipsCookie) {
+    assert(chipsCookie?.name === "agent_f12_chips", `CHIPS cookie was visible to document.cookie but missing from backend cookie evidence: ${JSON.stringify(storageOrigin.cookiePartitions)}`);
+  }
 
   const signalSummary = await callTool(baseUrl, "devtools_signal_summary", {
     profile: "default",
