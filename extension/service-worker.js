@@ -290,6 +290,8 @@ async function executeCommand(command, params) {
       return await chromeSourcesSearch(params);
     case "chrome_performance_trace":
       return await chromePerformanceTrace(params);
+    case "chrome_performance_insights":
+      return await chromePerformanceInsights(params);
     case "chrome_chrome_trace":
       return await chromeChromeTrace(params);
     case "chrome_cpu_profile":
@@ -1303,6 +1305,82 @@ function summarizeTraceEvents(events = [], limit = 10) {
     screenshots: screenshots.slice(0, limit),
     networkEventCount: networkLike.length,
     networkEvents: networkLike.slice(0, limit),
+  };
+}
+
+function summarizePerformanceInsights(page = {}, chromeTrace = null, limit = 10) {
+  const performancePage = page?.page || page || {};
+  const resources = Array.isArray(performancePage.resources) ? performancePage.resources : [];
+  const longTasks = Array.isArray(performancePage.longTasks) ? performancePage.longTasks : [];
+  const paints = Array.isArray(performancePage.paints) ? performancePage.paints : [];
+  const navigation = Array.isArray(performancePage.navigation) ? performancePage.navigation[0] : null;
+  const slowResources = resources
+    .map((entry) => ({
+      name: entry.name,
+      initiatorType: entry.initiatorType,
+      duration: Math.round(Number(entry.duration || 0) * 100) / 100,
+      transferSize: entry.transferSize,
+      encodedBodySize: entry.encodedBodySize,
+      decodedBodySize: entry.decodedBodySize,
+      renderBlockingStatus: entry.renderBlockingStatus,
+    }))
+    .filter((entry) => entry.duration > 0)
+    .sort((a, b) => b.duration - a.duration)
+    .slice(0, limit);
+  const longestLongTasks = longTasks
+    .map((entry) => ({
+      name: entry.name,
+      startTime: Math.round(Number(entry.startTime || 0) * 100) / 100,
+      duration: Math.round(Number(entry.duration || 0) * 100) / 100,
+      attribution: entry.attribution,
+    }))
+    .sort((a, b) => b.duration - a.duration)
+    .slice(0, limit);
+  const traceSummary = chromeTrace?.traceSummary || chromeTrace?.summary || null;
+  const traceLongEvents = Array.isArray(traceSummary?.longEvents) ? traceSummary.longEvents.slice(0, limit) : [];
+  return {
+    generatedAt: new Date().toISOString(),
+    source: {
+      performanceEntries: true,
+      chromeTrace: Boolean(traceSummary),
+      tracePath: chromeTrace?.tracePath || null,
+    },
+    page: {
+      url: performancePage.url || null,
+      durationMs: performancePage.durationMs || null,
+      timeOrigin: performancePage.timeOrigin || null,
+    },
+    navigation: navigation ? {
+      type: navigation.type,
+      duration: Math.round(Number(navigation.duration || 0) * 100) / 100,
+      domContentLoadedEventEnd: navigation.domContentLoadedEventEnd,
+      loadEventEnd: navigation.loadEventEnd,
+      transferSize: navigation.transferSize,
+      encodedBodySize: navigation.encodedBodySize,
+      decodedBodySize: navigation.decodedBodySize,
+    } : null,
+    paints,
+    resourceCount: resources.length,
+    slowResources,
+    longTaskCount: longTasks.length,
+    longestLongTasks,
+    trace: traceSummary ? {
+      eventCount: traceSummary.eventCount,
+      timeRangeMs: traceSummary.timeRangeMs,
+      durationByPhase: traceSummary.durationByPhase || [],
+      busiestThreads: traceSummary.busiestThreads || [],
+      topDurations: traceSummary.topDurations || [],
+      longEventCount: traceSummary.longEventCount || 0,
+      longEvents: traceLongEvents,
+      screenshotEventCount: traceSummary.screenshotEventCount || 0,
+    } : null,
+    captureBoundaries: [
+      "Performance entries describe the current page's browser-exposed timing state.",
+      "Long task attribution is browser-provided and may be sparse.",
+      "Chrome trace evidence is complete only for the explicit trace window.",
+      "This is objective performance evidence, not a root-cause verdict.",
+    ],
+    nextTools: ["devtools_chrome_trace", "devtools_cpu_profile", "devtools_coverage_detail", "devtools_source_get"],
   };
 }
 
@@ -4946,6 +5024,28 @@ async function chromePerformanceTrace(params) {
     };
   }, [durationMs]);
   return { tab: pickTab(tab), page };
+}
+
+async function chromePerformanceInsights(params) {
+  const page = await chromePerformanceTrace({
+    ...params,
+    durationMs: Number(params.durationMs || 500),
+  });
+  let chromeTrace = null;
+  if (params.includeChromeTrace) {
+    chromeTrace = await chromeChromeTrace({
+      ...params,
+      durationMs: Math.max(250, Number(params.traceDurationMs || params.durationMs || 500)),
+      maxEvents: Number(params.maxEvents || params.maxItems || 20),
+      saveScreenshots: params.saveScreenshots,
+      maxScreenshots: params.maxScreenshots,
+    });
+  }
+  return {
+    backend: "personal-chrome",
+    tab: page.tab,
+    insights: summarizePerformanceInsights(page, chromeTrace, Number(params.maxItems || 10)),
+  };
 }
 
 function waitForTracingComplete(tabId, timeoutMs = 15000) {

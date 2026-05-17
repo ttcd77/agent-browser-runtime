@@ -62,6 +62,16 @@ const storage = await callTool("devtools_storage_origin_summary");
 assert(storage.page?.url || storage.page?.origin, `storage summary missing page evidence: ${JSON.stringify(storage)}`);
 assert(storage.storageBoundarySummary?.frameCount >= 1, `storage boundary summary missing frames: ${JSON.stringify(storage)}`);
 
+const performanceInsights = await callTool("devtools_performance_insights", {
+  durationMs: 250,
+  includeChromeTrace: false,
+  maxItems: 5,
+});
+assert(performanceInsights.backend === "personal-chrome", `performance insights wrong backend: ${JSON.stringify(performanceInsights)}`);
+assert(performanceInsights.insights?.source?.performanceEntries === true, "performance insights missing performance entry source marker");
+assert(typeof performanceInsights.insights?.resourceCount === "number", "performance insights missing resource count");
+assert(Array.isArray(performanceInsights.insights?.captureBoundaries), "performance insights missing capture boundaries");
+
 console.log("Personal Chrome smoke passed:");
 console.log(`- bridge: ${baseUrl}`);
 console.log(`- active tab: ${status.tab.title || "(untitled)"} ${status.tab.url}`);

@@ -224,6 +224,19 @@ try {
   assert(Array.isArray(trace.traceSummary?.topDurations), "Chrome trace summary missing topDurations");
   assert(Array.isArray(trace.traceScreenshots), "Chrome trace did not return screenshot frame evidence array");
 
+  const performanceInsights = await callTool(baseUrl, "devtools_performance_insights", {
+    profile: "default",
+    durationMs: 250,
+    includeChromeTrace: true,
+    maxItems: 5,
+    maxEvents: 5,
+    maxScreenshots: 1,
+  });
+  assert(performanceInsights.backend === "managed-cdp", `performance insights wrong backend: ${JSON.stringify(performanceInsights)}`);
+  assert(performanceInsights.insights?.source?.performanceEntries === true, "performance insights missing performance entry source marker");
+  assert(typeof performanceInsights.insights?.resourceCount === "number", "performance insights missing resource count");
+  assert(Array.isArray(performanceInsights.insights?.captureBoundaries), "performance insights missing capture boundaries");
+
   const cpuProfile = await callTool(baseUrl, "devtools_cpu_profile", {
     profile: "default",
     durationMs: 300,

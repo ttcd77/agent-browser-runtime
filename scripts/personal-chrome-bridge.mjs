@@ -119,6 +119,7 @@ function normalizeCommand(toolName) {
     devtools_evidence_bundle: "chrome_evidence_bundle",
     devtools_sources_search: "chrome_sources_search",
     devtools_performance_trace: "chrome_performance_trace",
+    devtools_performance_insights: "chrome_performance_insights",
     devtools_chrome_trace: "chrome_chrome_trace",
     devtools_cpu_profile: "chrome_cpu_profile",
     devtools_coverage_snapshot: "chrome_coverage_snapshot",
@@ -380,7 +381,7 @@ function buildAgentInspectToolPlan(focus, options = {}) {
   if (focus === "performance") {
     return {
       ...base,
-      firstPass: ["devtools_memory_snapshot", "devtools_performance_trace"],
+      firstPass: ["devtools_memory_snapshot", "devtools_performance_insights", "devtools_performance_trace"],
       drillDown: ["devtools_chrome_trace", "devtools_cpu_profile", "devtools_coverage_detail"],
       captureHint: "Use heavier traces only around the smallest reproducible action.",
       objectiveBoundary: "Trace summaries expose timing evidence, not root-cause conclusions.",
@@ -484,10 +485,11 @@ async function runAgentInspect(params = {}) {
     out.nextTools = ["devtools_source_get", "devtools_source_pretty_print", "devtools_source_map_metadata", "agent_inspect focus=debug"];
   } else if (focus === "performance") {
     out.evidence.memory = await safeBridgeTool("devtools_memory_snapshot", base);
-    out.evidence.performance = await safeBridgeTool("devtools_performance_trace", base);
+    out.evidence.insights = await safeBridgeTool("devtools_performance_insights", withBase({ durationMs: 500, maxItems: limit, includeChromeTrace: Boolean(params.includeHeavy) }));
+    out.evidence.performance = await safeBridgeTool("devtools_performance_trace", withBase({ durationMs: 500 }));
     if (params.includeHeavy) out.evidence.cpuProfile = await safeBridgeTool("devtools_cpu_profile", withBase({ durationMs: 500, maxNodes: limit }));
-    out.summary = "Performance route: memory/performance monitor snapshot, with optional heavier CPU profiling.";
-    out.nextTools = ["devtools_chrome_trace", "devtools_cpu_profile", "devtools_coverage_detail"];
+    out.summary = "Performance route: memory counters plus objective timing, resource, long-task, and optional trace evidence.";
+    out.nextTools = ["devtools_performance_insights", "devtools_chrome_trace", "devtools_cpu_profile", "devtools_coverage_detail"];
   } else if (focus === "search") {
     if (!params.query) throw new Error("query is required for focus=search");
     out.evidence.search = await safeBridgeTool("devtools_global_search", withBase({ query: params.query, maxMatches: limit }));
@@ -624,6 +626,7 @@ const tools = {
   personal_chrome_evidence_bundle: "Export a compact objective F12 evidence bundle from the user's real Chrome tab.",
   personal_chrome_sources_search: "Search parsed JavaScript sources captured through chrome.debugger.",
   personal_chrome_performance_trace: "Capture a short Performance panel-style snapshot from the user's real Chrome tab.",
+  personal_chrome_performance_insights: "Summarize Performance panel timing, slow resources, long tasks, and optional Chrome trace evidence from the user's real Chrome tab.",
   personal_chrome_chrome_trace: "Capture Chrome Tracing data from the user's real Chrome tab and write the full trace locally.",
   personal_chrome_cpu_profile: "Capture a JavaScript CPU profile from the user's real Chrome tab and write the full profile locally.",
   personal_chrome_coverage_snapshot: "Capture short JavaScript precise coverage and CSS rule usage from the user's real Chrome tab.",
@@ -695,6 +698,7 @@ const tools = {
   devtools_evidence_bundle: "Unified Agent DevTools API: export a compact objective F12 evidence bundle.",
   devtools_sources_search: "Unified Agent DevTools API: search parsed JavaScript sources by literal query.",
   devtools_performance_trace: "Unified Agent DevTools API: capture navigation/resource/paint/long-task performance data.",
+  devtools_performance_insights: "Unified Agent DevTools API: summarize Performance panel timing, resources, long tasks, and optional trace evidence.",
   devtools_chrome_trace: "Unified Agent DevTools API: capture Chrome Tracing data and return a summary plus full trace path.",
   devtools_cpu_profile: "Unified Agent DevTools API: capture a JavaScript CPU profile and hotspot summary.",
   devtools_coverage_snapshot: "Unified Agent DevTools API: capture short JavaScript and CSS coverage data.",

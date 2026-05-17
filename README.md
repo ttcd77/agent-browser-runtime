@@ -236,6 +236,7 @@ Chrome Extension Mode and Managed Browser Mode:
 - `devtools_evidence_bundle`
 - `devtools_sources_search`
 - `devtools_performance_trace`
+- `devtools_performance_insights`
 - `devtools_chrome_trace`
 - `devtools_cpu_profile`
 - `devtools_coverage_snapshot`

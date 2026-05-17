@@ -849,6 +849,82 @@ function summarizeTraceEvents(events = [], limit = 10) {
   };
 }
 
+function summarizePerformanceInsights(page = {}, chromeTrace = null, limit = 10) {
+  const performancePage = page?.page || page || {};
+  const resources = Array.isArray(performancePage.resources) ? performancePage.resources : [];
+  const longTasks = Array.isArray(performancePage.longTasks) ? performancePage.longTasks : [];
+  const paints = Array.isArray(performancePage.paints) ? performancePage.paints : [];
+  const navigation = Array.isArray(performancePage.navigation) ? performancePage.navigation[0] : null;
+  const slowResources = resources
+    .map((entry) => ({
+      name: entry.name,
+      initiatorType: entry.initiatorType,
+      duration: Math.round(Number(entry.duration || 0) * 100) / 100,
+      transferSize: entry.transferSize,
+      encodedBodySize: entry.encodedBodySize,
+      decodedBodySize: entry.decodedBodySize,
+      renderBlockingStatus: entry.renderBlockingStatus,
+    }))
+    .filter((entry) => entry.duration > 0)
+    .sort((a, b) => b.duration - a.duration)
+    .slice(0, limit);
+  const longestLongTasks = longTasks
+    .map((entry) => ({
+      name: entry.name,
+      startTime: Math.round(Number(entry.startTime || 0) * 100) / 100,
+      duration: Math.round(Number(entry.duration || 0) * 100) / 100,
+      attribution: entry.attribution,
+    }))
+    .sort((a, b) => b.duration - a.duration)
+    .slice(0, limit);
+  const traceSummary = chromeTrace?.traceSummary || chromeTrace?.summary || null;
+  const traceLongEvents = Array.isArray(traceSummary?.longEvents) ? traceSummary.longEvents.slice(0, limit) : [];
+  return {
+    generatedAt: new Date().toISOString(),
+    source: {
+      performanceEntries: true,
+      chromeTrace: Boolean(traceSummary),
+      tracePath: chromeTrace?.tracePath || null,
+    },
+    page: {
+      url: performancePage.url || null,
+      durationMs: performancePage.durationMs || null,
+      timeOrigin: performancePage.timeOrigin || null,
+    },
+    navigation: navigation ? {
+      type: navigation.type,
+      duration: Math.round(Number(navigation.duration || 0) * 100) / 100,
+      domContentLoadedEventEnd: navigation.domContentLoadedEventEnd,
+      loadEventEnd: navigation.loadEventEnd,
+      transferSize: navigation.transferSize,
+      encodedBodySize: navigation.encodedBodySize,
+      decodedBodySize: navigation.decodedBodySize,
+    } : null,
+    paints,
+    resourceCount: resources.length,
+    slowResources,
+    longTaskCount: longTasks.length,
+    longestLongTasks,
+    trace: traceSummary ? {
+      eventCount: traceSummary.eventCount,
+      timeRangeMs: traceSummary.timeRangeMs,
+      durationByPhase: traceSummary.durationByPhase || [],
+      busiestThreads: traceSummary.busiestThreads || [],
+      topDurations: traceSummary.topDurations || [],
+      longEventCount: traceSummary.longEventCount || 0,
+      longEvents: traceLongEvents,
+      screenshotEventCount: traceSummary.screenshotEventCount || 0,
+    } : null,
+    captureBoundaries: [
+      "Performance entries describe the current page's browser-exposed timing state.",
+      "Long task attribution is browser-provided and may be sparse.",
+      "Chrome trace evidence is complete only for the explicit trace window.",
+      "This is objective performance evidence, not a root-cause verdict.",
+    ],
+    nextTools: ["devtools_chrome_trace", "devtools_cpu_profile", "devtools_coverage_detail", "devtools_source_get"],
+  };
+}
+
 function extractTraceScreenshots(events = [], directory, options = {}) {
   const maxScreenshots = Math.max(0, Number(options.maxScreenshots || 5));
   if (!maxScreenshots || !directory) return [];
@@ -945,7 +1021,7 @@ function buildAgentInspectToolPlan(focus, options = {}) {
   if (focus === "performance") {
     return {
       ...base,
-      firstPass: ["devtools_memory_snapshot", "devtools_performance_trace"],
+      firstPass: ["devtools_memory_snapshot", "devtools_performance_insights", "devtools_performance_trace"],
       drillDown: ["devtools_chrome_trace", "devtools_cpu_profile", "devtools_coverage_detail"],
       captureHint: "Use heavier traces only around the smallest reproducible action.",
       objectiveBoundary: "Trace summaries expose timing evidence, not root-cause conclusions.",
@@ -6218,10 +6294,11 @@ function registerStandaloneBrowserTools(tools, cdpPort, profileRegistry, default
         out.nextTools = ["devtools_source_get", "devtools_source_pretty_print", "devtools_source_map_metadata", "agent_inspect focus=debug"];
       } else if (focus === "performance") {
         out.evidence.memory = await safeCall("browser_memory_snapshot");
-        out.evidence.performance = await safeCall("browser_performance_trace");
+        out.evidence.insights = await safeCall("browser_performance_insights", { durationMs: 500, maxItems: limit, includeChromeTrace: Boolean(params?.includeHeavy) });
+        out.evidence.performance = await safeCall("browser_performance_trace", { durationMs: 500 });
         if (params?.includeHeavy) out.evidence.cpuProfile = await safeCall("browser_cpu_profile", { durationMs: 500, maxNodes: limit });
-        out.summary = "Performance route: memory/performance monitor snapshot, with optional heavier CPU profiling.";
-        out.nextTools = ["devtools_chrome_trace", "devtools_cpu_profile", "devtools_coverage_detail"];
+        out.summary = "Performance route: memory counters plus objective timing, resource, long-task, and optional trace evidence.";
+        out.nextTools = ["devtools_performance_insights", "devtools_chrome_trace", "devtools_cpu_profile", "devtools_coverage_detail"];
       } else if (focus === "search") {
         if (!params?.query) throw new Error("query is required for focus=search");
         out.evidence.search = await safeCall("browser_global_search", { query: params.query, maxMatches: limit });
@@ -6571,6 +6648,49 @@ function registerStandaloneBrowserTools(tools, cdpPort, profileRegistry, default
           parseError,
         };
       }));
+    },
+  });
+
+  tools.set("browser_performance_insights", {
+    name: "browser_performance_insights",
+    description: "Summarize Performance panel timing, slow resources, long tasks, and optional Chrome trace evidence for agents.",
+    parameters: {
+      type: "object",
+      properties: {
+        profile: { type: "string" },
+        tabId: { type: "string" },
+        durationMs: { type: "number" },
+        includeChromeTrace: { type: "boolean" },
+        maxItems: { type: "number" },
+        maxEvents: { type: "number" },
+        maxScreenshots: { type: "number" },
+        saveScreenshots: { type: "boolean" },
+      },
+    },
+    async execute(id, params) {
+      const profile = await resolveProfile(params?.profile);
+      const readPayload = (result) => JSON.parse(result.content?.[0]?.text || "{}");
+      const base = {
+        profile: profile.name,
+        tabId: params?.tabId,
+        durationMs: typeof params?.durationMs === "number" ? params.durationMs : 500,
+      };
+      const page = readPayload(await tools.get("browser_performance_trace").execute(id, base));
+      let chromeTrace = null;
+      if (params?.includeChromeTrace) {
+        chromeTrace = readPayload(await tools.get("browser_chrome_trace").execute(id, {
+          ...base,
+          maxEvents: typeof params?.maxEvents === "number" ? params.maxEvents : typeof params?.maxItems === "number" ? params.maxItems : 20,
+          maxScreenshots: params?.maxScreenshots,
+          saveScreenshots: params?.saveScreenshots,
+        }));
+      }
+      return toolResult({
+        backend: "managed-cdp",
+        profile: profile.name,
+        tabId: page.tabId || params?.tabId || profile.tabId,
+        insights: summarizePerformanceInsights(page, chromeTrace, params?.maxItems || 10),
+      });
     },
   });
 
@@ -7157,6 +7277,7 @@ function registerStandaloneBrowserTools(tools, cdpPort, profileRegistry, default
   aliasTool("devtools_sources_search", "browser_sources_search", "Unified Agent DevTools API: search parsed JavaScript sources by literal query.");
   aliasTool("devtools_performance_trace", "browser_performance_trace", "Unified Agent DevTools API: capture navigation/resource/paint/long-task performance data.");
   aliasTool("devtools_chrome_trace", "browser_chrome_trace", "Unified Agent DevTools API: capture Chrome Tracing data and return a summary plus full trace path.");
+  aliasTool("devtools_performance_insights", "browser_performance_insights", "Unified Agent DevTools API: summarize Performance panel timing, resources, long tasks, and optional trace evidence.");
   aliasTool("devtools_cpu_profile", "browser_cpu_profile", "Unified Agent DevTools API: capture a JavaScript CPU profile and hotspot summary.");
   aliasTool("devtools_coverage_snapshot", "browser_coverage_snapshot", "Unified Agent DevTools API: capture short JavaScript and CSS coverage data.");
   aliasTool("devtools_coverage_detail", "browser_coverage_detail", "Unified Agent DevTools API: capture Coverage-panel JavaScript/CSS range drilldown data.");

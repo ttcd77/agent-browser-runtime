@@ -97,15 +97,18 @@ original-source tree.
 | Human F12 action | Agent tool |
 |---|---|
 | Navigation/resource/paint timing | `devtools_performance_trace` |
+| Agent-readable timing/resource/long-task summary | `devtools_performance_insights` |
 | Chrome trace capture | `devtools_chrome_trace` |
 | JavaScript CPU profile and hotspot summary | `devtools_cpu_profile` |
 | JS/CSS coverage summary | `devtools_coverage_snapshot` |
 | JS/CSS coverage range drilldown | `devtools_coverage_detail` |
 | Memory/Performance Monitor counters | `devtools_memory_snapshot` |
 
-`devtools_chrome_trace` saves the full raw trace and returns a first-pass summary
-with top categories, top event names, long events, screenshot events, and
-network-like events.
+`devtools_performance_insights` is the first-pass agent route: it combines
+browser-exposed performance entries with optional trace summaries and reports
+capture boundaries. `devtools_chrome_trace` saves the full raw trace and returns
+a first-pass summary with top categories, top event names, long events,
+screenshot events, and network-like events.
 
 ## Personal And Managed Backends
 
