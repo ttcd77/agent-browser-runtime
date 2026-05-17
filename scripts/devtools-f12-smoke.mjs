@@ -1059,6 +1059,14 @@ try {
   assert(artifactSearch.backend === "managed-cdp", `artifact search wrong backend: ${JSON.stringify(artifactSearch)}`);
   assert(artifactSearch.totalMatches >= 1, `artifact search found no matches: ${JSON.stringify(artifactSearch)}`);
   assert(artifactSearch.fileMatches?.some((artifact) => artifact.path === savedHar.harPath), `artifact search missing saved HAR: ${JSON.stringify(artifactSearch.fileMatches)}`);
+  const artifactRead = await callTool(baseUrl, "devtools_artifact_read", {
+    path: savedHar.harPath,
+    startLine: 1,
+    lineCount: 12,
+  });
+  assert(artifactRead.backend === "managed-cdp", `artifact read wrong backend: ${JSON.stringify(artifactRead)}`);
+  assert(artifactRead.mode === "line" && artifactRead.returnedLineCount >= 1, `artifact read did not return line slice: ${JSON.stringify(artifactRead)}`);
+  assert(artifactRead.contentText.includes("Agent Browser Runtime"), `artifact read slice missing expected content: ${artifactRead.contentText}`);
 
   const harWithBodies = await callTool(baseUrl, "devtools_export_har", {
     profile: "default",
@@ -1096,6 +1104,7 @@ try {
   console.log(`- HAR artifact inspect: ${harArtifact.json.harEntryCount} entries / ${harArtifact.matchCount} matches`);
   console.log(`- artifact index files/kinds: ${artifactIndex.totalFileCount}/${Object.keys(artifactIndex.kinds).length}`);
   console.log(`- artifact search matches/files: ${artifactSearch.totalMatches}/${artifactSearch.matchedFileCount}`);
+  console.log(`- artifact read mode/lines: ${artifactRead.mode}/${artifactRead.returnedLineCount}`);
   console.log(`- request detail id: ${requestDetail.detail.requestId}`);
   console.log(`- DevTools issues: ${issuesLog.issueCount}`);
   console.log(`- accessibility nodes: ${accessibility.nodeCount}`);

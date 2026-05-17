@@ -896,6 +896,92 @@ function buildArtifactSearch(files = [], params = {}) {
   };
 }
 
+function readArtifactSlice(params = {}) {
+  const artifactPath = params.path || params.artifactPath;
+  if (!artifactPath) throw new Error("path is required");
+  const file = resolve(String(artifactPath));
+  const maxBytes = Math.max(1, Math.min(Number(params.maxBytes) || 120000, 2_000_000));
+  const startByte = Math.max(0, Number(params.startByte) || 0);
+  const startLine = params.startLine == null ? null : Math.max(1, Number(params.startLine) || 1);
+  const lineCount = Math.max(1, Math.min(Number(params.lineCount) || 80, 5000));
+  if (!existsSync(file)) {
+    return {
+      schema: "agent-browser-runtime.artifact-read.v1",
+      backend: "personal-chrome",
+      path: String(artifactPath),
+      resolvedPath: file,
+      exists: false,
+      boundaries: ["This tool reads local evidence artifact slices only; it does not interpret findings."],
+    };
+  }
+  const stat = statSync(file);
+  if (!stat.isFile()) {
+    return {
+      schema: "agent-browser-runtime.artifact-read.v1",
+      backend: "personal-chrome",
+      path: String(artifactPath),
+      resolvedPath: file,
+      exists: true,
+      isFile: false,
+      bytes: stat.size,
+      boundaries: ["The requested artifact path is not a regular file."],
+    };
+  }
+
+  const buffer = readFileSync(file);
+  const base = {
+    schema: "agent-browser-runtime.artifact-read.v1",
+    backend: "personal-chrome",
+    path: String(artifactPath),
+    resolvedPath: file,
+    exists: true,
+    isFile: true,
+    bytes: stat.size,
+    modifiedAt: stat.mtime.toISOString(),
+    sha256: stat.size <= 25_000_000 ? sha256File(file) : null,
+    hashSkipped: stat.size > 25_000_000,
+    kind: inferArtifactKind(file),
+    boundaries: [
+      "This is bounded local artifact reading for agent drill-down.",
+      "It returns exact file slices and does not decide vulnerability impact.",
+    ],
+    nextTools: ["devtools_artifact_search", "devtools_artifact_inspect"],
+  };
+
+  if (startLine != null) {
+    const textLimit = Math.min(buffer.length, Math.max(maxBytes, 5_000_000));
+    const text = buffer.subarray(0, textLimit).toString("utf8");
+    const lines = text.split(/\r?\n/);
+    const zero = startLine - 1;
+    const selected = lines.slice(zero, zero + lineCount);
+    return {
+      ...base,
+      mode: "line",
+      startLine,
+      lineCount,
+      returnedLineCount: selected.length,
+      lineSearchTruncated: textLimit < buffer.length,
+      contentText: selected.join("\n"),
+      lines: selected.map((line, index) => ({ lineNumber: startLine + index, text: line })),
+    };
+  }
+
+  const endByte = Math.min(buffer.length, startByte + maxBytes);
+  const slice = buffer.subarray(startByte, endByte);
+  const text = slice.toString("utf8");
+  return {
+    ...base,
+    mode: "byte",
+    startByte,
+    endByte,
+    returnedBytes: slice.length,
+    truncatedBefore: startByte > 0,
+    truncatedAfter: endByte < buffer.length,
+    contentText: text,
+    contentBase64: params.includeBase64 ? slice.toString("base64") : undefined,
+  };
+}
+
 function urlOrigin(url) {
   try { return new URL(url).origin; }
   catch { return ""; }
@@ -2092,6 +2178,9 @@ async function callBridgeTool(toolName, params = {}) {
   if (toolName === "personal_chrome_artifact_search" || toolName === "devtools_artifact_search") {
     return artifactSearch(params);
   }
+  if (toolName === "personal_chrome_artifact_read" || toolName === "devtools_artifact_read") {
+    return readArtifactSlice(params);
+  }
   if (toolName === "personal_chrome_source_map_source_get" || toolName === "devtools_source_map_source_get") {
     const maxChars = typeof params.maxChars === "number" ? params.maxChars : 120000;
     if (params.path) {
@@ -2667,6 +2756,7 @@ const tools = {
   personal_chrome_artifact_inspect: "Inspect a saved local Personal Chrome evidence artifact with bounded preview, JSON/HAR shape, and literal matches.",
   personal_chrome_artifact_index: "List saved local Personal Chrome evidence artifacts by type, size, mtime, and path.",
   personal_chrome_artifact_search: "Search saved local Personal Chrome evidence artifacts for a literal query.",
+  personal_chrome_artifact_read: "Read a bounded byte or line slice from a saved local Personal Chrome evidence artifact.",
   personal_chrome_request_correlation_graph: "Build a frame/script/request/console correlation graph from Personal Chrome F12 evidence.",
   personal_chrome_capture_diff: "Compare before/after Personal Chrome evidence artifacts or current captured traffic.",
   personal_chrome_auth_boundary_report: "Collect objective Personal Chrome auth boundary evidence without deciding vulnerability impact.",
@@ -2763,6 +2853,7 @@ const tools = {
   devtools_artifact_inspect: "Unified Agent DevTools API: inspect a saved evidence artifact with bounded preview, structure, and literal matches.",
   devtools_artifact_index: "Unified Agent DevTools API: list saved evidence artifacts by type, size, mtime, and path.",
   devtools_artifact_search: "Unified Agent DevTools API: literal search across saved evidence artifacts.",
+  devtools_artifact_read: "Unified Agent DevTools API: read a bounded byte or line slice from a saved evidence artifact.",
   devtools_request_correlation_graph: "Unified Agent DevTools API: build a frame/script/request/console correlation graph from F12 evidence.",
   devtools_capture_diff: "Unified Agent DevTools API: compare before/after evidence artifacts or current captured traffic.",
   devtools_auth_boundary_report: "Unified Agent DevTools API: collect objective auth boundary evidence without deciding vulnerability impact.",

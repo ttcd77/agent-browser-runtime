@@ -467,6 +467,14 @@ const artifactSearch = await callTool("devtools_artifact_search", {
 assert(artifactSearch.backend === "personal-chrome", `Personal Chrome artifact search wrong backend: ${JSON.stringify(artifactSearch)}`);
 assert(artifactSearch.totalMatches >= 1, `Personal Chrome artifact search found no matches: ${JSON.stringify(artifactSearch)}`);
 assert(artifactSearch.fileMatches?.some((artifact) => artifact.path === savedHar.harPath), `Personal Chrome artifact search missing saved HAR: ${JSON.stringify(artifactSearch.fileMatches)}`);
+const artifactRead = await callTool("devtools_artifact_read", {
+  path: savedHar.harPath,
+  startLine: 1,
+  lineCount: 12,
+});
+assert(artifactRead.backend === "personal-chrome", `Personal Chrome artifact read wrong backend: ${JSON.stringify(artifactRead)}`);
+assert(artifactRead.mode === "line" && artifactRead.returnedLineCount >= 1, `Personal Chrome artifact read did not return line slice: ${JSON.stringify(artifactRead)}`);
+assert(artifactRead.contentText.includes("Agent Browser Runtime"), `Personal Chrome artifact read slice missing expected content: ${artifactRead.contentText}`);
 
 const toolCatalog = await callTool("devtools_tool_catalog", { query: "auth" });
 assert(toolCatalog.toolCount >= 1, "Personal Chrome tool catalog did not return auth tools");
@@ -493,6 +501,7 @@ console.log(`- HAR completeness entries/body-included: ${harCompleteness.entryCo
 console.log(`- HAR artifact inspect: ${harArtifact.json.harEntryCount} entries`);
 console.log(`- artifact index files/kinds: ${artifactIndex.totalFileCount}/${Object.keys(artifactIndex.kinds).length}`);
 console.log(`- artifact search matches/files: ${artifactSearch.totalMatches}/${artifactSearch.matchedFileCount}`);
+console.log(`- artifact read mode/lines: ${artifactRead.mode}/${artifactRead.returnedLineCount}`);
 console.log(`- capability panels: ${capabilityMap.panelCount}`);
 console.log(`- realtime channels ws/sse: ${realtimeLog.websocketCount}/${realtimeLog.eventSourceMessageCount}`);
 

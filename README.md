@@ -328,6 +328,7 @@ Chrome Extension Mode and Managed Browser Mode:
 - `devtools_artifact_inspect`
 - `devtools_artifact_index`
 - `devtools_artifact_search`
+- `devtools_artifact_read`
 - `devtools_request_correlation_graph`
 - `devtools_capture_diff`
 - `devtools_auth_boundary_report`
@@ -504,6 +505,7 @@ The bridge exposes tools at `http://127.0.0.1:17337`, including:
 - `personal_chrome_artifact_inspect`
 - `personal_chrome_artifact_index`
 - `personal_chrome_artifact_search`
+- `personal_chrome_artifact_read`
 - `personal_chrome_request_correlation_graph`
 - `personal_chrome_capture_diff`
 - `personal_chrome_auth_boundary_report`

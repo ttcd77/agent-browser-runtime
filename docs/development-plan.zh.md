@@ -145,6 +145,14 @@
 
 ## 执行记录
 
+### 2026-05-18: Artifact Read
+
+已经完成:
+
+- 新增 `devtools_artifact_read` / `personal_chrome_artifact_read`。
+- Agent 可以按 byte range 或 line range 读取 HAR、trace、bundle、manifest 等本地证据文件的 bounded 片段。
+- 这让证据 drilldown 形成 `index -> search -> read/inspect` 的闭环，仍然只返回客观文件片段，不判断安全含义。
+
 ### 2026-05-17: Artifact Search
 
 已经完成:
