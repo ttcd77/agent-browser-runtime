@@ -1249,6 +1249,33 @@ function buildInitiatorSummary(initiator = null) {
   };
 }
 
+async function buildInitiatorSourceContext(getScriptSource, initiatorSummary = null, contextLines = 5) {
+  const frame = (initiatorSummary?.callFrames || []).find((entry) => entry?.scriptId && Number.isFinite(entry.lineNumber));
+  if (!frame) {
+    return {
+      available: false,
+      reason: "no-script-frame",
+      summary: initiatorSummary || null,
+    };
+  }
+  try {
+    const source = await getScriptSource(String(frame.scriptId));
+    return {
+      available: true,
+      frame,
+      contextLines,
+      lines: sourceContextLines(source?.scriptSource || "", frame.lineNumber, contextLines),
+    };
+  } catch (error) {
+    return {
+      available: false,
+      reason: "script-source-unavailable",
+      frame,
+      error: String(error?.message || error),
+    };
+  }
+}
+
 function buildRequestDetail(entry, cookies = []) {
   if (!entry) return null;
   const requestHeadersLower = lowerHeaderMap(entry.requestHeaders || {});
@@ -2308,13 +2335,24 @@ async function chromeRequestBody(params) {
 
 async function chromeRequestDetail(params) {
   if (!params.requestId) throw new Error("requestId is required");
-  const { tab, session } = await ensureDevtoolsAttached(params);
+  const { tab, target, session } = await ensureDevtoolsAttached(params);
   const request = session.requests.get(String(params.requestId)) || null;
   const cookies = request?.url ? await chrome.cookies.getAll({ url: request.url }).catch(() => []) : [];
+  let initiatorSourceContext = null;
+  if (request) {
+    await chromeDebuggerSendCommand(target, "Debugger.enable").catch(() => {});
+    initiatorSourceContext = await buildInitiatorSourceContext(
+      (scriptId) => chromeDebuggerSendCommand(target, "Debugger.getScriptSource", { scriptId }),
+      buildInitiatorSummary(request.initiator || null),
+      5,
+    );
+  }
+  const detail = buildRequestDetail(request, cookies);
+  if (detail) detail.initiatorSourceContext = initiatorSourceContext;
   return {
     tab: pickTab(tab),
     requestId: String(params.requestId),
-    detail: buildRequestDetail(request, cookies),
+    detail,
     ...(request ? {} : { error: "request_not_found" }),
   };
 }

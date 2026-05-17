@@ -1159,6 +1159,33 @@ function buildInitiatorSummary(initiator = null) {
   };
 }
 
+async function buildInitiatorSourceContext(getScriptSource, initiatorSummary = null, contextLines = 5) {
+  const frame = (initiatorSummary?.callFrames || []).find((entry) => entry?.scriptId && Number.isFinite(entry.lineNumber));
+  if (!frame) {
+    return {
+      available: false,
+      reason: "no-script-frame",
+      summary: initiatorSummary || null,
+    };
+  }
+  try {
+    const source = await getScriptSource(String(frame.scriptId));
+    return {
+      available: true,
+      frame,
+      contextLines,
+      lines: sourceContextLines(source?.scriptSource || "", frame.lineNumber, contextLines),
+    };
+  } catch (error) {
+    return {
+      available: false,
+      reason: "script-source-unavailable",
+      frame,
+      error: String(error?.message || error),
+    };
+  }
+}
+
 function buildRequestDetail(entry, cookies = []) {
   if (!entry) return null;
   const requestHeadersLower = lowerHeaderMap(entry.requestHeaders || {});
@@ -4421,18 +4448,32 @@ function registerStandaloneBrowserTools(tools, cdpPort, profileRegistry, default
       const profile = await resolveProfile(params?.profile);
       const entry = profileRegistry.getTraffic(profile.name, params?.requestId);
       let cookies = [];
+      let initiatorSourceContext = null;
       if (entry?.url) {
-        cookies = await withPageClient(cdpPort, profile.tabId, async (client) => {
+        const detailProbe = await withPageClient(cdpPort, profile.tabId, async (client) => {
           await client.Network.enable().catch(() => {});
+          await client.Debugger.enable().catch(() => {});
           const result = await client.Network.getCookies({ urls: [entry.url] }).catch(() => ({ cookies: [] }));
-          return result.cookies || [];
-        }).catch(() => []);
+          const initiatorSummary = buildInitiatorSummary(entry.initiator || null);
+          return {
+            cookies: result.cookies || [],
+            initiatorSourceContext: await buildInitiatorSourceContext(
+              (scriptId) => client.Debugger.getScriptSource({ scriptId }),
+              initiatorSummary,
+              5,
+            ),
+          };
+        }).catch(() => ({ cookies: [], initiatorSourceContext: null }));
+        cookies = detailProbe.cookies || [];
+        initiatorSourceContext = detailProbe.initiatorSourceContext || null;
       }
+      const detail = buildRequestDetail(entry, cookies);
+      if (detail) detail.initiatorSourceContext = initiatorSourceContext;
       return toolResult({
         profile: profile.name,
         evidenceDir: profile.evidenceDir,
         requestId: params?.requestId,
-        detail: buildRequestDetail(entry, cookies),
+        detail,
         ...(entry ? {} : { error: "request_not_found" }),
       });
     },

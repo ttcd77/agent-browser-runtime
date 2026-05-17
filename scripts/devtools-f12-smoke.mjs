@@ -109,6 +109,13 @@ const appServer = http.createServer(async (req, res) => {
         attempted: true,
         documentCookieVisible: document.cookie.includes('agent_f12_chips='),
       };
+      window.__agentFetchEchoFromFixture = function __agentFetchEchoFromFixture() {
+        return fetch('/echo', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json', 'x-smoke-original': 'yes' },
+          body: JSON.stringify({ hello: 'world', source: 'fixture-function' })
+        }).then(response => response.text());
+      };
       window.__idbReady = new Promise((resolve) => {
         const open = indexedDB.open('agent-f12-smoke-db', 1);
         open.onupgradeneeded = () => open.result.createObjectStore('records', { keyPath: 'id' });
@@ -733,11 +740,7 @@ try {
 
   await callTool(baseUrl, "devtools_eval", {
     profile: "default",
-    expression: `fetch('/echo', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json', 'x-smoke-original': 'yes' },
-      body: JSON.stringify({ hello: 'world' })
-    }).then(response => response.text())`,
+    expression: `window.__agentFetchEchoFromFixture()`,
     awaitPromise: true,
   });
   const replayTraffic = await callTool(baseUrl, "devtools_network_log", {
@@ -746,6 +749,15 @@ try {
   });
   const echoRequest = (replayTraffic.entries || replayTraffic.requests || []).find((entry) => String(entry.url || "").endsWith("/echo"));
   assert(echoRequest?.requestId, `echo request was not captured for replay: ${JSON.stringify(replayTraffic)}`);
+  const echoDetail = await callTool(baseUrl, "devtools_request_detail", {
+    profile: "default",
+    requestId: echoRequest.requestId,
+  });
+  assert(echoDetail.detail?.initiatorSummary?.stackDepth >= 1, `echo request detail missing initiator stack depth: ${JSON.stringify(echoDetail.detail?.initiatorSummary)}`);
+  assert(echoDetail.detail?.initiatorSourceContext, `echo request detail missing initiator source context: ${JSON.stringify(echoDetail.detail)}`);
+  if (echoDetail.detail.initiatorSourceContext.available) {
+    assert(echoDetail.detail.initiatorSourceContext.lines?.some((line) => line.text.includes("__agentFetchEchoFromFixture")), `echo initiator source context missing fixture function: ${JSON.stringify(echoDetail.detail.initiatorSourceContext)}`);
+  }
   const formReplay = await callTool(baseUrl, "devtools_request_replay", {
     profile: "default",
     requestId: echoRequest.requestId,

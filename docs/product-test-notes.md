@@ -124,6 +124,8 @@ It starts an isolated temporary managed browser and verifies:
 - WebSocket frame and EventSource/SSE evidence through `devtools_realtime_log`,
 - per-request Network detail including headers, cookies, timing, initiator, and
   ExtraInfo fields where Chrome exposes them,
+- request initiator source context with nearby script lines when Chrome exposes
+  the initiating script frame,
 - Accessibility tree extraction,
 - raw Chrome `DOMSnapshot.captureSnapshot`,
 - live DOM search through Chrome `DOM.performSearch`,
