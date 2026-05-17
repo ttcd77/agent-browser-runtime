@@ -1042,6 +1042,14 @@ try {
   assert(harArtifact.json?.ok === true, `artifact inspect did not parse HAR JSON: ${JSON.stringify(harArtifact.json)}`);
   assert(harArtifact.json?.harEntryCount >= 1, `artifact inspect missing HAR entry count: ${JSON.stringify(harArtifact.json)}`);
   assert(harArtifact.matchCount >= 1, `artifact inspect did not find query match: ${JSON.stringify(harArtifact.matches)}`);
+  const artifactIndex = await callTool(baseUrl, "devtools_artifact_index", {
+    profile: "default",
+    kind: "har",
+    maxFiles: 20,
+  });
+  assert(artifactIndex.backend === "managed-cdp", `artifact index wrong backend: ${JSON.stringify(artifactIndex)}`);
+  assert(artifactIndex.totalFileCount >= 1, `artifact index missing files: ${JSON.stringify(artifactIndex)}`);
+  assert(artifactIndex.artifacts?.some((artifact) => artifact.kind === "har" && artifact.path === savedHar.harPath), `artifact index missing saved HAR: ${JSON.stringify(artifactIndex.artifacts)}`);
 
   const harWithBodies = await callTool(baseUrl, "devtools_export_har", {
     profile: "default",
@@ -1077,6 +1085,7 @@ try {
   console.log(`- network timeline rows: ${networkTimeline.timeline.length}`);
   console.log(`- capture bisect: ${captureBisect.buckets.network.requestCount} requests -> ${captureBisect.bisectPath}`);
   console.log(`- HAR artifact inspect: ${harArtifact.json.harEntryCount} entries / ${harArtifact.matchCount} matches`);
+  console.log(`- artifact index files/kinds: ${artifactIndex.totalFileCount}/${Object.keys(artifactIndex.kinds).length}`);
   console.log(`- request detail id: ${requestDetail.detail.requestId}`);
   console.log(`- DevTools issues: ${issuesLog.issueCount}`);
   console.log(`- accessibility nodes: ${accessibility.nodeCount}`);

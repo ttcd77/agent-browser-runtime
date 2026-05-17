@@ -145,6 +145,14 @@
 
 ## 执行记录
 
+### 2026-05-17: Artifact Index
+
+已经完成:
+
+- 新增 `devtools_artifact_index` / `personal_chrome_artifact_index`。
+- Agent 可以先列出当前证据池里的 HAR、trace、screenshot、Application export、bundle、manifest、graph 等 artifact，再选择具体文件调用 `devtools_artifact_inspect`。
+- 这一步继续保持客观工具边界: 只暴露文件类型、大小、路径、mtime、hash 和 drilldown 输入，不判断安全含义。
+
 ### 2026-05-17: Artifact Drilldown
 
 已经完成:

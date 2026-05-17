@@ -538,7 +538,7 @@ function listEvidenceFiles(rootDir, options = {}) {
   const out = [];
   const walk = (dir) => {
     if (out.length >= maxFiles || !existsSync(dir)) return;
-    for (const name of readdirSync(dir)) {
+    for (const name of readdirSync(dir).sort().reverse()) {
       if (out.length >= maxFiles) break;
       const file = join(dir, name);
       let stat;
@@ -656,6 +656,83 @@ function inspectArtifactFile(params = {}) {
     out.searchTruncated = buffer.length > 5_000_000;
   }
   return out;
+}
+
+function inferArtifactKind(file) {
+  const value = String(file || "").replace(/\\/g, "/").toLowerCase();
+  const ext = value.split(".").pop() || "";
+  if (ext === "har" || value.includes("/har/")) return "har";
+  if (value.includes("/traces/") || value.includes("chrome-trace") || value.includes("trace")) return "trace";
+  if (value.includes("/screenshots/") || ["png", "jpg", "jpeg", "webp"].includes(ext)) return "screenshot";
+  if (value.includes("/application/") || value.includes("application-export")) return "application";
+  if (value.includes("/bundles/") || value.includes("evidence-bundle") || value.includes("f12-evidence")) return "bundle";
+  if (value.includes("/manifests/") || value.includes("manifest")) return "manifest";
+  if (value.includes("/graphs/") || value.includes("graph")) return "graph";
+  if (value.includes("/diffs/") || value.includes("diff")) return "diff";
+  if (value.includes("/auth/") || value.includes("auth-boundary")) return "auth-boundary";
+  if (value.includes("/boundaries/") || value.includes("worker-frame")) return "boundary";
+  if (value.includes("/heap/") || ext === "heapsnapshot") return "heap";
+  if (value.includes("/profiles/") || value.includes("cpu-profile")) return "cpu-profile";
+  if (value.includes("/source-maps/") || value.includes("source-map")) return "source-map";
+  if (value.includes("/bodies/") || value.includes("body")) return "body";
+  if (ext === "json") return "json";
+  if (["txt", "log", "md", "html", "js", "mjs", "ts", "css", "csv", "xml", "yml", "yaml", "map"].includes(ext)) return "text";
+  return "other";
+}
+
+function buildArtifactIndex(files = [], params = {}) {
+  const query = String(params.query || "").trim().toLowerCase();
+  const kindFilter = String(params.kind || "").trim().toLowerCase();
+  const maxFiles = Math.max(1, Math.min(Number(params.maxFiles) || 200, 2000));
+  const minBytes = Number.isFinite(Number(params.minBytes)) ? Number(params.minBytes) : null;
+  const maxBytes = Number.isFinite(Number(params.maxBytes)) ? Number(params.maxBytes) : null;
+  const rows = files.map((file) => ({
+    ...file,
+    kind: inferArtifactKind(file.path || file.relativePath || ""),
+  }));
+  const filtered = rows
+    .filter((file) => !kindFilter || file.kind === kindFilter)
+    .filter((file) => !query || `${file.path || ""} ${file.relativePath || ""} ${file.kind}`.toLowerCase().includes(query))
+    .filter((file) => minBytes == null || Number(file.bytes || 0) >= minBytes)
+    .filter((file) => maxBytes == null || Number(file.bytes || 0) <= maxBytes)
+    .sort((a, b) => String(b.modifiedAt || "").localeCompare(String(a.modifiedAt || "")));
+  const kinds = {};
+  let totalBytes = 0;
+  for (const file of rows) {
+    kinds[file.kind] = (kinds[file.kind] || 0) + 1;
+    totalBytes += Number(file.bytes || 0);
+  }
+  return {
+    schema: "agent-browser-runtime.artifact-index.v1",
+    generatedAt: new Date().toISOString(),
+    totalFileCount: rows.length,
+    returnedFileCount: Math.min(filtered.length, maxFiles),
+    totalBytes,
+    kinds,
+    filters: {
+      query: query || null,
+      kind: kindFilter || null,
+      minBytes,
+      maxBytes,
+      maxFiles,
+    },
+    artifacts: filtered.slice(0, maxFiles).map((file) => ({
+      path: file.path,
+      relativePath: file.relativePath,
+      kind: file.kind,
+      bytes: file.bytes,
+      modifiedAt: file.modifiedAt,
+      sha256: file.sha256 || null,
+      hashSkipped: Boolean(file.hashSkipped),
+      nextTool: "devtools_artifact_inspect",
+      inspectInput: { path: file.path },
+    })),
+    boundaries: [
+      "This index lists local evidence artifacts that already exist on disk.",
+      "It does not read every artifact body and does not decide vulnerability impact.",
+      "Use devtools_artifact_inspect for bounded structure, preview, and literal match drill-down.",
+    ],
+  };
 }
 
 function requestOrigin(url) {
@@ -2418,7 +2495,7 @@ const DEVTOOLS_CAPABILITY_META = {
   "evidence-workflow": {
     panel: "Recorder / Evidence",
     purpose: "Create reusable evidence packs, manifests, diffs, correlation graphs, and research workflows.",
-    firstPass: ["browser_security_pack", "devtools_security_research_pack", "devtools_evidence_bundle", "devtools_evidence_manifest"],
+    firstPass: ["browser_security_pack", "devtools_security_research_pack", "devtools_artifact_index", "devtools_evidence_bundle", "devtools_evidence_manifest"],
   },
   "raw-cdp": {
     panel: "Raw CDP",
@@ -9276,6 +9353,32 @@ function registerStandaloneBrowserTools(tools, cdpPort, profileRegistry, default
     },
   });
 
+  tools.set("browser_artifact_index", {
+    name: "browser_artifact_index",
+    description: "List saved profile evidence artifacts by type, size, mtime, and path so agents can choose bounded drill-down targets.",
+    parameters: {
+      type: "object",
+      properties: {
+        profile: { type: "string" },
+        kind: { type: "string" },
+        query: { type: "string" },
+        maxFiles: { type: "number" },
+        minBytes: { type: "number" },
+        maxBytes: { type: "number" },
+      },
+    },
+    async execute(_id, params) {
+      const profile = await resolveProfile(params?.profile);
+      const files = listEvidenceFiles(profile.evidenceDir, { maxFiles: Math.max(Number(params?.maxFiles) || 500, 500) });
+      return toolResult({
+        backend: "managed-cdp",
+        profile: profile.name,
+        evidenceDir: profile.evidenceDir,
+        ...buildArtifactIndex(files, params),
+      });
+    },
+  });
+
   tools.set("browser_request_correlation_graph", {
     name: "browser_request_correlation_graph",
     description: "Build an objective graph connecting frames, scripts, Network requests, and Console entries observed in current F12 evidence.",
@@ -10880,6 +10983,7 @@ function registerStandaloneBrowserTools(tools, cdpPort, profileRegistry, default
   aliasTool("devtools_evidence_bundle", "browser_evidence_bundle", "Unified Agent DevTools API: export a compact objective F12 evidence bundle.");
   aliasTool("devtools_evidence_manifest", "browser_evidence_manifest", "Unified Agent DevTools API: write a manifest with evidence paths, hashes, capture metadata, and provenance.");
   aliasTool("devtools_artifact_inspect", "browser_artifact_inspect", "Unified Agent DevTools API: inspect a saved evidence artifact with bounded preview, structure, and literal matches.");
+  aliasTool("devtools_artifact_index", "browser_artifact_index", "Unified Agent DevTools API: list saved evidence artifacts by type, size, mtime, and path.");
   aliasTool("devtools_request_correlation_graph", "browser_request_correlation_graph", "Unified Agent DevTools API: build a frame/script/request/console correlation graph from F12 evidence.");
   aliasTool("devtools_capture_diff", "browser_capture_diff", "Unified Agent DevTools API: compare before/after evidence artifacts or current captured traffic.");
   aliasTool("devtools_auth_boundary_report", "browser_auth_boundary_report", "Unified Agent DevTools API: collect objective auth boundary evidence without deciding vulnerability impact.");

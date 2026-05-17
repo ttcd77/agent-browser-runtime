@@ -210,6 +210,7 @@ captured rows; they do not make a security judgement.
 - `devtools_evidence_bundle`
 - `devtools_evidence_manifest`
 - `devtools_artifact_inspect`
+- `devtools_artifact_index`
 - `devtools_request_correlation_graph`
 - `devtools_capture_diff`
 - `devtools_auth_boundary_report`

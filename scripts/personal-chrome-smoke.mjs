@@ -452,6 +452,13 @@ assert(harArtifact.backend === "personal-chrome", `Personal Chrome artifact insp
 assert(harArtifact.exists && harArtifact.bytes > 0, `Personal Chrome artifact inspect could not read saved HAR: ${JSON.stringify(harArtifact)}`);
 assert(harArtifact.json?.ok === true, `Personal Chrome artifact inspect did not parse HAR JSON: ${JSON.stringify(harArtifact.json)}`);
 assert(harArtifact.json?.harEntryCount >= 1, `Personal Chrome artifact inspect missing HAR entry count: ${JSON.stringify(harArtifact.json)}`);
+const artifactIndex = await callTool("devtools_artifact_index", {
+  kind: "har",
+  maxFiles: 20,
+});
+assert(artifactIndex.backend === "personal-chrome", `Personal Chrome artifact index wrong backend: ${JSON.stringify(artifactIndex)}`);
+assert(artifactIndex.totalFileCount >= 1, `Personal Chrome artifact index missing files: ${JSON.stringify(artifactIndex)}`);
+assert(artifactIndex.artifacts?.some((artifact) => artifact.kind === "har" && artifact.path === savedHar.harPath), `Personal Chrome artifact index missing saved HAR: ${JSON.stringify(artifactIndex.artifacts)}`);
 
 const toolCatalog = await callTool("devtools_tool_catalog", { query: "auth" });
 assert(toolCatalog.toolCount >= 1, "Personal Chrome tool catalog did not return auth tools");
@@ -476,6 +483,7 @@ console.log(`- facade tools: ${facadeInspect.facade}/${facadeCapture.facade}/${f
 console.log(`- capture bisect buckets: ${captureBisect.buckets.network.requestCount}/${captureBisect.buckets.pages.pageCount}`);
 console.log(`- HAR completeness entries/body-included: ${harCompleteness.entryCount}/${harCompleteness.body.includedCount}`);
 console.log(`- HAR artifact inspect: ${harArtifact.json.harEntryCount} entries`);
+console.log(`- artifact index files/kinds: ${artifactIndex.totalFileCount}/${Object.keys(artifactIndex.kinds).length}`);
 console.log(`- capability panels: ${capabilityMap.panelCount}`);
 console.log(`- realtime channels ws/sse: ${realtimeLog.websocketCount}/${realtimeLog.eventSourceMessageCount}`);
 
