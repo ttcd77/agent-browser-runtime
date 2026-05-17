@@ -280,6 +280,7 @@ Chrome Extension Mode and Managed Browser Mode:
 - `devtools_source_get`
 - `devtools_source_pretty_print`
 - `devtools_source_map_metadata`
+- `devtools_source_map_sources`
 - `devtools_global_search`
 - `devtools_evidence_bundle`
 - `devtools_evidence_manifest`
@@ -451,6 +452,7 @@ The bridge exposes tools at `http://127.0.0.1:17337`, including:
 - `personal_chrome_source_get`
 - `personal_chrome_source_pretty_print`
 - `personal_chrome_source_map_metadata`
+- `personal_chrome_source_map_sources`
 - `personal_chrome_global_search`
 - `personal_chrome_evidence_bundle`
 - `personal_chrome_evidence_manifest`

@@ -13,6 +13,7 @@ const traceDir = process.env.PERSONAL_CHROME_TRACE_DIR || join(process.cwd(), "t
 const harDir = process.env.PERSONAL_CHROME_HAR_DIR || join(process.cwd(), "tmp", "personal-chrome-har");
 const applicationExportDir = process.env.PERSONAL_CHROME_APPLICATION_EXPORT_DIR || join(process.cwd(), "tmp", "personal-chrome-application");
 const cpuProfileDir = process.env.PERSONAL_CHROME_CPU_PROFILE_DIR || join(process.cwd(), "tmp", "personal-chrome-cpu-profiles");
+const sourceMapDir = process.env.PERSONAL_CHROME_SOURCE_MAP_DIR || join(process.cwd(), "tmp", "personal-chrome-sources");
 const manifestDir = process.env.PERSONAL_CHROME_MANIFEST_DIR || join(process.cwd(), "tmp", "personal-chrome-manifests");
 const graphDir = process.env.PERSONAL_CHROME_GRAPH_DIR || join(process.cwd(), "tmp", "personal-chrome-graphs");
 const diffDir = process.env.PERSONAL_CHROME_DIFF_DIR || join(process.cwd(), "tmp", "personal-chrome-diffs");
@@ -121,6 +122,7 @@ function normalizeCommand(toolName) {
     devtools_source_get: "chrome_source_get",
     devtools_source_pretty_print: "chrome_source_pretty_print",
     devtools_source_map_metadata: "chrome_source_map_metadata",
+    devtools_source_map_sources: "chrome_source_map_sources",
     devtools_global_search: "chrome_global_search",
     devtools_evidence_bundle: "chrome_evidence_bundle",
     devtools_evidence_manifest: "chrome_evidence_manifest",
@@ -1048,6 +1050,62 @@ function persistEvidenceBundle(result, params = {}) {
   };
 }
 
+function safeArtifactName(raw, fallback = "source") {
+  const name = String(raw || fallback)
+    .replace(/\\/g, "/")
+    .split("/")
+    .filter(Boolean)
+    .pop() || fallback;
+  return name.replace(/[^a-zA-Z0-9_.-]/g, "_").slice(0, 120) || fallback;
+}
+
+function persistSourceMapSources(result, params = {}) {
+  if (!Array.isArray(result?.results) || params.save === false) return result;
+  const root = params.path || join(sourceMapDir, `${Date.now()}-source-map-sources`);
+  mkdirSync(root, { recursive: true });
+  const persistedResults = [];
+  for (const item of result.results) {
+    if (!Array.isArray(item.sources)) {
+      persistedResults.push(item);
+      continue;
+    }
+    const scriptName = safeArtifactName(item.script?.url || item.script?.scriptId || "script", "script");
+    const scriptDir = join(root, scriptName);
+    mkdirSync(scriptDir, { recursive: true });
+    const sources = [];
+    for (const source of item.sources) {
+      if (!source.hasContent) {
+        sources.push({ ...source, contentText: undefined, path: null, saved: false, reason: "source map entry has no sourcesContent" });
+        continue;
+      }
+      const file = join(scriptDir, `${String(source.index).padStart(3, "0")}-${safeArtifactName(source.source, "source")}`);
+      writeFileSync(file, source.contentText || "", "utf8");
+      sources.push({
+        ...source,
+        contentText: undefined,
+        path: file,
+        saved: true,
+        sha256: sha256File(file),
+      });
+    }
+    persistedResults.push({ ...item, sources, sourceRoot: scriptDir });
+  }
+  const manifestPath = join(root, "manifest.json");
+  const manifest = {
+    generatedAt: new Date().toISOString(),
+    backend: "personal-chrome",
+    count: persistedResults.length,
+    results: persistedResults,
+  };
+  writeFileSync(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`, "utf8");
+  return {
+    ...result,
+    sourceRoot: root,
+    manifestPath,
+    results: persistedResults,
+  };
+}
+
 function postProcessToolResult(toolName, result, params = {}) {
   if (toolName === "personal_chrome_screenshot" || toolName === "devtools_screenshot") {
     return persistScreenshot(result, params);
@@ -1069,6 +1127,9 @@ function postProcessToolResult(toolName, result, params = {}) {
   }
   if (toolName === "personal_chrome_evidence_bundle" || toolName === "devtools_evidence_bundle") {
     return persistEvidenceBundle(result, params);
+  }
+  if (toolName === "personal_chrome_source_map_sources" || toolName === "devtools_source_map_sources") {
+    return persistSourceMapSources(result, params);
   }
   return result;
 }
@@ -1574,6 +1635,7 @@ const tools = {
   personal_chrome_source_get: "Return JavaScript source for a scriptId captured through chrome.debugger.",
   personal_chrome_source_pretty_print: "Return a DevTools-style heuristic pretty-printed JavaScript source from the user's real Chrome tab.",
   personal_chrome_source_map_metadata: "Return sourceMappingURL and source map metadata from the user's real Chrome tab.",
+  personal_chrome_source_map_sources: "Extract original source files from source maps in the user's real Chrome tab.",
   personal_chrome_global_search: "Search F12 evidence surfaces in the user's real Chrome tab for a literal query.",
   personal_chrome_evidence_bundle: "Export a compact objective F12 evidence bundle from the user's real Chrome tab.",
   personal_chrome_evidence_manifest: "Write a manifest with Personal Chrome evidence paths, hashes, capture metadata, and provenance.",
@@ -1660,6 +1722,7 @@ const tools = {
   devtools_source_get: "Unified Agent DevTools API: read script source by scriptId.",
   devtools_source_pretty_print: "Unified Agent DevTools API: pretty-print parsed JavaScript source.",
   devtools_source_map_metadata: "Unified Agent DevTools API: read source map reference and metadata.",
+  devtools_source_map_sources: "Unified Agent DevTools API: extract original source files from source maps.",
   devtools_global_search: "Unified Agent DevTools API: search F12 evidence surfaces for a literal query.",
   devtools_evidence_bundle: "Unified Agent DevTools API: export a compact objective F12 evidence bundle.",
   devtools_evidence_manifest: "Unified Agent DevTools API: write a manifest with evidence paths, hashes, capture metadata, and provenance.",

@@ -185,6 +185,11 @@ Verified manually during development:
   - Managed Browser: parsed an inline source map data URL and returned source
     count, names count, mappings size, and sourcesContent presence without
     returning the whole original-source tree.
+- `devtools_source_map_sources`
+  - Managed Browser: extracts source-map original files from `sourcesContent`
+    into local evidence artifacts and returns manifest/file paths.
+  - Personal Chrome: receives source-map originals through `chrome.debugger`
+    and persists them under `tmp/personal-chrome-sources`.
 - `devtools_save_har`
   - Managed Browser: saved captured traffic as a HAR file under profile
     evidence.

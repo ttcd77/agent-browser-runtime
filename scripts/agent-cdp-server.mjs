@@ -2683,6 +2683,103 @@ async function parseSourceMapMetadata(reference, scriptUrl, options = {}) {
   return result;
 }
 
+async function loadSourceMap(reference, scriptUrl, options = {}) {
+  const metadata = await parseSourceMapMetadata(reference, scriptUrl, { fetchMap: Boolean(options.fetchMap) });
+  if (!reference || metadata.error) return { metadata, map: null, rawText: "" };
+  try {
+    if (String(reference).startsWith("data:")) {
+      const rawText = decodeDataUrlText(reference);
+      return { metadata, map: JSON.parse(rawText), rawText };
+    }
+    if (!options.fetchMap || !metadata.resolvedURL || !metadata.fetched || !metadata.httpStatus || metadata.httpStatus >= 400) {
+      return { metadata, map: null, rawText: "" };
+    }
+    const response = await fetch(metadata.resolvedURL);
+    const rawText = await response.text();
+    if (!response.ok) {
+      return { metadata: { ...metadata, error: metadata.error || `HTTP ${response.status}` }, map: null, rawText };
+    }
+    return { metadata, map: JSON.parse(rawText), rawText };
+  } catch (err) {
+    return { metadata: { ...metadata, error: String(err?.message || err) }, map: null, rawText: "" };
+  }
+}
+
+function safeArtifactName(raw, fallback = "source") {
+  const name = String(raw || fallback)
+    .replace(/\\/g, "/")
+    .split("/")
+    .filter(Boolean)
+    .pop() || fallback;
+  return name.replace(/[^a-zA-Z0-9_.-]/g, "_").slice(0, 120) || fallback;
+}
+
+function sourceMapOriginalEntries(map, script = {}, options = {}) {
+  const sources = Array.isArray(map?.sources) ? map.sources : [];
+  const sourcesContent = Array.isArray(map?.sourcesContent) ? map.sourcesContent : [];
+  const maxSources = Math.max(1, Math.min(Number(options.maxSources || 100), 1000));
+  const maxContentChars = Math.max(0, Number(options.maxContentChars || 0));
+  return sources.slice(0, maxSources).map((source, index) => {
+    const hasContent = typeof sourcesContent[index] === "string";
+    const content = hasContent ? String(sourcesContent[index]) : "";
+    let resolvedURL = source;
+    try {
+      const root = map?.sourceRoot ? new URL(String(map.sourceRoot), script.url || "about:blank").toString() : script.url || "about:blank";
+      resolvedURL = new URL(String(source), root).toString();
+    } catch {
+      // Keep the source map's raw source entry when URL resolution is not meaningful.
+    }
+    const limited = maxContentChars > 0 ? truncateText(content, maxContentChars) : { text: "", truncated: false };
+    return {
+      index,
+      source: String(source),
+      resolvedURL,
+      hasContent,
+      contentBytes: Buffer.byteLength(content, "utf8"),
+      contentText: content,
+      content: limited.text,
+      contentTruncated: limited.truncated,
+    };
+  });
+}
+
+function writeSourceMapOriginalSources(rootDir, script = {}, entries = [], metadata = {}) {
+  const stamp = Date.now();
+  const scriptName = safeArtifactName(script.url || script.scriptId || "script", "script");
+  const outDir = join(rootDir, "sources", `${stamp}-${scriptName}`);
+  mkdirSync(outDir, { recursive: true });
+  const savedSources = [];
+  for (const entry of entries) {
+    if (!entry.hasContent) {
+      savedSources.push({ ...entry, path: null, saved: false, reason: "source map entry has no sourcesContent" });
+      continue;
+    }
+    const file = join(outDir, `${String(entry.index).padStart(3, "0")}-${safeArtifactName(entry.source, "source")}`);
+    writeFileSync(file, entry.contentText || "", "utf8");
+    savedSources.push({
+      ...entry,
+      path: file,
+      saved: true,
+      sha256: fileSha256(file),
+    });
+  }
+  const manifestPath = join(outDir, "manifest.json");
+  const manifest = {
+    generatedAt: new Date().toISOString(),
+    script,
+    metadata,
+    sourceCount: entries.length,
+    savedCount: savedSources.filter((entry) => entry.saved).length,
+    sources: savedSources.map(({ content, contentText, ...entry }) => entry),
+  };
+  writeFileSync(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`, "utf8");
+  return {
+    sourceRoot: outDir,
+    manifestPath,
+    sources: savedSources.map(({ content, contentText, ...entry }) => entry),
+  };
+}
+
 function sourceContextLines(sourceText, lineNumber = 0, contextLines = 5) {
   const lines = String(sourceText || "").split(/\r?\n/);
   const zeroBased = Math.max(0, Number(lineNumber) || 0);
@@ -6833,6 +6930,116 @@ function registerStandaloneBrowserTools(tools, cdpPort, profileRegistry, default
     },
   });
 
+  tools.set("browser_source_map_sources", {
+    name: "browser_source_map_sources",
+    description: "Extract original source files from source maps and save them as profile-scoped evidence artifacts.",
+    parameters: {
+      type: "object",
+      properties: {
+        profile: { type: "string" },
+        tabId: { type: "string" },
+        scriptId: { type: "string" },
+        query: { type: "string" },
+        urlContains: { type: "string" },
+        hasSourceMap: { type: "boolean" },
+        isModule: { type: "boolean" },
+        reload: { type: "boolean" },
+        ignoreCache: { type: "boolean" },
+        waitMs: { type: "number" },
+        maxScripts: { type: "number" },
+        maxSources: { type: "number" },
+        maxContentChars: { type: "number" },
+        fetchMap: { type: "boolean" },
+        save: { type: "boolean" },
+      },
+    },
+    async execute(_id, params) {
+      const profile = await resolveProfile(params?.profile);
+      const waitMs = typeof params?.waitMs === "number" ? params.waitMs : 1200;
+      const maxScripts = typeof params?.maxScripts === "number" ? params.maxScripts : 40;
+      return toolResult(await withPageClient(cdpPort, params?.tabId || profile.tabId, async (client, target) => {
+        const scripts = new Map();
+        await client.Debugger.enable();
+        client.Debugger.scriptParsed((event) => {
+          scripts.set(event.scriptId, {
+            timestamp: new Date().toISOString(),
+            scriptId: event.scriptId,
+            url: event.url,
+            startLine: event.startLine,
+            startColumn: event.startColumn,
+            endLine: event.endLine,
+            endColumn: event.endColumn,
+            executionContextId: event.executionContextId,
+            hash: event.hash,
+            executionContextAuxData: event.executionContextAuxData,
+            isLiveEdit: event.isLiveEdit,
+            sourceMapURL: event.sourceMapURL,
+            hasSourceURL: event.hasSourceURL,
+            isModule: event.isModule,
+            length: event.length,
+            stackTrace: event.stackTrace,
+          });
+        });
+        if (params?.reload !== false) {
+          await client.Page.enable();
+          await client.Page.reload({ ignoreCache: Boolean(params?.ignoreCache) });
+          await sleep(waitMs);
+        } else {
+          await sleep(300);
+        }
+        const rows = [...scripts.values()]
+          .filter((script) => !params?.scriptId || String(script.scriptId) === String(params.scriptId))
+          .filter((script) => sourceMatches(script, params))
+          .slice(-maxScripts);
+        const results = [];
+        let lastError = null;
+        for (const script of rows) {
+          try {
+            const source = await client.Debugger.getScriptSource({ scriptId: script.scriptId });
+            const text = String(source?.scriptSource || "");
+            if (params?.query && !text.includes(String(params.query))) continue;
+            const reference = script.sourceMapURL || extractSourceMapReference(text);
+            const loaded = await loadSourceMap(reference, script.url, { fetchMap: Boolean(params?.fetchMap) });
+            const entries = loaded.map ? sourceMapOriginalEntries(loaded.map, script, params || {}) : [];
+            const saved = params?.save === false
+              ? null
+              : writeSourceMapOriginalSources(profile.evidenceDir, script, entries, loaded.metadata);
+            results.push({
+              script,
+              sourceMapURLFromDebugger: script.sourceMapURL || "",
+              sourceMapURLFromComment: extractSourceMapReference(text),
+              metadata: loaded.metadata,
+              sourceCount: entries.length,
+              sourcesWithContent: entries.filter((entry) => entry.hasContent).length,
+              sources: saved?.sources || entries.map(({ content, contentText, ...entry }) => entry),
+              sourceRoot: saved?.sourceRoot || null,
+              manifestPath: saved?.manifestPath || null,
+            });
+          } catch (err) {
+            lastError = String(err?.message || err);
+            results.push({ script, error: lastError });
+          }
+        }
+        if (!results.length) {
+          throw new Error(lastError || "no matching source found");
+        }
+        await profileRegistry.touchProfile(profile.name, { tabId: target.id });
+        return {
+          profile: profile.name,
+          tabId: target.id,
+          evidenceDir: profile.evidenceDir,
+          count: results.length,
+          results,
+          captureBoundaries: [
+            "Only source maps referenced by parsed scripts can be extracted.",
+            "sourcesContent is saved when present. External original sources are not fetched unless they are embedded in the source map.",
+            "For external .map files, pass fetchMap=true so the runtime can retrieve and parse the map file.",
+          ],
+        };
+      }));
+    },
+  });
+
   tools.set("browser_global_search", {
     name: "browser_global_search",
     description: "Search F12 evidence surfaces for a literal query across Network records, parsed Sources, Storage, IndexedDB samples, and Cache metadata.",
@@ -8880,6 +9087,7 @@ function registerStandaloneBrowserTools(tools, cdpPort, profileRegistry, default
   aliasTool("devtools_source_get", "browser_source_get", "Unified Agent DevTools API: read script source by scriptId.");
   aliasTool("devtools_source_pretty_print", "browser_source_pretty_print", "Unified Agent DevTools API: pretty-print parsed JavaScript source.");
   aliasTool("devtools_source_map_metadata", "browser_source_map_metadata", "Unified Agent DevTools API: read source map reference and metadata.");
+  aliasTool("devtools_source_map_sources", "browser_source_map_sources", "Unified Agent DevTools API: extract original source files from source maps.");
   aliasTool("devtools_global_search", "browser_global_search", "Unified Agent DevTools API: search F12 evidence surfaces for a literal query.");
   aliasTool("devtools_evidence_bundle", "browser_evidence_bundle", "Unified Agent DevTools API: export a compact objective F12 evidence bundle.");
   aliasTool("devtools_evidence_manifest", "browser_evidence_manifest", "Unified Agent DevTools API: write a manifest with evidence paths, hashes, capture metadata, and provenance.");

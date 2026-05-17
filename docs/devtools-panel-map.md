@@ -88,6 +88,7 @@ evidence.
 | Read source by script id | `devtools_source_get` |
 | Pretty-print parsed JavaScript source | `devtools_source_pretty_print` |
 | Inspect source map reference and metadata | `devtools_source_map_metadata` |
+| Extract original source files from source maps | `devtools_source_map_sources` |
 | Search script source | `devtools_sources_search` |
 | Pause/resume/step and inspect call frames/scopes | `devtools_debugger_control` |
 | Trace token-like data through fetch/XHR/storage/cookies | `devtools_token_flow_trace` |

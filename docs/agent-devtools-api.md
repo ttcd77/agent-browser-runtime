@@ -188,6 +188,7 @@ DevTools/F12 data layer:
 - `devtools_source_get`
 - `devtools_source_pretty_print`
 - `devtools_source_map_metadata`
+- `devtools_source_map_sources`
 - `devtools_global_search`
 - `devtools_evidence_bundle`
 - `devtools_evidence_manifest`

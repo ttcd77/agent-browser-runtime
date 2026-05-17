@@ -284,6 +284,8 @@ async function executeCommand(command, params) {
       return await chromeSourcePrettyPrint(params);
     case "chrome_source_map_metadata":
       return await chromeSourceMapMetadata(params);
+    case "chrome_source_map_sources":
+      return await chromeSourceMapSources(params);
     case "chrome_global_search":
       return await chromeGlobalSearch(params);
     case "chrome_evidence_bundle":
@@ -4881,6 +4883,56 @@ async function parseSourceMapMetadata(reference, scriptUrl, options = {}) {
   return result;
 }
 
+async function loadSourceMap(reference, scriptUrl, options = {}) {
+  const metadata = await parseSourceMapMetadata(reference, scriptUrl, { fetchMap: Boolean(options.fetchMap) });
+  if (!reference || metadata.error) return { metadata, map: null, rawText: "" };
+  try {
+    if (String(reference).startsWith("data:")) {
+      const rawText = decodeDataUrlText(reference);
+      return { metadata, map: JSON.parse(rawText), rawText };
+    }
+    if (!options.fetchMap || !metadata.resolvedURL || !metadata.fetched || !metadata.httpStatus || metadata.httpStatus >= 400) {
+      return { metadata, map: null, rawText: "" };
+    }
+    const response = await fetch(metadata.resolvedURL);
+    const rawText = await response.text();
+    if (!response.ok) {
+      return { metadata: { ...metadata, error: metadata.error || `HTTP ${response.status}` }, map: null, rawText };
+    }
+    return { metadata, map: JSON.parse(rawText), rawText };
+  } catch (err) {
+    return { metadata: { ...metadata, error: String(err?.message || err) }, map: null, rawText: "" };
+  }
+}
+
+function sourceMapOriginalEntries(map, script = {}, options = {}) {
+  const sources = Array.isArray(map?.sources) ? map.sources : [];
+  const sourcesContent = Array.isArray(map?.sourcesContent) ? map.sourcesContent : [];
+  const maxSources = Math.max(1, Math.min(Number(options.maxSources || 100), 1000));
+  const maxContentChars = Math.max(0, Number(options.maxContentChars || 120000));
+  return sources.slice(0, maxSources).map((source, index) => {
+    const hasContent = typeof sourcesContent[index] === "string";
+    const content = hasContent ? String(sourcesContent[index]) : "";
+    let resolvedURL = source;
+    try {
+      const root = map?.sourceRoot ? new URL(String(map.sourceRoot), script.url || "about:blank").toString() : script.url || "about:blank";
+      resolvedURL = new URL(String(source), root).toString();
+    } catch {
+      // Keep the source map's raw source entry when URL resolution is not meaningful.
+    }
+    const limited = truncateText(content, maxContentChars);
+    return {
+      index,
+      source: String(source),
+      resolvedURL,
+      hasContent,
+      contentBytes: utf8Bytes(content),
+      contentText: limited.text,
+      contentTruncated: limited.truncated,
+    };
+  });
+}
+
 async function pickScriptSource(params, options = {}) {
   const { tab, target, session } = await ensureDevtoolsAttached(params);
   if (params.reload !== false) {
@@ -4964,6 +5016,57 @@ async function chromeSourceMapMetadata(params) {
     tab: pickTab(tab),
     count: results.length,
     results,
+  };
+}
+
+async function chromeSourceMapSources(params) {
+  const { tab, target, session } = await ensureDevtoolsAttached(params);
+  if (params.reload !== false) {
+    session.scripts = new Map();
+    await chromeDebuggerSendCommand(target, "Debugger.enable").catch(() => {});
+    await chromeDebuggerSendCommand(target, "Page.enable").catch(() => {});
+    await chromeDebuggerSendCommand(target, "Page.reload", { ignoreCache: Boolean(params.ignoreCache) }).catch(() => {});
+    await delay(Number(params.waitMs || 1200));
+  }
+  const maxScripts = Number(params.maxScripts || 40);
+  const scripts = [...session.scripts.values()]
+    .filter((script) => !params.scriptId || String(script.scriptId) === String(params.scriptId))
+    .filter((script) => sourceMatches(script, params))
+    .slice(-maxScripts);
+  const results = [];
+  let lastError = null;
+  for (const script of scripts) {
+    try {
+      const source = await chromeDebuggerSendCommand(target, "Debugger.getScriptSource", { scriptId: script.scriptId });
+      const text = String(source?.scriptSource || "");
+      if (params.query && !text.includes(String(params.query))) continue;
+      const reference = script.sourceMapURL || extractSourceMapReference(text);
+      const loaded = await loadSourceMap(reference, script.url, { fetchMap: Boolean(params.fetchMap) });
+      const sources = loaded.map ? sourceMapOriginalEntries(loaded.map, script, params || {}) : [];
+      results.push({
+        script,
+        sourceMapURLFromDebugger: script.sourceMapURL || "",
+        sourceMapURLFromComment: extractSourceMapReference(text),
+        metadata: loaded.metadata,
+        sourceCount: sources.length,
+        sourcesWithContent: sources.filter((entry) => entry.hasContent).length,
+        sources,
+      });
+    } catch (err) {
+      lastError = String(err?.message || err);
+      results.push({ script, error: lastError });
+    }
+  }
+  if (!results.length) throw new Error(lastError || "no matching source found");
+  return {
+    tab: pickTab(tab),
+    count: results.length,
+    results,
+    captureBoundaries: [
+      "Only source maps referenced by parsed scripts can be extracted.",
+      "sourcesContent is returned when present and may be truncated by maxContentChars before it reaches the bridge.",
+      "For external .map files, pass fetchMap=true so the extension can retrieve and parse the map file.",
+    ],
   };
 }
 

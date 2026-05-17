@@ -427,6 +427,16 @@ try {
   });
   const sourceMapResult = sourceMapMetadata.results.find((entry) => entry.metadata?.kind === "data-url");
   assert(sourceMapResult?.metadata?.map?.sourcesCount >= 1, "source map metadata did not parse inline source map");
+  const sourceMapSources = await callTool(baseUrl, "devtools_source_map_sources", {
+    profile: "default",
+    query: sourceMarker,
+    waitMs: 500,
+    maxSources: 5,
+  });
+  const originalSource = sourceMapSources.results
+    ?.flatMap((entry) => entry.sources || [])
+    .find((entry) => entry.source === "source-search-smoke.ts");
+  assert(originalSource?.saved === true && originalSource?.path, `source map original source was not saved: ${JSON.stringify(sourceMapSources)}`);
   const consoleLog = await callTool(baseUrl, "devtools_console_log", {
     profile: "default",
     reload: true,

@@ -150,6 +150,7 @@ Unified Agent DevTools tools:
 - `devtools_source_get`
 - `devtools_source_pretty_print`
 - `devtools_source_map_metadata`
+- `devtools_source_map_sources`
 - `devtools_global_search`
 - `devtools_evidence_bundle`
 - `devtools_evidence_manifest`
@@ -236,6 +237,7 @@ Backend-specific aliases:
 - `personal_chrome_source_get`
 - `personal_chrome_source_pretty_print`
 - `personal_chrome_source_map_metadata`
+- `personal_chrome_source_map_sources`
 - `personal_chrome_global_search`
 - `personal_chrome_evidence_bundle`
 - `personal_chrome_evidence_manifest`
