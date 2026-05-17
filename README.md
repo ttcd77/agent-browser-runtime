@@ -52,6 +52,13 @@ By default everything runs through one local CDP endpoint, usually `http://127.0
 
 Browser profiles can contain live authentication state. Treat screenshots, cookies, headers, bodies, and script sources as sensitive evidence.
 
+## Safety Boundaries
+
+Use this runtime only with browser profiles, accounts, and targets you are
+authorized to inspect. Public demos should use Managed Browser mode with
+`example.com` or local fixtures. Personal Chrome mode is for explicit local
+operator-authorized debugging of the user's own browser state.
+
 ## Install
 
 ```bash
@@ -59,6 +66,29 @@ npm install
 npm run build
 npm run test
 ```
+
+## Quickstart
+
+Managed Browser mode is the safest public demo path because it uses a fresh
+agent-owned browser profile instead of the user's daily Chrome profile.
+
+```bash
+$env:CDP_LAUNCH_BROWSER="1"
+npm run agent:server
+```
+
+In another terminal:
+
+```bash
+npm run research:pack -- --url https://example.com --profile researcher
+```
+
+The command prints local artifact paths for the HAR, Application export, trace,
+manifest, correlation graph, and evidence bundle when those artifacts are
+available.
+
+For agent operators, start with `docs/agent-operator-runbook.md`. For the
+complete product contract, read `docs/agent-devtools-api.md`.
 
 Run all local checks:
 
@@ -69,6 +99,12 @@ npm run smoke:product
 npm run smoke:server
 npm run smoke:f12
 npm run smoke:browser
+```
+
+Open-source readiness gate:
+
+```bash
+npm run release:readiness
 ```
 
 ## Run The Standalone Agent Server

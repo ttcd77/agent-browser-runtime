@@ -96,6 +96,16 @@ const appServer = http.createServer(async (req, res) => {
     }));
     return;
   }
+  if (req.url === "/redirect-start") {
+    res.writeHead(302, { location: "/redirect-end", "cache-control": "no-store" });
+    res.end("redirecting");
+    return;
+  }
+  if (req.url === "/redirect-end") {
+    res.writeHead(200, { "content-type": "application/json; charset=utf-8", "cache-control": "no-store" });
+    res.end(JSON.stringify({ ok: true, marker: "agent-f12-redirect-end" }));
+    return;
+  }
   res.writeHead(200, { "content-type": "text/html; charset=utf-8" });
   res.end(`<!doctype html>
     <title>Application Smoke</title>
@@ -360,11 +370,15 @@ try {
         frame.contentDocument.getElementById("frame-action").addEventListener("click", () => {
           frame.contentDocument.body.dataset.frameClicked = "yes";
         });
+        const host = document.getElementById("agent-shadow-host");
+        const shadow = host.attachShadow({ mode: "open" });
+        shadow.innerHTML = "<button id='shadow-action'>Shadow Action</button><span>SHADOW_SECRET_MARKER</span>";
       });
       //# sourceMappingURL=data:application/json;base64,${sourceMap}
     </script>
     <h1>Source Search Smoke</h1>
     <button id="agent-listener-button">Listener Smoke</button>
+    <div id="agent-shadow-host"></div>
     <iframe id="agent-frame"></iframe>
     <iframe id="opaque-frame" sandbox srcdoc="<p>Opaque frame</p>"></iframe>`)}`;
   await callTool(baseUrl, "browser_navigate", {
@@ -427,6 +441,9 @@ try {
   });
   assert(frameTree.frameAccess?.some((frame) => frame.path === framePath && frame.accessible === true), `frame tree missing accessible same-origin frame: ${JSON.stringify(frameTree)}`);
   assert(frameTree.frameAccess?.some((frame) => frame.id === "opaque-frame" && frame.accessible === false), `frame tree missing inaccessible sandbox frame boundary: ${JSON.stringify(frameTree)}`);
+  assert(frameTree.shadowRootCount >= 1, `frame tree missing shadow root boundary summary: ${JSON.stringify(frameTree)}`);
+  assert(frameTree.shadowRoots?.some((root) => root.host?.id === "agent-shadow-host" && root.sampleText.includes("SHADOW_SECRET_MARKER")), `frame tree missing shadow root sample evidence: ${JSON.stringify(frameTree.shadowRoots)}`);
+  assert(Array.isArray(frameTree.captureBoundaries) && frameTree.captureBoundaries.some((entry) => entry.includes("Closed shadow roots")), `frame tree missing shadow/root boundary notes: ${JSON.stringify(frameTree)}`);
   const prettySource = await callTool(baseUrl, "devtools_source_pretty_print", {
     profile: "default",
     query: sourceMarker,
@@ -743,6 +760,22 @@ try {
     expression: `window.__agentFetchEchoFromFixture()`,
     awaitPromise: true,
   });
+  await callTool(baseUrl, "devtools_eval", {
+    profile: "default",
+    expression: `fetch('/redirect-start').then(response => response.json()).then(value => { window.__agentRedirectSmoke = value; return value; })`,
+    awaitPromise: true,
+  });
+  const redirectSummary = await callTool(baseUrl, "devtools_network_summary", {
+    profile: "default",
+    limit: 50,
+  });
+  const redirectRow = redirectSummary.redirects?.find((row) => row.chainLength >= 1 && String(row.url || "").includes("/redirect-end"));
+  assert(redirectRow, `network summary missing redirect chain evidence: ${JSON.stringify(redirectSummary.redirects)}`);
+  const redirectDetail = await callTool(baseUrl, "devtools_request_detail", {
+    profile: "default",
+    requestId: redirectRow.requestId,
+  });
+  assert(redirectDetail.detail?.redirectChain?.some((entry) => String(entry.url || "").includes("/redirect-start") && Number(entry.status) === 302), `request detail missing redirect start evidence: ${JSON.stringify(redirectDetail.detail?.redirectChain)}`);
   const replayTraffic = await callTool(baseUrl, "devtools_network_log", {
     profile: "default",
     limit: 20,

@@ -5,6 +5,7 @@ portfolio-quality security engineering project.
 
 ## Must Be True Before Public Release
 
+- `npm run release:readiness` passes.
 - `npm run check` passes.
 - `npm run contract:devtools` reports the same Managed and Personal tool count.
 - `npm run smoke:f12` passes on Managed Browser.
@@ -25,6 +26,9 @@ The repo should make these engineering signals obvious:
 - F12 parity as an agent-facing tool layer, not a screenshot toy.
 - Unified `devtools_*` contract across Personal Chrome and Managed Browser.
 - Structured evidence capture for security research.
+- Verified iframe/shadow DOM boundary evidence in both Managed Browser and
+  Personal Chrome.
+- Verified redirect-chain evidence in both Managed Browser and Personal Chrome.
 - Evidence manifest, request correlation graph, auth boundary report, and
   before/after diff as objective tools rather than model-like judgment.
 - Profile-scoped browser state and evidence directories.
@@ -44,6 +48,19 @@ profile:
 5. Drill into one request with `devtools_request_detail`.
 
 This demonstrates the product without touching private cookies or real accounts.
+
+## One Command Gate
+
+Use this before tagging or sharing the repository:
+
+```bash
+npm run check:release
+```
+
+This runs the open-source readiness gate plus the full local browser/tool check.
+If Personal Chrome is not installed and connected, run `npm run release:readiness`
+and `npm run smoke:f12` first, then document that Personal Chrome smoke is
+pending local extension setup.
 
 ## Keep Private
 

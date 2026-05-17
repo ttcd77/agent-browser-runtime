@@ -19,6 +19,7 @@ async function startFixtureServer() {
         <link rel="stylesheet" href="/style.css">
         <h1 id="title">Agent Browser Runtime Personal Smoke</h1>
         <button id="action">Run fixture action</button>
+        <div id="personal-shadow-host"></div>
         <iframe id="same-origin-frame" src="/frame.html"></iframe>
         <script src="/app.js"></script>`);
       return;
@@ -38,6 +39,9 @@ async function startFixtureServer() {
         localStorage.setItem("agent-personal-smoke-local", "local-fixture-value");
         sessionStorage.setItem("agent-personal-smoke-session", "session-fixture-value");
         document.cookie = "agent_personal_chips=partitioned; path=/; Secure; SameSite=None; Partitioned";
+        const shadowHost = document.getElementById("personal-shadow-host");
+        const shadow = shadowHost.attachShadow({ mode: "open" });
+        shadow.innerHTML = "<span>PERSONAL_SHADOW_MARKER</span>";
         window.__chipsCookieAttempt = {
           name: "agent_personal_chips",
           attempted: true,
@@ -77,6 +81,19 @@ async function startFixtureServer() {
         "cache-control": "no-store",
       });
       res.end(JSON.stringify({ ok: true, marker: "agent-personal-smoke-api" }));
+      return;
+    }
+    if (url.pathname === "/redirect-start") {
+      res.writeHead(302, { location: "/redirect-end", "cache-control": "no-store" });
+      res.end("redirecting");
+      return;
+    }
+    if (url.pathname === "/redirect-end") {
+      res.writeHead(200, {
+        "content-type": "application/json; charset=utf-8",
+        "cache-control": "no-store",
+      });
+      res.end(JSON.stringify({ ok: true, marker: "agent-personal-redirect-end" }));
       return;
     }
     if (url.pathname === "/frame.html") {
@@ -150,6 +167,11 @@ const status = await callTool("devtools_status");
 assert(status.attached === true, `debugger status not attached: ${JSON.stringify(status)}`);
 assert(status.tab?.url, `status missing active tab URL: ${JSON.stringify(status)}`);
 
+await callTool("devtools_capture_start", {
+  clear: true,
+  label: "personal-redirect-smoke",
+});
+
 const runtime = await callTool("devtools_cdp_command", {
   method: "Runtime.evaluate",
   params: {
@@ -169,8 +191,28 @@ const applicationReady = await callTool("devtools_cdp_command", {
 });
 assert(Array.isArray(applicationReady.result?.result?.value), `Personal fixture storage did not settle: ${JSON.stringify(applicationReady)}`);
 
+await callTool("devtools_cdp_command", {
+  method: "Runtime.evaluate",
+  params: {
+    expression: "fetch('/redirect-start').then(response => response.json()).then(value => { window.__agentPersonalRedirectSmoke = value; return value; })",
+    awaitPromise: true,
+    returnByValue: true,
+  },
+});
+const redirectSummary = await callTool("devtools_network_summary", {
+  limit: 50,
+});
+const redirectRow = redirectSummary.redirects?.find((row) => row.chainLength >= 1 && String(row.url || "").includes("/redirect-end"));
+assert(redirectRow, `Personal network summary missing redirect chain evidence: ${JSON.stringify(redirectSummary.redirects)}`);
+const redirectDetail = await callTool("devtools_request_detail", {
+  requestId: redirectRow.requestId,
+});
+assert(redirectDetail.detail?.redirectChain?.some((entry) => String(entry.url || "").includes("/redirect-start") && Number(entry.status) === 302), `Personal request detail missing redirect start evidence: ${JSON.stringify(redirectDetail.detail?.redirectChain)}`);
+
 const frameTree = await callTool("devtools_frame_tree");
 assert(frameTree.frameCount >= 1 || frameTree.frames?.length >= 1 || frameTree.frameTree?.frame?.id, `frame tree missing frames: ${JSON.stringify(frameTree)}`);
+assert(frameTree.shadowRootCount >= 1, `Personal frame tree missing shadow root summary: ${JSON.stringify(frameTree)}`);
+assert(frameTree.shadowRoots?.some((root) => root.host?.id === "personal-shadow-host" && root.sampleText.includes("PERSONAL_SHADOW_MARKER")), `Personal frame tree missing shadow root evidence: ${JSON.stringify(frameTree.shadowRoots)}`);
 
 const storage = await callTool("devtools_storage_origin_summary");
 assert(storage.page?.url || storage.page?.origin, `storage summary missing page evidence: ${JSON.stringify(storage)}`);

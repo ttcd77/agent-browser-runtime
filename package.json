@@ -1,10 +1,31 @@
 {
   "name": "agent-browser-runtime",
   "version": "0.1.0",
-  "description": "A local CDP browser runtime for AI agents with profile-scoped browser actions, screenshots, and traffic capture.",
+  "description": "A local DevTools evidence runtime for AI agents, with Personal Chrome and Managed Browser backends.",
   "type": "module",
   "license": "MIT",
   "private": false,
+  "keywords": [
+    "ai-agent",
+    "browser-automation",
+    "chrome-devtools-protocol",
+    "cdp",
+    "devtools",
+    "mcp",
+    "security-research"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "files": [
+    "dist",
+    "docs",
+    "examples",
+    "extension",
+    "scripts",
+    "README.md",
+    "LICENSE"
+  ],
   "scripts": {
     "build": "tsc && node scripts/copy-plugin-manifests.mjs",
     "test": "vitest run src/plugins/cdp-traffic-capture/schemas.test.ts src/plugins/browser-profile-pool/lease-store.test.ts",
@@ -23,6 +44,8 @@
     "check": "npm run build && npm run test",
     "check:devtools": "npm run contract:devtools && npm run smoke:f12 && npm run smoke:personal",
     "check:full": "npm run check && npm run check:devtools",
+    "release:readiness": "node scripts/open-source-readiness.mjs",
+    "check:release": "npm run release:readiness && npm run check:full",
     "agent:auto-dry-run": "node scripts/agent-auto-loop.mjs --once --dry-run",
     "agent:auto-once": "node scripts/agent-auto-loop.mjs --once",
     "agent:auto-loop": "node scripts/agent-auto-loop.mjs --interval-minutes 45 --max-iterations 3"

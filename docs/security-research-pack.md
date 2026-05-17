@@ -86,6 +86,17 @@ The same tool name works in both product modes:
 If a backend cannot provide a sub-artifact, the response should say so in the
 step result instead of silently dropping it.
 
+Transport boundaries:
+
+- Managed Browser uses direct CDP and can expose broader browser-process
+  DevTools domains where Chrome allows them.
+- Personal Chrome uses the extension `chrome.debugger` transport against the
+  user's selected tab. Browser-process CDP commands and some heavy artifacts may
+  return structured `notApplicable` responses with Managed Browser fallback
+  guidance.
+- Both modes keep the same `devtools_*` names and return capture boundaries so
+  agents can distinguish complete evidence from unavailable or uncaptured data.
+
 ## Recommended Agent Flow
 
 1. Call `devtools_backend_capabilities`.

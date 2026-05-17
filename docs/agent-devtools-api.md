@@ -229,17 +229,17 @@ backend contract.
 
 Implemented:
 
-- Elements/Page snapshot: visible text, controls, screenshots, click/type/scroll including same-origin iframe targeting, DOM tree, selected element inspection, layout boxes, key computed styles, forced pseudo-state style inspection (`:hover`, `:focus`, etc.), raw Chrome DOMSnapshot data, live DOM search with same-origin iframe fallback context, Elements-panel Event Listeners, Styles/Computed/Box Model evidence, and selected-node DOM mutation watch for breakpoint-style evidence.
+- Elements/Page snapshot: visible text, controls, screenshots, click/type/scroll including same-origin iframe targeting, DOM tree, selected element inspection, layout boxes, key computed styles, forced pseudo-state style inspection (`:hover`, `:focus`, etc.), raw Chrome DOMSnapshot data, live DOM search with same-origin iframe fallback context, frame-tree plus page-context iframe access and open-shadow-root boundary summaries, Elements-panel Event Listeners, Styles/Computed/Box Model evidence, and selected-node DOM mutation watch for breakpoint-style evidence.
 - Sources/Debugger/Search: parsed script metadata, source map URL metadata, module flag, script source by script id, heuristic pretty-printing, inline/external source map metadata, source-map original source extraction and one-file retrieval, Debugger pause/resume/step controls, temporary URL breakpoint probing with paused frame/scope previews, paused-frame expression evaluation, temporary token-flow instrumentation across fetch/XHR/storage/cookie APIs, literal source search, global literal search across Network/Sources/Application evidence, and compact F12 evidence bundle export with optional HAR, token scan, and token-flow sections.
 - Performance/Memory: navigation timing, resource timing, paint timing, marks/measures, long-task entries, PerformanceObserver entries including LCP/layout-shift/event-timing/long-animation-frame where Chrome exposes them, objective performance-insight summaries for agents, Chrome Tracing capture with full trace file output, trace querying and trace-to-trace comparison by event/category/duration/thread/time range, trace screenshot frame extraction where Chrome emits frames, trace event summaries, phase duration buckets, rendering timeline rows for loading/scripting/rendering/painting/screenshot events, busiest thread/process summaries, top duration events, JavaScript heap snapshot artifacts where HeapProfiler is exposed, short JS/CSS coverage snapshots, Coverage-panel range drilldown with bounded source snippets, JS heap usage, DOM counters, and Performance Monitor metrics.
-- Network: request URL, method, headers, status, response headers, request-detail evidence including cookies and ExtraInfo events, initiator stack summaries, nearby initiator source context where Chrome exposes the script frame, lifecycle flags, Timing/Initiator-style rows, frame id, redirect chain, cache/service-worker flags, TLS details where exposed, WebSocket lifecycle and frames, EventSource/SSE messages, request replay/edit-and-resend with explicit forbidden-header reporting plus raw/form/json/multipart body helpers, batch replay variants with response diffs, HAR-like object export with timing phase extensions, HAR file save, objective HAR completeness reports with coverage ratios and concrete drill-down samples, and low-token summary for dashboards/triage.
+- Network: request URL, method, headers, status, response headers, request-detail evidence including cookies and ExtraInfo events, initiator stack summaries, nearby initiator source context where Chrome exposes the script frame, lifecycle flags, Timing/Initiator-style rows, frame id, redirect chain rows verified in Managed and Personal smoke tests, cache/service-worker flags, TLS details where exposed, WebSocket lifecycle and frames, EventSource/SSE messages, request replay/edit-and-resend with explicit forbidden-header reporting plus raw/form/json/multipart body helpers, batch replay variants with response diffs, HAR-like object export with timing phase extensions, HAR file save, objective HAR completeness reports with coverage ratios and concrete drill-down samples, and low-token summary for dashboards/triage.
 - Payload/Body: response body by request id; request postData/payload by request id when Chrome exposes it.
 - Console/Issues: console API, log entries, exceptions, stack traces, source
   context around stack frames, and Chrome DevTools Issues-panel events where
   the backend exposes them.
 - Security: page secure-context summary and TLS/certificate details collected from Network security metadata.
 - Accessibility: AX tree nodes, roles, names, values, descriptions, properties, child ids, and backend DOM node ids where Chrome exposes them.
-- Frames: frame tree, same-origin frame accessibility map, inaccessible/sandboxed frame boundary reporting, and recent frame lifecycle events.
+- Frames: frame tree, same-origin frame accessibility map, open shadow-root boundary summaries, inaccessible/sandboxed frame boundary reporting, and recent frame lifecycle events.
 - Storage: localStorage, sessionStorage, document-visible cookies, backend cookie API/CDP cookies, cookie security summaries, origin/storage-key/quota evidence, explicit storage-boundary summaries with quota usage breakdowns, Storage Buckets support/bucket summaries where the browser exposes them, cookie partition metadata summaries where Chrome exposes them, IndexedDB database/object-store/index/sample records, IndexedDB paged record reads, Cache Storage request/response metadata and body reads, Service Worker registrations, Service Worker script/status detail, Service Worker target summary, CacheStorage summary/detail, and Application panel JSON export.
 - Token scan: full-value scan across headers, payloads, storage, and cookies in authorized browser mode.
 
@@ -278,6 +278,11 @@ http://127.0.0.1:17337/tool/devtools_network_log
 This mode uses `chrome.debugger`, so Chrome may show a banner that the extension
 is debugging the browser. That is expected.
 
+Boundary: Personal Chrome exposes the user's selected tab through the extension
+`chrome.debugger` transport. It can inspect ordinary web-page F12 evidence, but
+browser-process CDP commands and some heavy artifacts may return structured
+`notApplicable` responses with Managed Browser fallback guidance.
+
 ### Managed Browser
 
 Run:
@@ -292,6 +297,14 @@ Call tools at:
 ```text
 http://127.0.0.1:17335/tool/devtools_network_log
 ```
+
+Boundary: Managed Browser uses direct CDP and can expose broader page-target and
+browser-process DevTools domains where Chrome allows them. Use it for clean
+profiles, repeatable captures, and deeper evidence packs.
+
+Shared rule: both modes keep the same `devtools_*` names. When evidence is
+outside the current capture window, unavailable, truncated, or blocked by the
+browser visibility model, tools should say so instead of inventing data.
 
 This mode uses CDP directly and stores evidence under the runtime data directory.
 

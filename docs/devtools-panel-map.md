@@ -52,6 +52,7 @@ evidence.
 | Inspect request table | `devtools_network_log` |
 | Summarize request table | `devtools_network_summary` |
 | Inspect Timing/Initiator rows | `devtools_network_timeline` |
+| Inspect redirect chain rows | `devtools_network_summary`, then `devtools_request_detail` |
 | Inspect WebSocket frames and EventSource/SSE messages | `devtools_realtime_log` |
 | Read response body | `devtools_request_body` |
 | Inspect one request's headers/cookies/timing/initiator | `devtools_request_detail` |
@@ -71,6 +72,7 @@ evidence.
 | Capture raw DOMSnapshot | `devtools_dom_snapshot` |
 | Search live DOM | `devtools_dom_search` |
 | Inspect iframe/frame tree | `devtools_frame_tree` |
+| Inspect open shadow-root and iframe access boundaries | `devtools_frame_tree` |
 | Inspect accessibility tree | `devtools_accessibility_snapshot` |
 | Inspect selected node event listeners | `devtools_event_listeners` |
 | Inspect selected node Styles/Computed/Box Model | `devtools_css_styles` |
@@ -106,10 +108,11 @@ evidence.
 | Run one-call security research evidence workflow | `devtools_security_research_pack` |
 | Read source context around a console stack frame | `devtools_console_source_context` |
 
-Current boundary: breakpoints, scopes, live debugging, and AST-lossless
-formatting are not fully implemented yet. Pretty-printing is currently
-heuristic, and source maps are exposed as metadata rather than a full
-original-source tree.
+Current boundary: live debugging is supported for pause/resume/step, temporary
+URL breakpoint probing, paused call-frame/scope previews, and selected paused
+expression evaluation. Pretty-printing is still heuristic, and source maps are
+exposed as metadata plus extractable original source files rather than a full
+DevTools UI source tree.
 
 ## Application Panel
 
@@ -155,4 +158,8 @@ The same `devtools_*` names are exposed by both modes:
   user's real browser after explicit local installation.
 
 Agents should use the `devtools_*` names. Backend-specific names are retained for
-debugging and compatibility only.
+debugging and compatibility only. `devtools_frame_tree` now returns Chrome's
+frame tree plus page-context frame access and open-shadow-root boundary evidence
+in both Managed Browser and Personal Chrome. Closed shadow roots and
+cross-origin/sandboxed frame internals are reported as browser visibility
+boundaries, not as missing tool implementation.

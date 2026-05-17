@@ -2723,6 +2723,126 @@ function frameAccessPageFunction() {
   return rows;
 }
 
+function frameShadowBoundaryPageFunction(options = {}) {
+  const maxShadowRoots = Math.max(0, Number(options.maxShadowRoots || 100));
+  const shadowRoots = [];
+  const frameRows = [];
+  const frameErrors = [];
+  function nodeLabel(node) {
+    if (!node || node.nodeType !== Node.ELEMENT_NODE) return null;
+    const id = node.id ? `#${node.id}` : "";
+    const cls = typeof node.className === "string" && node.className.trim()
+      ? `.${node.className.trim().split(/\s+/).slice(0, 3).join(".")}`
+      : "";
+    return `${node.tagName.toLowerCase()}${id}${cls}`;
+  }
+  function cssPath(el) {
+    const parts = [];
+    let current = el;
+    while (current && current.nodeType === Node.ELEMENT_NODE && parts.length < 8) {
+      let part = current.tagName.toLowerCase();
+      if (current.id) {
+        part += `#${current.id}`;
+        parts.unshift(part);
+        break;
+      }
+      const parent = current.parentElement;
+      if (parent) {
+        const siblings = Array.from(parent.children).filter((child) => child.tagName === current.tagName);
+        if (siblings.length > 1) part += `:nth-of-type(${siblings.indexOf(current) + 1})`;
+      }
+      parts.unshift(part);
+      current = parent;
+    }
+    return parts.join(" > ");
+  }
+  function frameInfo(win, path) {
+    try {
+      return {
+        path,
+        url: win.location.href,
+        origin: win.location.origin,
+        title: win.document?.title || "",
+      };
+    } catch (error) {
+      return { path, inaccessible: true, error: String(error?.message || error) };
+    }
+  }
+  function scanRoot(root, ownerPath, frame) {
+    if (!root || shadowRoots.length >= maxShadowRoots) return;
+    const elements = root.querySelectorAll ? Array.from(root.querySelectorAll("*")) : [];
+    for (const el of elements) {
+      if (shadowRoots.length >= maxShadowRoots) break;
+      if (!el.shadowRoot) continue;
+      const shadow = el.shadowRoot;
+      const path = `${ownerPath} > ${cssPath(el)}::shadow`;
+      const entry = {
+        path,
+        mode: shadow.mode || "open",
+        host: {
+          label: nodeLabel(el),
+          path: cssPath(el),
+          id: el.id || null,
+          tagName: el.tagName,
+        },
+        frame,
+        childElementCount: shadow.children?.length || 0,
+        textLength: String(shadow.textContent || "").length,
+        sampleText: String(shadow.textContent || "").trim().slice(0, 240),
+        slotCount: shadow.querySelectorAll ? shadow.querySelectorAll("slot").length : 0,
+      };
+      shadowRoots.push(entry);
+      scanRoot(shadow, path, frame);
+    }
+  }
+  function visit(win, doc, path) {
+    const frame = frameInfo(win, path);
+    scanRoot(doc, path, frame);
+    const frames = Array.from(doc.querySelectorAll("iframe,frame"));
+    frames.forEach((frameElement, index) => {
+      const childPath = `${path} > frame[${index}]`;
+      const row = {
+        path: childPath,
+        tagName: frameElement.tagName,
+        id: frameElement.id || null,
+        name: frameElement.getAttribute("name") || null,
+        src: frameElement.getAttribute("src") || frameElement.getAttribute("srcdoc") || "",
+        sandbox: frameElement.getAttribute("sandbox") || null,
+        accessible: false,
+      };
+      try {
+        const childWindow = frameElement.contentWindow;
+        const childDocument = frameElement.contentDocument || childWindow?.document;
+        row.url = childWindow?.location?.href || "";
+        row.origin = childWindow?.location?.origin || "";
+        row.title = childDocument?.title || "";
+        row.accessible = Boolean(childDocument?.documentElement);
+        if (row.accessible) visit(childWindow, childDocument, childPath);
+      } catch (error) {
+        row.error = String(error?.message || error);
+        frameErrors.push({ path: childPath, error: row.error, src: row.src });
+      }
+      frameRows.push(row);
+    });
+  }
+  visit(window, document, "top");
+  return {
+    generatedAt: new Date().toISOString(),
+    frames: frameRows,
+    frameCount: frameRows.length,
+    inaccessibleFrameCount: frameRows.filter((frame) => frame.accessible === false).length,
+    frameErrors,
+    shadowRoots,
+    shadowRootCount: shadowRoots.length,
+    truncatedShadowRoots: shadowRoots.length >= maxShadowRoots,
+    boundaries: [
+      "Open shadow roots are enumerable from page JavaScript; closed shadow roots are intentionally not exposed.",
+      "Same-origin iframe documents can be inspected from page context; cross-origin or sandboxed frame internals may be unavailable.",
+      "This is DOM boundary evidence only, not a vulnerability judgment.",
+    ],
+  };
+}
+
 function tokenFlowTracePageFunction(options) {
   const durationMs = Math.max(50, Number(options.durationMs || 1000));
   const maxEvents = Math.max(1, Number(options.maxEvents || 100));
@@ -5156,6 +5276,7 @@ function registerStandaloneBrowserTools(tools, cdpPort, profileRegistry, default
         framePath: { type: "string" },
         frameIndexes: { type: "array", items: { type: "number" } },
         tabId: { type: "string" },
+        maxShadowRoots: { type: "number" },
       },
     },
     async execute(_id, params) {
@@ -5428,15 +5549,33 @@ function registerStandaloneBrowserTools(tools, cdpPort, profileRegistry, default
           returnByValue: true,
           awaitPromise: true,
         }).catch((error) => ({ error: String(error?.message || error) }));
+        const boundaries = await client.Runtime.evaluate({
+          expression: `(${frameShadowBoundaryPageFunction.toString()})(${JSON.stringify({ maxShadowRoots: params?.maxShadowRoots })})`,
+          returnByValue: true,
+          awaitPromise: true,
+        }).catch((error) => ({ error: String(error?.message || error) }));
         const frameAccess = access.error ? [] : access.result?.value || [];
+        const boundarySummary = boundaries.error ? null : boundaries.result?.value || null;
+        const frames = flattenFrameTree(tree.frameTree);
         await profileRegistry.touchProfile(profile.name, { tabId: target.id });
         return {
           profile: profile.name,
           tabId: target.id,
           frameTree: tree.frameTree,
+          frames,
+          frameCount: frames.length,
           frameAccess,
           inaccessibleFrameCount: frameAccess.filter((frame) => frame.accessible === false).length,
           frameAccessError: access.error || null,
+          boundarySummary,
+          shadowRoots: boundarySummary?.shadowRoots || [],
+          shadowRootCount: boundarySummary?.shadowRootCount || 0,
+          frameShadowBoundaryError: boundaries.error || null,
+          captureBoundaries: [
+            "Page frame tree comes from Chrome Page.getFrameTree.",
+            "Frame access and shadow root rows come from the page context and follow same-origin and shadow DOM visibility rules.",
+            "Closed shadow roots and cross-origin frame internals may be intentionally unavailable.",
+          ],
         };
       }));
     },
