@@ -99,6 +99,7 @@ for the currently active tab. It also verifies non-navigating facade calls:
 `browser_inspect`, `browser_capture`, `browser_raw`, and `browser_security_pack`.
 It verifies `devtools_capture_bisect` as a non-judgmental captured-evidence
 splitter for Network, page/frame, and realtime buckets.
+It verifies `devtools_capability_map` as the panel-level navigation contract.
 
 ## Managed F12 Smoke
 
@@ -116,6 +117,7 @@ It starts an isolated temporary managed browser and verifies:
 - Network summary from an explicit F12 capture,
 - Network Timing/Initiator-style timeline rows,
 - captured-evidence bisection into Network, page/frame, and realtime buckets,
+- panel-level capability map for agent navigation,
 - WebSocket frame and EventSource/SSE evidence through `devtools_realtime_log`,
 - per-request Network detail including headers, cookies, timing, initiator, and
   ExtraInfo fields where Chrome exposes them,

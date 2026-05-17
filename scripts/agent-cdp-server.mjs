@@ -1685,7 +1685,7 @@ function buildAgentInspectToolPlan(focus, options = {}) {
 }
 
 function devtoolsToolCategory(name) {
-  if (name === "agent_inspect" || /backend_capabilities|tool_catalog|tool_help|workflow_guide|protocol_schema/.test(name)) return "orientation";
+  if (name === "agent_inspect" || /backend_capabilities|tool_catalog|tool_help|workflow_guide|capability_map|protocol_schema/.test(name)) return "orientation";
   if (/tabs|snapshot|screenshot|click|type|scroll|eval|hard_reload/.test(name)) return "page-control";
   if (/network|request|har|capture_|realtime/.test(name)) return "network";
   if (/console|issues|security_summary|signal_summary|page_diagnostics/.test(name)) return "diagnostics";
@@ -1726,6 +1726,112 @@ function devtoolsToolCatalogFromEntries(entries, options = {}) {
     boundaries: [
       "Tool catalog is a navigation aid; it does not choose or execute tools automatically.",
       "Prefer agent_inspect or devtools_security_research_pack for first-pass work, then drill down.",
+    ],
+  };
+}
+
+const DEVTOOLS_CAPABILITY_META = {
+  orientation: {
+    panel: "Orientation",
+    purpose: "Understand backend, available tools, workflows, and capture boundaries before drilling down.",
+    firstPass: ["devtools_backend_capabilities", "devtools_tool_catalog", "devtools_workflow_guide", "agent_inspect"],
+  },
+  "page-control": {
+    panel: "Page",
+    purpose: "Open, inspect, screenshot, and interact with the page like a user.",
+    firstPass: ["browser_open", "browser_act", "devtools_snapshot", "devtools_screenshot"],
+  },
+  network: {
+    panel: "Network",
+    purpose: "Record request traffic, inspect timing/initiators/bodies, replay captured requests, and export HAR evidence.",
+    firstPass: ["devtools_capture_start", "devtools_hard_reload", "agent_inspect", "devtools_network_summary", "devtools_capture_bisect"],
+  },
+  diagnostics: {
+    panel: "Console / Issues / Security",
+    purpose: "Read console messages, exceptions, DevTools Issues, page diagnostics, and security context.",
+    firstPass: ["agent_inspect", "devtools_page_diagnostics", "devtools_signal_summary", "devtools_console_log"],
+  },
+  application: {
+    panel: "Application",
+    purpose: "Inspect storage, cookies, service workers, CacheStorage, IndexedDB, and auth-boundary evidence.",
+    firstPass: ["agent_inspect", "devtools_storage_origin_summary", "devtools_cookie_summary", "devtools_service_worker_summary"],
+  },
+  "dom-frame": {
+    panel: "Elements / Frames / Accessibility",
+    purpose: "Inspect DOM, styles, event listeners, accessibility tree, frame tree, and worker/frame boundaries.",
+    firstPass: ["agent_inspect", "devtools_elements_snapshot", "devtools_dom_search", "devtools_frame_tree"],
+  },
+  "sources-debugger": {
+    panel: "Sources / Debugger",
+    purpose: "Inspect parsed scripts, source maps, source text, breakpoints, paused frames, and literal searches.",
+    firstPass: ["agent_inspect", "devtools_sources_list", "devtools_sources_search", "devtools_source_map_metadata"],
+  },
+  performance: {
+    panel: "Performance / Memory",
+    purpose: "Capture performance evidence, traces, CPU profiles, coverage, heap/memory counters, and trace queries.",
+    firstPass: ["agent_inspect", "devtools_performance_insights", "devtools_performance_observer", "devtools_chrome_trace"],
+  },
+  "evidence-workflow": {
+    panel: "Recorder / Evidence",
+    purpose: "Create reusable evidence packs, manifests, diffs, correlation graphs, and research workflows.",
+    firstPass: ["browser_security_pack", "devtools_security_research_pack", "devtools_evidence_bundle", "devtools_evidence_manifest"],
+  },
+  "raw-cdp": {
+    panel: "Raw CDP",
+    purpose: "Reach DevTools Protocol commands that do not yet have a friendly wrapper.",
+    firstPass: ["devtools_protocol_schema", "devtools_cdp_command"],
+  },
+};
+
+function devtoolsCapabilityMapFromEntries(entries, options = {}) {
+  const backend = options.backend || "unknown";
+  const normalized = entries.map((tool) => ({
+    name: tool.name,
+    category: devtoolsToolCategory(tool.name),
+    description: tool.description || "",
+    required: tool.parameters?.required || [],
+    parameterNames: Object.keys(tool.parameters?.properties || {}),
+  }));
+  const available = new Set(normalized.map((tool) => tool.name));
+  const facadeTools = normalized
+    .filter((tool) => tool.name.startsWith("browser_"))
+    .sort((a, b) => a.name.localeCompare(b.name));
+  const productTools = normalized
+    .filter((tool) => tool.name === "agent_inspect" || tool.name.startsWith("devtools_"));
+  const panels = Object.entries(DEVTOOLS_CAPABILITY_META).map(([category, meta]) => {
+    const toolsInCategory = productTools
+      .filter((tool) => tool.category === category)
+      .sort((a, b) => a.name.localeCompare(b.name));
+    const preferred = meta.firstPass.filter((name) => available.has(name));
+    const artifactTools = toolsInCategory
+      .filter((tool) => /export|save|bundle|manifest|pack|trace|snapshot|profile|har|report|map_sources/.test(tool.name))
+      .map((tool) => tool.name);
+    return {
+      category,
+      panel: meta.panel,
+      purpose: meta.purpose,
+      toolCount: toolsInCategory.length,
+      firstPass: preferred,
+      drillDown: toolsInCategory.map((tool) => tool.name).filter((name) => !preferred.includes(name)),
+      artifactTools,
+      rawEscapeHatch: category === "raw-cdp" ? "devtools_cdp_command" : null,
+    };
+  });
+  return {
+    backend,
+    generatedAt: new Date().toISOString(),
+    contract: "Agent DevTools capability map",
+    facadeTools: facadeTools.map((tool) => ({
+      name: tool.name,
+      description: tool.description,
+    })),
+    panelCount: panels.length,
+    panels,
+    recommendedStart: ["browser_open", "browser_capture", "browser_inspect", "browser_security_pack", "browser_raw"].filter((name) => available.has(name)),
+    boundaries: [
+      "Capability map is navigation metadata; it does not execute tools or decide impact.",
+      "Use browser_* facade tools first, then drill into devtools_* tools for exact F12 evidence.",
+      "Use devtools_cdp_command only when the friendly wrapper does not expose the needed DevTools Protocol method.",
     ],
   };
 }
@@ -9316,6 +9422,18 @@ function registerStandaloneBrowserTools(tools, cdpPort, profileRegistry, default
     },
   });
 
+  tools.set("devtools_capability_map", {
+    name: "devtools_capability_map",
+    description: "Agent usability: return the DevTools capability map grouped by F12 panel, first-pass tools, drill-down tools, artifacts, and raw CDP escape hatches.",
+    parameters: {
+      type: "object",
+      properties: {},
+    },
+    async execute() {
+      return toolResult(devtoolsCapabilityMapFromEntries([...tools.values()], { backend: "managed-cdp" }));
+    },
+  });
+
   tools.set("devtools_workflow_guide", {
     name: "devtools_workflow_guide",
     description: "Agent usability: return deterministic tool recipes for common browser-security research tasks.",
@@ -9538,7 +9656,7 @@ function registerStandaloneBrowserTools(tools, cdpPort, profileRegistry, default
     async execute(id, params) {
       const toolName = String(params?.tool || "").trim();
       if (!toolName.startsWith("devtools_")) throw new Error("browser_raw only allows devtools_* tools");
-      if (["devtools_tool_catalog", "devtools_tool_help", "devtools_workflow_guide"].includes(toolName)) throw new Error("use tool usability helpers directly");
+      if (["devtools_tool_catalog", "devtools_tool_help", "devtools_capability_map", "devtools_workflow_guide"].includes(toolName)) throw new Error("use tool usability helpers directly");
       const target = tools.get(toolName);
       if (!target) throw new Error(`unknown devtools tool: ${toolName}`);
       const result = JSON.parse((await target.execute(id, params?.input || {})).content?.[0]?.text || "{}");

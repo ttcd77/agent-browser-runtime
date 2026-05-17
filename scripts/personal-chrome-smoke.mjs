@@ -176,6 +176,11 @@ assert(toolCatalog.toolCount >= 1, "Personal Chrome tool catalog did not return 
 assert(toolCatalog.tools.some((tool) => tool.name === "devtools_auth_boundary_report"), "Personal Chrome tool catalog missing auth boundary report");
 const toolHelp = await callTool("devtools_tool_help", { tool: "devtools_security_research_pack" });
 assert(toolHelp.description, "Personal Chrome tool help missing description");
+const capabilityMap = await callTool("devtools_capability_map", {});
+assert(capabilityMap.backend === "personal-chrome", `Personal Chrome capability map wrong backend: ${JSON.stringify(capabilityMap)}`);
+assert(capabilityMap.panels?.some((panel) => panel.category === "network"), "Personal Chrome capability map missing Network panel");
+assert(capabilityMap.panels?.some((panel) => panel.category === "sources-debugger"), "Personal Chrome capability map missing Sources panel");
+assert(capabilityMap.panels?.some((panel) => panel.category === "performance"), "Personal Chrome capability map missing Performance panel");
 const workflowGuide = await callTool("devtools_workflow_guide", { task: "auth-boundary" });
 assert(workflowGuide.steps?.some((step) => step.tool === "devtools_auth_boundary_report"), "Personal Chrome workflow guide missing auth boundary step");
 
@@ -186,4 +191,5 @@ console.log(`- allowed domains: ${capabilities.domainAccess.allowedDomains.lengt
 console.log(`- layer: ${capabilities.layer}`);
 console.log(`- facade tools: ${facadeInspect.facade}/${facadeCapture.facade}/${facadePack.facade}`);
 console.log(`- capture bisect buckets: ${captureBisect.buckets.network.requestCount}/${captureBisect.buckets.pages.pageCount}`);
+console.log(`- capability panels: ${capabilityMap.panelCount}`);
 console.log(`- realtime channels ws/sse: ${realtimeLog.websocketCount}/${realtimeLog.eventSourceMessageCount}`);

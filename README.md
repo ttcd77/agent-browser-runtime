@@ -204,6 +204,7 @@ the full response.
 - `agent_inspect`
 - `devtools_tool_catalog`
 - `devtools_tool_help`
+- `devtools_capability_map`
 - `devtools_workflow_guide`
 
 The three `devtools_tool_*` / `devtools_workflow_guide` tools are for usability:
@@ -225,6 +226,7 @@ Chrome Extension Mode and Managed Browser Mode:
 - `devtools_eval`
 - `devtools_tool_catalog`
 - `devtools_tool_help`
+- `devtools_capability_map`
 - `devtools_workflow_guide`
 - `devtools_attach`
 - `devtools_detach`

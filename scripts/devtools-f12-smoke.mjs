@@ -600,6 +600,13 @@ try {
     tool: "devtools_security_research_pack",
   });
   assert(toolHelp.parameters?.properties, "tool help missing parameter schema");
+  const capabilityMap = await callTool(baseUrl, "devtools_capability_map", {
+    profile: "default",
+  });
+  assert(capabilityMap.backend === "managed-cdp", `capability map wrong backend: ${JSON.stringify(capabilityMap)}`);
+  assert(capabilityMap.panels?.some((panel) => panel.category === "network" && panel.firstPass.includes("devtools_network_summary")), "capability map missing Network first-pass tools");
+  assert(capabilityMap.panels?.some((panel) => panel.category === "sources-debugger"), "capability map missing Sources panel");
+  assert(capabilityMap.panels?.some((panel) => panel.category === "performance"), "capability map missing Performance panel");
   const workflowGuide = await callTool(baseUrl, "devtools_workflow_guide", {
     profile: "default",
     task: "auth-boundary",
@@ -886,6 +893,7 @@ try {
   console.log(`- storage origin frames/cookies: ${storageOrigin.frames.length}/${storageOrigin.cookieCount}`);
   console.log(`- signal summary signals/high-priority/medium: ${signalSummary.signalCount}/${signalSummary.highCount}/${signalSummary.mediumCount}`);
   console.log(`- agent router focus/search matches: ${agentOverview.focus}/${agentSearch.evidence.search.matchCount}`);
+  console.log(`- capability panels: ${capabilityMap.panelCount}`);
   console.log(`- facade tools: ${facadeOpen.facade}/${facadeInspect.facade}/${facadeCapture.facade}/${facadePack.facade}`);
   console.log(`- saved HAR entries/bytes: ${savedHar.entryCount}/${savedHar.harBytes}`);
   console.log(`- HAR entries with bodies: ${bodyEntries.length}`);
