@@ -145,6 +145,14 @@
 
 ## 执行记录
 
+### 2026-05-17: Artifact Search
+
+已经完成:
+
+- 新增 `devtools_artifact_search` / `personal_chrome_artifact_search`。
+- Agent 可以在本地证据池中按 kind 和 literal query 搜索 HAR、JSON、trace、bundle 等文本型 artifact，返回 bounded match window 和后续 `devtools_artifact_inspect` 输入。
+- 仍然只做客观字符串定位: 跳过超大或非文本文件，不判断匹配是否代表安全问题。
+
 ### 2026-05-17: Artifact Index
 
 已经完成:

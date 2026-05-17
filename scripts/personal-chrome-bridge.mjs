@@ -812,6 +812,90 @@ function buildArtifactIndex(files = [], params = {}) {
   };
 }
 
+function buildArtifactSearch(files = [], params = {}) {
+  const query = String(params.query || "").trim();
+  if (!query) throw new Error("query is required");
+  const kindFilter = String(params.kind || "").trim().toLowerCase();
+  const maxFiles = Math.max(1, Math.min(Number(params.maxFiles) || 100, 1000));
+  const maxMatches = Math.max(1, Math.min(Number(params.maxMatches) || 50, 500));
+  const maxMatchesPerFile = Math.max(1, Math.min(Number(params.maxMatchesPerFile) || 10, 100));
+  const maxBytesPerFile = Math.max(1024, Math.min(Number(params.maxBytesPerFile) || 500000, 5_000_000));
+  const contextChars = Math.max(0, Math.min(Number(params.contextChars) || 160, 2000));
+  const rows = files
+    .map((file) => ({ ...file, kind: inferArtifactKind(file.path || file.relativePath || "") }))
+    .filter((file) => !kindFilter || file.kind === kindFilter)
+    .sort((a, b) => String(b.modifiedAt || "").localeCompare(String(a.modifiedAt || "")))
+    .slice(0, maxFiles);
+  const fileMatches = [];
+  let scannedFileCount = 0;
+  let skippedFileCount = 0;
+  let totalMatches = 0;
+  for (const file of rows) {
+    if (totalMatches >= maxMatches) break;
+    if (!file.path || !existsSync(file.path) || Number(file.bytes || 0) > maxBytesPerFile) {
+      skippedFileCount += 1;
+      continue;
+    }
+    const ext = String(file.path).toLowerCase().split(".").pop() || "";
+    const searchable = ["har", "json", "txt", "log", "md", "html", "htm", "js", "mjs", "ts", "css", "csv", "xml", "yml", "yaml", "map", "svg"].includes(ext);
+    if (!searchable) {
+      skippedFileCount += 1;
+      continue;
+    }
+    let text = "";
+    try {
+      text = readFileSync(file.path, "utf8");
+    } catch {
+      skippedFileCount += 1;
+      continue;
+    }
+    scannedFileCount += 1;
+    const matches = findTextMatches(text, query, {
+      caseSensitive: Boolean(params.caseSensitive),
+      maxMatches: Math.min(maxMatchesPerFile, maxMatches - totalMatches),
+      contextChars,
+    });
+    if (!matches.length) continue;
+    totalMatches += matches.length;
+    fileMatches.push({
+      path: file.path,
+      relativePath: file.relativePath,
+      kind: file.kind,
+      bytes: file.bytes,
+      modifiedAt: file.modifiedAt,
+      matchCount: matches.length,
+      matches,
+      nextTool: "devtools_artifact_inspect",
+      inspectInput: { path: file.path, query },
+    });
+  }
+  return {
+    schema: "agent-browser-runtime.artifact-search.v1",
+    generatedAt: new Date().toISOString(),
+    query,
+    filters: {
+      kind: kindFilter || null,
+      maxFiles,
+      maxMatches,
+      maxMatchesPerFile,
+      maxBytesPerFile,
+      contextChars,
+      caseSensitive: Boolean(params.caseSensitive),
+    },
+    candidateFileCount: rows.length,
+    scannedFileCount,
+    skippedFileCount,
+    matchedFileCount: fileMatches.length,
+    totalMatches,
+    fileMatches,
+    boundaries: [
+      "This is literal search across saved local evidence artifacts.",
+      "It skips oversized or non-text artifacts and does not interpret match meaning.",
+      "Use devtools_artifact_inspect on a returned path for bounded file-level drill-down.",
+    ],
+  };
+}
+
 function urlOrigin(url) {
   try { return new URL(url).origin; }
   catch { return ""; }
@@ -1195,6 +1279,16 @@ function artifactIndex(params = {}) {
     backend: "personal-chrome",
     artifactRoots: roots,
     ...buildArtifactIndex(files, params),
+  };
+}
+
+function artifactSearch(params = {}) {
+  const roots = personalArtifactRoots();
+  const files = roots.flatMap((dir) => listFiles(dir, Math.ceil(Math.max(Number(params.maxFiles) || 500, 500) / Math.max(1, roots.length))));
+  return {
+    backend: "personal-chrome",
+    artifactRoots: roots,
+    ...buildArtifactSearch(files, params),
   };
 }
 
@@ -1995,6 +2089,9 @@ async function callBridgeTool(toolName, params = {}) {
   if (toolName === "personal_chrome_artifact_index" || toolName === "devtools_artifact_index") {
     return artifactIndex(params);
   }
+  if (toolName === "personal_chrome_artifact_search" || toolName === "devtools_artifact_search") {
+    return artifactSearch(params);
+  }
   if (toolName === "personal_chrome_source_map_source_get" || toolName === "devtools_source_map_source_get") {
     const maxChars = typeof params.maxChars === "number" ? params.maxChars : 120000;
     if (params.path) {
@@ -2569,6 +2666,7 @@ const tools = {
   personal_chrome_evidence_manifest: "Write a manifest with Personal Chrome evidence paths, hashes, capture metadata, and provenance.",
   personal_chrome_artifact_inspect: "Inspect a saved local Personal Chrome evidence artifact with bounded preview, JSON/HAR shape, and literal matches.",
   personal_chrome_artifact_index: "List saved local Personal Chrome evidence artifacts by type, size, mtime, and path.",
+  personal_chrome_artifact_search: "Search saved local Personal Chrome evidence artifacts for a literal query.",
   personal_chrome_request_correlation_graph: "Build a frame/script/request/console correlation graph from Personal Chrome F12 evidence.",
   personal_chrome_capture_diff: "Compare before/after Personal Chrome evidence artifacts or current captured traffic.",
   personal_chrome_auth_boundary_report: "Collect objective Personal Chrome auth boundary evidence without deciding vulnerability impact.",
@@ -2664,6 +2762,7 @@ const tools = {
   devtools_evidence_manifest: "Unified Agent DevTools API: write a manifest with evidence paths, hashes, capture metadata, and provenance.",
   devtools_artifact_inspect: "Unified Agent DevTools API: inspect a saved evidence artifact with bounded preview, structure, and literal matches.",
   devtools_artifact_index: "Unified Agent DevTools API: list saved evidence artifacts by type, size, mtime, and path.",
+  devtools_artifact_search: "Unified Agent DevTools API: literal search across saved evidence artifacts.",
   devtools_request_correlation_graph: "Unified Agent DevTools API: build a frame/script/request/console correlation graph from F12 evidence.",
   devtools_capture_diff: "Unified Agent DevTools API: compare before/after evidence artifacts or current captured traffic.",
   devtools_auth_boundary_report: "Unified Agent DevTools API: collect objective auth boundary evidence without deciding vulnerability impact.",

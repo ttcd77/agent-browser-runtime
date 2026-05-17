@@ -735,6 +735,90 @@ function buildArtifactIndex(files = [], params = {}) {
   };
 }
 
+function buildArtifactSearch(files = [], params = {}) {
+  const query = String(params.query || "").trim();
+  if (!query) throw new Error("query is required");
+  const kindFilter = String(params.kind || "").trim().toLowerCase();
+  const maxFiles = Math.max(1, Math.min(Number(params.maxFiles) || 100, 1000));
+  const maxMatches = Math.max(1, Math.min(Number(params.maxMatches) || 50, 500));
+  const maxMatchesPerFile = Math.max(1, Math.min(Number(params.maxMatchesPerFile) || 10, 100));
+  const maxBytesPerFile = Math.max(1024, Math.min(Number(params.maxBytesPerFile) || 500000, 5_000_000));
+  const contextChars = Math.max(0, Math.min(Number(params.contextChars) || 160, 2000));
+  const rows = files
+    .map((file) => ({ ...file, kind: inferArtifactKind(file.path || file.relativePath || "") }))
+    .filter((file) => !kindFilter || file.kind === kindFilter)
+    .sort((a, b) => String(b.modifiedAt || "").localeCompare(String(a.modifiedAt || "")))
+    .slice(0, maxFiles);
+  const fileMatches = [];
+  let scannedFileCount = 0;
+  let skippedFileCount = 0;
+  let totalMatches = 0;
+  for (const file of rows) {
+    if (totalMatches >= maxMatches) break;
+    if (!file.path || !existsSync(file.path) || Number(file.bytes || 0) > maxBytesPerFile) {
+      skippedFileCount += 1;
+      continue;
+    }
+    const ext = String(file.path).toLowerCase().split(".").pop() || "";
+    const searchable = ["har", "json", "txt", "log", "md", "html", "htm", "js", "mjs", "ts", "css", "csv", "xml", "yml", "yaml", "map", "svg"].includes(ext);
+    if (!searchable) {
+      skippedFileCount += 1;
+      continue;
+    }
+    let text = "";
+    try {
+      text = readFileSync(file.path, "utf8");
+    } catch {
+      skippedFileCount += 1;
+      continue;
+    }
+    scannedFileCount += 1;
+    const matches = findSourceMatches(text, query, {
+      caseSensitive: Boolean(params.caseSensitive),
+      maxMatches: Math.min(maxMatchesPerFile, maxMatches - totalMatches),
+      contextChars,
+    });
+    if (!matches.length) continue;
+    totalMatches += matches.length;
+    fileMatches.push({
+      path: file.path,
+      relativePath: file.relativePath,
+      kind: file.kind,
+      bytes: file.bytes,
+      modifiedAt: file.modifiedAt,
+      matchCount: matches.length,
+      matches,
+      nextTool: "devtools_artifact_inspect",
+      inspectInput: { path: file.path, query },
+    });
+  }
+  return {
+    schema: "agent-browser-runtime.artifact-search.v1",
+    generatedAt: new Date().toISOString(),
+    query,
+    filters: {
+      kind: kindFilter || null,
+      maxFiles,
+      maxMatches,
+      maxMatchesPerFile,
+      maxBytesPerFile,
+      contextChars,
+      caseSensitive: Boolean(params.caseSensitive),
+    },
+    candidateFileCount: rows.length,
+    scannedFileCount,
+    skippedFileCount,
+    matchedFileCount: fileMatches.length,
+    totalMatches,
+    fileMatches,
+    boundaries: [
+      "This is literal search across saved local evidence artifacts.",
+      "It skips oversized or non-text artifacts and does not interpret match meaning.",
+      "Use devtools_artifact_inspect on a returned path for bounded file-level drill-down.",
+    ],
+  };
+}
+
 function requestOrigin(url) {
   try {
     return new URL(url).origin;
@@ -9379,6 +9463,36 @@ function registerStandaloneBrowserTools(tools, cdpPort, profileRegistry, default
     },
   });
 
+  tools.set("browser_artifact_search", {
+    name: "browser_artifact_search",
+    description: "Search saved local profile evidence artifacts for a literal query and return bounded match windows plus drill-down paths.",
+    parameters: {
+      type: "object",
+      properties: {
+        profile: { type: "string" },
+        query: { type: "string" },
+        kind: { type: "string" },
+        maxFiles: { type: "number" },
+        maxMatches: { type: "number" },
+        maxMatchesPerFile: { type: "number" },
+        maxBytesPerFile: { type: "number" },
+        contextChars: { type: "number" },
+        caseSensitive: { type: "boolean" },
+      },
+      required: ["query"],
+    },
+    async execute(_id, params) {
+      const profile = await resolveProfile(params?.profile);
+      const files = listEvidenceFiles(profile.evidenceDir, { maxFiles: Math.max(Number(params?.maxFiles) || 500, 500) });
+      return toolResult({
+        backend: "managed-cdp",
+        profile: profile.name,
+        evidenceDir: profile.evidenceDir,
+        ...buildArtifactSearch(files, params),
+      });
+    },
+  });
+
   tools.set("browser_request_correlation_graph", {
     name: "browser_request_correlation_graph",
     description: "Build an objective graph connecting frames, scripts, Network requests, and Console entries observed in current F12 evidence.",
@@ -10984,6 +11098,7 @@ function registerStandaloneBrowserTools(tools, cdpPort, profileRegistry, default
   aliasTool("devtools_evidence_manifest", "browser_evidence_manifest", "Unified Agent DevTools API: write a manifest with evidence paths, hashes, capture metadata, and provenance.");
   aliasTool("devtools_artifact_inspect", "browser_artifact_inspect", "Unified Agent DevTools API: inspect a saved evidence artifact with bounded preview, structure, and literal matches.");
   aliasTool("devtools_artifact_index", "browser_artifact_index", "Unified Agent DevTools API: list saved evidence artifacts by type, size, mtime, and path.");
+  aliasTool("devtools_artifact_search", "browser_artifact_search", "Unified Agent DevTools API: literal search across saved evidence artifacts.");
   aliasTool("devtools_request_correlation_graph", "browser_request_correlation_graph", "Unified Agent DevTools API: build a frame/script/request/console correlation graph from F12 evidence.");
   aliasTool("devtools_capture_diff", "browser_capture_diff", "Unified Agent DevTools API: compare before/after evidence artifacts or current captured traffic.");
   aliasTool("devtools_auth_boundary_report", "browser_auth_boundary_report", "Unified Agent DevTools API: collect objective auth boundary evidence without deciding vulnerability impact.");

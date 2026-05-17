@@ -135,6 +135,7 @@ facts instead of assuming the replay perfectly cloned the original request.
 | Write artifact manifest with hashes and provenance | `devtools_evidence_manifest` |
 | Inspect saved artifact shape, preview, and literal matches | `devtools_artifact_inspect` |
 | List saved artifacts by type, size, mtime, and path | `devtools_artifact_index` |
+| Search saved artifacts for literal matches | `devtools_artifact_search` |
 | Build request/script/frame/console correlation graph | `devtools_request_correlation_graph` |
 | Compare before/after captured evidence | `devtools_capture_diff` |
 | Collect auth boundary evidence | `devtools_auth_boundary_report` |

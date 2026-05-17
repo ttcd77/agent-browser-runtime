@@ -1050,6 +1050,15 @@ try {
   assert(artifactIndex.backend === "managed-cdp", `artifact index wrong backend: ${JSON.stringify(artifactIndex)}`);
   assert(artifactIndex.totalFileCount >= 1, `artifact index missing files: ${JSON.stringify(artifactIndex)}`);
   assert(artifactIndex.artifacts?.some((artifact) => artifact.kind === "har" && artifact.path === savedHar.harPath), `artifact index missing saved HAR: ${JSON.stringify(artifactIndex.artifacts)}`);
+  const artifactSearch = await callTool(baseUrl, "devtools_artifact_search", {
+    profile: "default",
+    query: "Agent Browser Runtime",
+    kind: "har",
+    maxFiles: 20,
+  });
+  assert(artifactSearch.backend === "managed-cdp", `artifact search wrong backend: ${JSON.stringify(artifactSearch)}`);
+  assert(artifactSearch.totalMatches >= 1, `artifact search found no matches: ${JSON.stringify(artifactSearch)}`);
+  assert(artifactSearch.fileMatches?.some((artifact) => artifact.path === savedHar.harPath), `artifact search missing saved HAR: ${JSON.stringify(artifactSearch.fileMatches)}`);
 
   const harWithBodies = await callTool(baseUrl, "devtools_export_har", {
     profile: "default",
@@ -1086,6 +1095,7 @@ try {
   console.log(`- capture bisect: ${captureBisect.buckets.network.requestCount} requests -> ${captureBisect.bisectPath}`);
   console.log(`- HAR artifact inspect: ${harArtifact.json.harEntryCount} entries / ${harArtifact.matchCount} matches`);
   console.log(`- artifact index files/kinds: ${artifactIndex.totalFileCount}/${Object.keys(artifactIndex.kinds).length}`);
+  console.log(`- artifact search matches/files: ${artifactSearch.totalMatches}/${artifactSearch.matchedFileCount}`);
   console.log(`- request detail id: ${requestDetail.detail.requestId}`);
   console.log(`- DevTools issues: ${issuesLog.issueCount}`);
   console.log(`- accessibility nodes: ${accessibility.nodeCount}`);

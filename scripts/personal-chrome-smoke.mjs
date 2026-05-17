@@ -459,6 +459,14 @@ const artifactIndex = await callTool("devtools_artifact_index", {
 assert(artifactIndex.backend === "personal-chrome", `Personal Chrome artifact index wrong backend: ${JSON.stringify(artifactIndex)}`);
 assert(artifactIndex.totalFileCount >= 1, `Personal Chrome artifact index missing files: ${JSON.stringify(artifactIndex)}`);
 assert(artifactIndex.artifacts?.some((artifact) => artifact.kind === "har" && artifact.path === savedHar.harPath), `Personal Chrome artifact index missing saved HAR: ${JSON.stringify(artifactIndex.artifacts)}`);
+const artifactSearch = await callTool("devtools_artifact_search", {
+  query: "Agent Browser Runtime",
+  kind: "har",
+  maxFiles: 20,
+});
+assert(artifactSearch.backend === "personal-chrome", `Personal Chrome artifact search wrong backend: ${JSON.stringify(artifactSearch)}`);
+assert(artifactSearch.totalMatches >= 1, `Personal Chrome artifact search found no matches: ${JSON.stringify(artifactSearch)}`);
+assert(artifactSearch.fileMatches?.some((artifact) => artifact.path === savedHar.harPath), `Personal Chrome artifact search missing saved HAR: ${JSON.stringify(artifactSearch.fileMatches)}`);
 
 const toolCatalog = await callTool("devtools_tool_catalog", { query: "auth" });
 assert(toolCatalog.toolCount >= 1, "Personal Chrome tool catalog did not return auth tools");
@@ -484,6 +492,7 @@ console.log(`- capture bisect buckets: ${captureBisect.buckets.network.requestCo
 console.log(`- HAR completeness entries/body-included: ${harCompleteness.entryCount}/${harCompleteness.body.includedCount}`);
 console.log(`- HAR artifact inspect: ${harArtifact.json.harEntryCount} entries`);
 console.log(`- artifact index files/kinds: ${artifactIndex.totalFileCount}/${Object.keys(artifactIndex.kinds).length}`);
+console.log(`- artifact search matches/files: ${artifactSearch.totalMatches}/${artifactSearch.matchedFileCount}`);
 console.log(`- capability panels: ${capabilityMap.panelCount}`);
 console.log(`- realtime channels ws/sse: ${realtimeLog.websocketCount}/${realtimeLog.eventSourceMessageCount}`);
 
