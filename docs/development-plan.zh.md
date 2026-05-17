@@ -87,7 +87,7 @@
 开发项:
 
 - HAR 导出继续接近 DevTools: 更完整 timing、body handle、redirect/body 证据。第一步先落地 `devtools_har_completeness`，让 Agent 知道当前 HAR 证据完整到什么程度。
-- Sources/Debugger: breakpoint 管理、paused scope 深挖、source map 原始文件导航。
+- Sources/Debugger: source map 原始文件导航已补 `devtools_source_map_source_get`；下一步继续 breakpoint 管理和 paused scope 深挖。
 - Performance: trace event 到 frame/layout/paint 的更好分组，不做性能风险判断，只做证据整理。
 - Application: CHIPS / partitioned cookie、quota/storage bucket、Cache/IndexedDB drill-down。
 - Replay: 更明确 forbidden header、browser fetch replay 与 raw socket-level replay 边界。

@@ -437,6 +437,13 @@ try {
     ?.flatMap((entry) => entry.sources || [])
     .find((entry) => entry.source === "source-search-smoke.ts");
   assert(originalSource?.saved === true && originalSource?.path, `source map original source was not saved: ${JSON.stringify(sourceMapSources)}`);
+  const sourceMapSourceGet = await callTool(baseUrl, "devtools_source_map_source_get", {
+    profile: "default",
+    path: originalSource.path,
+    maxChars: 2000,
+  });
+  assert(sourceMapSourceGet.contentText?.includes(sourceMarker), "source map source_get lost original source marker");
+  assert(sourceMapSourceGet.source?.sha256, "source map source_get did not return artifact hash");
   const consoleLog = await callTool(baseUrl, "devtools_console_log", {
     profile: "default",
     reload: true,

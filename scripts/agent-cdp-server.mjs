@@ -1,6 +1,6 @@
 import { appendFileSync, existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
-import { dirname, join } from "node:path";
+import { dirname, join, resolve, sep } from "node:path";
 import { pathToFileURL } from "node:url";
 import { spawn } from "node:child_process";
 import { createHash } from "node:crypto";
@@ -3112,6 +3112,65 @@ function writeSourceMapOriginalSources(rootDir, script = {}, entries = [], metad
     manifestPath,
     sources: savedSources.map(({ content, contentText, ...entry }) => entry),
   };
+}
+
+function pathInsideRoot(file, rootDir) {
+  const target = resolve(file);
+  const rootPath = resolve(rootDir);
+  const normalizedTarget = process.platform === "win32" ? target.toLowerCase() : target;
+  const normalizedRoot = process.platform === "win32" ? rootPath.toLowerCase() : rootPath;
+  return normalizedTarget === normalizedRoot || normalizedTarget.startsWith(`${normalizedRoot}${sep}`);
+}
+
+function readSourceMapArtifact(file, allowedRoot, maxChars = 120000) {
+  if (!file) throw new Error("path is required");
+  if (!pathInsideRoot(file, allowedRoot)) {
+    throw new Error(`source artifact path is outside this profile evidence directory: ${file}`);
+  }
+  if (!existsSync(file)) throw new Error(`source artifact path does not exist: ${file}`);
+  const stat = statSync(file);
+  if (!stat.isFile()) throw new Error(`source artifact path is not a file: ${file}`);
+  const text = readFileSync(file, "utf8");
+  const limited = truncateText(text, maxChars);
+  return {
+    path: file,
+    bytes: stat.size,
+    sha256: fileSha256(file),
+    contentText: limited.text,
+    truncated: limited.truncated,
+    contentBytes: Buffer.byteLength(text, "utf8"),
+  };
+}
+
+function selectSourceMapOriginalSource(results = [], params = {}) {
+  const entries = [];
+  for (const [resultIndex, result] of results.entries()) {
+    for (const source of result.sources || []) {
+      entries.push({
+        resultIndex,
+        script: result.script || null,
+        sourceRoot: result.sourceRoot || null,
+        manifestPath: result.manifestPath || null,
+        source,
+      });
+    }
+  }
+  const savedEntries = entries.filter((entry) => entry.source?.saved && entry.source?.path);
+  if (!savedEntries.length) {
+    throw new Error("no saved source-map original source is available; the map may not include sourcesContent");
+  }
+  if (typeof params.index === "number") {
+    const byIndex = savedEntries.find((entry) => Number(entry.source?.index) === Number(params.index));
+    if (byIndex) return byIndex;
+  }
+  if (params.source) {
+    const needle = String(params.source);
+    const exact = savedEntries.find((entry) => String(entry.source?.source || "") === needle);
+    if (exact) return exact;
+    const partial = savedEntries.find((entry) => String(entry.source?.source || "").includes(needle) || String(entry.source?.resolvedURL || "").includes(needle));
+    if (partial) return partial;
+  }
+  return savedEntries[0];
 }
 
 function sourceContextLines(sourceText, lineNumber = 0, contextLines = 5) {
@@ -7446,6 +7505,155 @@ function registerStandaloneBrowserTools(tools, cdpPort, profileRegistry, default
     },
   });
 
+  tools.set("browser_source_map_source_get", {
+    name: "browser_source_map_source_get",
+    description: "Read one saved original source file extracted from a source map, or extract and select one by script/source selector.",
+    parameters: {
+      type: "object",
+      properties: {
+        profile: { type: "string" },
+        tabId: { type: "string" },
+        path: { type: "string" },
+        scriptId: { type: "string" },
+        query: { type: "string" },
+        urlContains: { type: "string" },
+        source: { type: "string" },
+        index: { type: "number" },
+        hasSourceMap: { type: "boolean" },
+        isModule: { type: "boolean" },
+        reload: { type: "boolean" },
+        ignoreCache: { type: "boolean" },
+        waitMs: { type: "number" },
+        maxScripts: { type: "number" },
+        maxSources: { type: "number" },
+        maxChars: { type: "number" },
+        fetchMap: { type: "boolean" },
+      },
+    },
+    async execute(_id, params) {
+      const profile = await resolveProfile(params?.profile);
+      const maxChars = typeof params?.maxChars === "number" ? params.maxChars : 120000;
+      if (params?.path) {
+        const artifact = readSourceMapArtifact(params.path, profile.evidenceDir, maxChars);
+        return toolResult({
+          profile: profile.name,
+          evidenceDir: profile.evidenceDir,
+          selectedBy: "path",
+          source: {
+            path: artifact.path,
+            saved: true,
+            bytes: artifact.bytes,
+            sha256: artifact.sha256,
+          },
+          contentText: artifact.contentText,
+          contentBytes: artifact.contentBytes,
+          truncated: artifact.truncated,
+          captureBoundaries: [
+            "Reads only previously saved source-map evidence under the selected profile evidence directory.",
+            "This tool returns source text and artifact provenance; it does not decide whether the source contains a vulnerability.",
+          ],
+        });
+      }
+
+      const waitMs = typeof params?.waitMs === "number" ? params.waitMs : 1200;
+      const maxScripts = typeof params?.maxScripts === "number" ? params.maxScripts : 40;
+      return toolResult(await withPageClient(cdpPort, params?.tabId || profile.tabId, async (client, target) => {
+        const scripts = new Map();
+        await client.Debugger.enable();
+        client.Debugger.scriptParsed((event) => {
+          scripts.set(event.scriptId, {
+            timestamp: new Date().toISOString(),
+            scriptId: event.scriptId,
+            url: event.url,
+            startLine: event.startLine,
+            startColumn: event.startColumn,
+            endLine: event.endLine,
+            endColumn: event.endColumn,
+            executionContextId: event.executionContextId,
+            hash: event.hash,
+            executionContextAuxData: event.executionContextAuxData,
+            isLiveEdit: event.isLiveEdit,
+            sourceMapURL: event.sourceMapURL,
+            hasSourceURL: event.hasSourceURL,
+            isModule: event.isModule,
+            length: event.length,
+            stackTrace: event.stackTrace,
+          });
+        });
+        if (params?.reload !== false) {
+          await client.Page.enable();
+          await client.Page.reload({ ignoreCache: Boolean(params?.ignoreCache) });
+          await sleep(waitMs);
+        } else {
+          await sleep(300);
+        }
+        const rows = [...scripts.values()]
+          .filter((script) => !params?.scriptId || String(script.scriptId) === String(params.scriptId))
+          .filter((script) => sourceMatches(script, params))
+          .slice(-maxScripts);
+        const results = [];
+        let lastError = null;
+        for (const script of rows) {
+          try {
+            const source = await client.Debugger.getScriptSource({ scriptId: script.scriptId });
+            const text = String(source?.scriptSource || "");
+            if (params?.query && !text.includes(String(params.query))) continue;
+            const reference = script.sourceMapURL || extractSourceMapReference(text);
+            const loaded = await loadSourceMap(reference, script.url, { fetchMap: Boolean(params?.fetchMap) });
+            const entries = loaded.map ? sourceMapOriginalEntries(loaded.map, script, { ...params, maxContentChars: 0 }) : [];
+            const saved = writeSourceMapOriginalSources(profile.evidenceDir, script, entries, loaded.metadata);
+            results.push({
+              script,
+              sourceMapURLFromDebugger: script.sourceMapURL || "",
+              sourceMapURLFromComment: extractSourceMapReference(text),
+              metadata: loaded.metadata,
+              sourceCount: entries.length,
+              sourcesWithContent: entries.filter((entry) => entry.hasContent).length,
+              sources: saved.sources,
+              sourceRoot: saved.sourceRoot,
+              manifestPath: saved.manifestPath,
+            });
+          } catch (err) {
+            lastError = String(err?.message || err);
+            results.push({ script, error: lastError });
+          }
+        }
+        if (!results.length) {
+          throw new Error(lastError || "no matching source found");
+        }
+        const selected = selectSourceMapOriginalSource(results, params || {});
+        const artifact = readSourceMapArtifact(selected.source.path, profile.evidenceDir, maxChars);
+        await profileRegistry.touchProfile(profile.name, { tabId: target.id });
+        return {
+          profile: profile.name,
+          tabId: target.id,
+          evidenceDir: profile.evidenceDir,
+          selectedBy: params?.source ? "source" : typeof params?.index === "number" ? "index" : "first-saved-source",
+          resultIndex: selected.resultIndex,
+          script: selected.script,
+          sourceRoot: selected.sourceRoot,
+          manifestPath: selected.manifestPath,
+          source: {
+            ...selected.source,
+            contentText: undefined,
+            content: undefined,
+            path: artifact.path,
+            bytes: artifact.bytes,
+            sha256: artifact.sha256,
+          },
+          contentText: artifact.contentText,
+          contentBytes: artifact.contentBytes,
+          truncated: artifact.truncated,
+          captureBoundaries: [
+            "Only source maps referenced by parsed scripts can be extracted.",
+            "sourcesContent is saved when present. External original sources are not fetched unless they are embedded in the source map.",
+            "This tool returns source text and artifact provenance; it does not decide whether the source contains a vulnerability.",
+          ],
+        };
+      }));
+    },
+  });
+
   tools.set("browser_global_search", {
     name: "browser_global_search",
     description: "Search F12 evidence surfaces for a literal query across Network records, parsed Sources, Storage, IndexedDB samples, and Cache metadata.",
@@ -7723,7 +7931,7 @@ function registerStandaloneBrowserTools(tools, cdpPort, profileRegistry, default
         out.evidence.sources = await safeCall("browser_sources_list", { limit: limit * 5 });
         if (params?.query) out.evidence.search = await safeCall("browser_sources_search", { query: params.query, maxMatches: limit });
         out.summary = "Sources panel route: parsed scripts, source maps, literal source search, and debugger drill-down.";
-        out.nextTools = ["devtools_source_get", "devtools_source_pretty_print", "devtools_source_map_metadata", "agent_inspect focus=debug"];
+        out.nextTools = ["devtools_source_get", "devtools_source_pretty_print", "devtools_source_map_metadata", "devtools_source_map_source_get", "agent_inspect focus=debug"];
       } else if (focus === "performance") {
         out.evidence.memory = await safeCall("browser_memory_snapshot");
         out.evidence.observer = await safeCall("browser_performance_observer", { durationMs: 500, maxItems: limit });
@@ -9496,6 +9704,7 @@ function registerStandaloneBrowserTools(tools, cdpPort, profileRegistry, default
   aliasTool("devtools_source_pretty_print", "browser_source_pretty_print", "Unified Agent DevTools API: pretty-print parsed JavaScript source.");
   aliasTool("devtools_source_map_metadata", "browser_source_map_metadata", "Unified Agent DevTools API: read source map reference and metadata.");
   aliasTool("devtools_source_map_sources", "browser_source_map_sources", "Unified Agent DevTools API: extract original source files from source maps.");
+  aliasTool("devtools_source_map_source_get", "browser_source_map_source_get", "Unified Agent DevTools API: read one original source file extracted from a source map.");
   aliasTool("devtools_global_search", "browser_global_search", "Unified Agent DevTools API: search F12 evidence surfaces for a literal query.");
   aliasTool("devtools_evidence_bundle", "browser_evidence_bundle", "Unified Agent DevTools API: export a compact objective F12 evidence bundle.");
   aliasTool("devtools_evidence_manifest", "browser_evidence_manifest", "Unified Agent DevTools API: write a manifest with evidence paths, hashes, capture metadata, and provenance.");

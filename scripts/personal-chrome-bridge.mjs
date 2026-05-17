@@ -1,7 +1,7 @@
 import http from "node:http";
 import { createHash, randomUUID } from "node:crypto";
 import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
-import { dirname, join } from "node:path";
+import { dirname, join, resolve, sep } from "node:path";
 import { WebSocketServer } from "ws";
 
 const httpPort = Number.parseInt(process.env.PERSONAL_CHROME_HTTP_PORT || "17337", 10);
@@ -126,6 +126,7 @@ function normalizeCommand(toolName) {
     devtools_source_pretty_print: "chrome_source_pretty_print",
     devtools_source_map_metadata: "chrome_source_map_metadata",
     devtools_source_map_sources: "chrome_source_map_sources",
+    devtools_source_map_source_get: "chrome_source_map_source_get",
     devtools_global_search: "chrome_global_search",
     devtools_evidence_bundle: "chrome_evidence_bundle",
     devtools_evidence_manifest: "chrome_evidence_manifest",
@@ -493,6 +494,41 @@ function traceCompare(params = {}) {
 
 function sha256File(file) {
   return createHash("sha256").update(readFileSync(file)).digest("hex");
+}
+
+function truncateText(text, maxChars = 120000) {
+  const value = String(text || "");
+  const limit = Math.max(0, Number(maxChars) || 0);
+  if (!limit || value.length <= limit) return { text: value, truncated: false };
+  return { text: value.slice(0, limit), truncated: true };
+}
+
+function pathInsideRoot(file, rootDir) {
+  const target = resolve(file);
+  const rootPath = resolve(rootDir);
+  const normalizedTarget = process.platform === "win32" ? target.toLowerCase() : target;
+  const normalizedRoot = process.platform === "win32" ? rootPath.toLowerCase() : rootPath;
+  return normalizedTarget === normalizedRoot || normalizedTarget.startsWith(`${normalizedRoot}${sep}`);
+}
+
+function readSourceMapArtifact(file, maxChars = 120000) {
+  if (!file) throw new Error("path is required");
+  if (!pathInsideRoot(file, sourceMapDir)) {
+    throw new Error(`source artifact path is outside the Personal Chrome source-map evidence directory: ${file}`);
+  }
+  if (!existsSync(file)) throw new Error(`source artifact path does not exist: ${file}`);
+  const stat = statSync(file);
+  if (!stat.isFile()) throw new Error(`source artifact path is not a file: ${file}`);
+  const text = readFileSync(file, "utf8");
+  const limited = truncateText(text, maxChars);
+  return {
+    path: file,
+    bytes: stat.size,
+    sha256: sha256File(file),
+    contentText: limited.text,
+    truncated: limited.truncated,
+    contentBytes: Buffer.byteLength(text, "utf8"),
+  };
 }
 
 function listFiles(rootDir, maxFiles = 200) {
@@ -1427,6 +1463,37 @@ function persistSourceMapSources(result, params = {}) {
   };
 }
 
+function selectSourceMapOriginalSource(results = [], params = {}) {
+  const entries = [];
+  for (const [resultIndex, result] of results.entries()) {
+    for (const source of result.sources || []) {
+      entries.push({
+        resultIndex,
+        script: result.script || null,
+        sourceRoot: result.sourceRoot || null,
+        manifestPath: result.manifestPath || null,
+        source,
+      });
+    }
+  }
+  const savedEntries = entries.filter((entry) => entry.source?.saved && entry.source?.path);
+  if (!savedEntries.length) {
+    throw new Error("no saved source-map original source is available; the map may not include sourcesContent");
+  }
+  if (typeof params.index === "number") {
+    const byIndex = savedEntries.find((entry) => Number(entry.source?.index) === Number(params.index));
+    if (byIndex) return byIndex;
+  }
+  if (params.source) {
+    const needle = String(params.source);
+    const exact = savedEntries.find((entry) => String(entry.source?.source || "") === needle);
+    if (exact) return exact;
+    const partial = savedEntries.find((entry) => String(entry.source?.source || "").includes(needle) || String(entry.source?.resolvedURL || "").includes(needle));
+    if (partial) return partial;
+  }
+  return savedEntries[0];
+}
+
 function postProcessToolResult(toolName, result, params = {}) {
   if (toolName === "personal_chrome_screenshot" || toolName === "devtools_screenshot") {
     return persistScreenshot(result, params);
@@ -1488,6 +1555,61 @@ async function callBridgeTool(toolName, params = {}) {
   }
   if (toolName === "personal_chrome_trace_compare" || toolName === "devtools_trace_compare") {
     return traceCompare(params);
+  }
+  if (toolName === "personal_chrome_source_map_source_get" || toolName === "devtools_source_map_source_get") {
+    const maxChars = typeof params.maxChars === "number" ? params.maxChars : 120000;
+    if (params.path) {
+      const artifact = readSourceMapArtifact(params.path, maxChars);
+      return {
+        backend: "personal-chrome",
+        selectedBy: "path",
+        source: {
+          path: artifact.path,
+          saved: true,
+          bytes: artifact.bytes,
+          sha256: artifact.sha256,
+        },
+        contentText: artifact.contentText,
+        contentBytes: artifact.contentBytes,
+        truncated: artifact.truncated,
+        captureBoundaries: [
+          "Reads only previously saved source-map evidence under the Personal Chrome source-map evidence directory.",
+          "This tool returns source text and artifact provenance; it does not decide whether the source contains a vulnerability.",
+        ],
+      };
+    }
+    const extracted = await safeBridgeTool("devtools_source_map_sources", {
+      ...params,
+      save: true,
+      maxContentChars: 0,
+    });
+    const selected = selectSourceMapOriginalSource(extracted.results || [], params);
+    const artifact = readSourceMapArtifact(selected.source.path, maxChars);
+    return {
+      backend: "personal-chrome",
+      tab: extracted.tab || null,
+      selectedBy: params.source ? "source" : typeof params.index === "number" ? "index" : "first-saved-source",
+      resultIndex: selected.resultIndex,
+      script: selected.script,
+      sourceRoot: selected.sourceRoot,
+      manifestPath: extracted.manifestPath || selected.manifestPath || null,
+      source: {
+        ...selected.source,
+        contentText: undefined,
+        content: undefined,
+        path: artifact.path,
+        bytes: artifact.bytes,
+        sha256: artifact.sha256,
+      },
+      contentText: artifact.contentText,
+      contentBytes: artifact.contentBytes,
+      truncated: artifact.truncated,
+      captureBoundaries: [
+        "Only source maps referenced by parsed scripts can be extracted.",
+        "sourcesContent is saved when present. External original sources are not fetched unless they are embedded in the source map.",
+        "This tool returns source text and artifact provenance; it does not decide whether the source contains a vulnerability.",
+      ],
+    };
   }
   if (toolName === "personal_chrome_capture_bisect" || toolName === "devtools_capture_bisect") {
     const limit = typeof params.limit === "number" ? params.limit : 200;
@@ -1844,7 +1966,7 @@ async function runAgentInspect(params = {}) {
     out.evidence.sources = await safeBridgeTool("devtools_sources_list", withBase({ limit: limit * 5 }));
     if (params.query) out.evidence.search = await safeBridgeTool("devtools_sources_search", withBase({ query: params.query, maxMatches: limit }));
     out.summary = "Sources panel route: parsed scripts, source maps, literal source search, and debugger drill-down.";
-    out.nextTools = ["devtools_source_get", "devtools_source_pretty_print", "devtools_source_map_metadata", "agent_inspect focus=debug"];
+    out.nextTools = ["devtools_source_get", "devtools_source_pretty_print", "devtools_source_map_metadata", "devtools_source_map_source_get", "agent_inspect focus=debug"];
   } else if (focus === "performance") {
     out.evidence.memory = await safeBridgeTool("devtools_memory_snapshot", base);
     out.evidence.observer = await safeBridgeTool("devtools_performance_observer", withBase({ durationMs: 500, maxItems: limit }));
@@ -1999,6 +2121,7 @@ const tools = {
   personal_chrome_source_pretty_print: "Return a DevTools-style heuristic pretty-printed JavaScript source from the user's real Chrome tab.",
   personal_chrome_source_map_metadata: "Return sourceMappingURL and source map metadata from the user's real Chrome tab.",
   personal_chrome_source_map_sources: "Extract original source files from source maps in the user's real Chrome tab.",
+  personal_chrome_source_map_source_get: "Read one saved original source file extracted from a source map in the user's real Chrome tab.",
   personal_chrome_global_search: "Search F12 evidence surfaces in the user's real Chrome tab for a literal query.",
   personal_chrome_evidence_bundle: "Export a compact objective F12 evidence bundle from the user's real Chrome tab.",
   personal_chrome_evidence_manifest: "Write a manifest with Personal Chrome evidence paths, hashes, capture metadata, and provenance.",
@@ -2089,6 +2212,7 @@ const tools = {
   devtools_source_pretty_print: "Unified Agent DevTools API: pretty-print parsed JavaScript source.",
   devtools_source_map_metadata: "Unified Agent DevTools API: read source map reference and metadata.",
   devtools_source_map_sources: "Unified Agent DevTools API: extract original source files from source maps.",
+  devtools_source_map_source_get: "Unified Agent DevTools API: read one original source file extracted from a source map.",
   devtools_global_search: "Unified Agent DevTools API: search F12 evidence surfaces for a literal query.",
   devtools_evidence_bundle: "Unified Agent DevTools API: export a compact objective F12 evidence bundle.",
   devtools_evidence_manifest: "Unified Agent DevTools API: write a manifest with evidence paths, hashes, capture metadata, and provenance.",

@@ -196,6 +196,11 @@ Verified manually during development:
     into local evidence artifacts and returns manifest/file paths.
   - Personal Chrome: receives source-map originals through `chrome.debugger`
     and persists them under `tmp/personal-chrome-sources`.
+- `devtools_source_map_source_get`
+  - Managed Browser: reads one saved source-map original file by path or by
+    source selector and returns bounded text plus artifact hash/provenance.
+  - Personal Chrome: uses the same unified tool name and reads persisted
+    source-map evidence from `tmp/personal-chrome-sources`.
 - `devtools_save_har`
   - Managed Browser: saved captured traffic as a HAR file under profile
     evidence.
