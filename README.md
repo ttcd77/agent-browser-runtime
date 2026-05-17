@@ -171,6 +171,15 @@ This starts a capture window, hard reloads the page, collects the first-pass
 F12 evidence areas, and returns saved HAR, Application export, Chrome trace, and
 evidence bundle paths. See `docs/security-research-pack.md`.
 
+CLI shortcut:
+
+```bash
+npm run research:pack -- --url https://example.com --profile researcher
+```
+
+The CLI prints the key artifact paths. Use `--json` when an agent or script needs
+the full response.
+
 ## Tools
 
 ### Agent Router
@@ -268,6 +277,21 @@ See `docs/agent-devtools-api.md`.
 For an F12-to-tool lookup table, see `docs/devtools-panel-map.md`.
 For the one-call research workflow, see `docs/security-research-pack.md`.
 For public release readiness, see `docs/open-source-release-checklist.md`.
+For a minimal adapter sketch, see `examples/mcp-adapter-sketch.mjs`.
+
+## Known Backend Boundaries
+
+- Managed Browser uses direct CDP and is the preferred backend for repeatable
+  target work, clean profiles, raw CDP discovery, and artifact generation.
+- Personal Chrome uses a local extension bridge and `chrome.debugger`. It is best
+  when the user wants the agent to inspect the browser state they are already
+  seeing.
+- The two modes expose the same `devtools_*` contract, but Chrome may expose more
+  browser-process CDP data to Managed Browser than to Personal Chrome.
+- Capture is explicit. If recording was not enabled before an action, neither
+  humans nor agents can recover network events Chrome did not retain.
+- Tools return objective evidence, signals, paths, and completeness boundaries.
+  They do not decide whether something is a vulnerability.
 
 Backend/debug tools:
 

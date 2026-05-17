@@ -58,9 +58,8 @@ Do not publish:
 
 ## Next Polish Items
 
-- Add a CLI wrapper for the research pack.
+- Add packaged npm metadata/bin entries if publishing to npm.
 - Add a short demo GIF or screenshot using only `example.com`.
-- Add a minimal MCP adapter example.
-- Add a "known backend limitations" section to the README.
+- Turn the minimal MCP adapter sketch into a full MCP server package.
 - Rename any remaining internal wording that sounds tied to OpenClaw unless it
   is explicitly compatibility-related.

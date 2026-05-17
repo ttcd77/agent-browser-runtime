@@ -98,3 +98,24 @@ step result instead of silently dropping it.
    `devtools_source_get`, or `devtools_trace_query` only when needed.
 
 This keeps the default flow simple while preserving the lower-level F12 tools.
+
+## CLI Shortcut
+
+Start the Managed Browser server first:
+
+```bash
+CDP_LAUNCH_BROWSER=1 npm run agent:server
+```
+
+Then run:
+
+```bash
+npm run research:pack -- --url https://example.com --profile researcher
+```
+
+Use `--personal` to call the Personal Chrome bridge at `127.0.0.1:17337`
+instead:
+
+```bash
+npm run research:pack -- --personal --url https://example.com --no-trace
+```

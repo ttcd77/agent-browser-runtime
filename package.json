@@ -18,6 +18,7 @@
     "contract:devtools": "node scripts/devtools-contract-check.mjs",
     "smoke:server": "npm run build && node scripts/agent-server-smoke.mjs",
     "smoke:f12": "npm run build && node scripts/devtools-f12-smoke.mjs",
+    "research:pack": "node scripts/security-research-pack-cli.mjs",
     "check": "npm run build && npm run test"
   },
   "dependencies": {
