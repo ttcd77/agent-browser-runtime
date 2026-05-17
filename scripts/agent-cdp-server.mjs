@@ -6877,8 +6877,12 @@ function registerStandaloneBrowserTools(tools, cdpPort, profileRegistry, default
         columnNumber: { type: "number" },
         condition: { type: "string" },
         breakpointId: { type: "string" },
+        keepBreakpoint: { type: "boolean" },
         xhrUrlContains: { type: "string" },
         expression: { type: "string" },
+        triggerExpression: { type: "string" },
+        reload: { type: "boolean" },
+        ignoreCache: { type: "boolean" },
         waitMs: { type: "number" },
         autoResume: { type: "boolean" },
         maxFrames: { type: "number" },
@@ -6903,6 +6907,8 @@ function registerStandaloneBrowserTools(tools, cdpPort, profileRegistry, default
 
         let commandResult = null;
         let pendingCommand = null;
+        let triggerResult = null;
+        let cleanupResult = null;
         if (action === "setBreakpointByUrl") {
           commandResult = await client.Debugger.setBreakpointByUrl({
             lineNumber: Number(params?.lineNumber || 0),
@@ -6940,21 +6946,49 @@ function registerStandaloneBrowserTools(tools, cdpPort, profileRegistry, default
           }).catch((error) => ({ error: String(error?.message || error) }));
           commandResult = { pending: true, reason: "Runtime.evaluate may remain pending while JavaScript is paused." };
           await sleep(waitMs);
+        } else if (action === "probeBreakpointByUrl") {
+          commandResult = await client.Debugger.setBreakpointByUrl({
+            lineNumber: Number(params?.lineNumber || 0),
+            url: params?.url ? String(params.url) : undefined,
+            urlRegex: params?.urlRegex ? String(params.urlRegex) : undefined,
+            columnNumber: typeof params?.columnNumber === "number" ? params.columnNumber : 0,
+            condition: params?.condition ? String(params.condition) : undefined,
+          });
+          if (params?.reload) {
+            await client.Page.enable().catch(() => {});
+            pendingCommand = client.Page.reload({ ignoreCache: Boolean(params?.ignoreCache) }).catch((error) => ({ error: String(error?.message || error) }));
+          } else if (params?.triggerExpression) {
+            pendingCommand = client.Runtime.evaluate({
+              expression: String(params.triggerExpression),
+              awaitPromise: false,
+              returnByValue: false,
+            }).catch((error) => ({ error: String(error?.message || error) }));
+          }
+          await sleep(waitMs);
         } else if (action !== "snapshot") {
           throw new Error(`unsupported debugger action: ${action}`);
         }
 
         const paused = await debuggerPausedSummary(client, pausedEvent, params || {});
-        const shouldResume = params?.autoResume !== false && ["pause", "pauseOnExpression", "stepOver", "stepInto", "stepOut"].includes(action);
+        const shouldResume = params?.autoResume !== false && ["pause", "pauseOnExpression", "stepOver", "stepInto", "stepOut", "probeBreakpointByUrl"].includes(action);
         let resumeResult = null;
         if (paused && shouldResume) {
           resumeResult = await client.Debugger.resume().catch((error) => ({ error: String(error?.message || error) }));
         }
         if (pendingCommand) {
-          commandResult = await Promise.race([
+          const settledPendingCommand = await Promise.race([
             pendingCommand,
             sleep(1000).then(() => ({ pending: true, reason: "Runtime.evaluate did not settle after resume timeout." })),
           ]);
+          if (action === "probeBreakpointByUrl") {
+            triggerResult = settledPendingCommand;
+          } else {
+            commandResult = settledPendingCommand;
+          }
+        }
+        if (action === "probeBreakpointByUrl" && params?.keepBreakpoint !== true && commandResult?.breakpointId) {
+          cleanupResult = await client.Debugger.removeBreakpoint({ breakpointId: commandResult.breakpointId })
+            .catch((error) => ({ error: String(error?.message || error) }));
         }
         await profileRegistry.touchProfile(profile.name, { tabId: target.id });
         return {
@@ -6962,10 +6996,17 @@ function registerStandaloneBrowserTools(tools, cdpPort, profileRegistry, default
           tabId: target.id,
           action,
           commandResult,
+          triggerResult,
           paused,
           autoResumed: Boolean(paused && shouldResume),
           resumeResult,
-          note: "Managed Browser uses a short-lived CDP session; use pauseOnExpression for capture-and-resume inspection, or raw CDP for specialized flows.",
+          cleanupResult,
+          captureBoundaries: [
+            "Breakpoint evidence is collected from the active Debugger session and current parsed scripts.",
+            "probeBreakpointByUrl sets a temporary breakpoint, triggers reload or triggerExpression when supplied, captures paused frames/scopes, then removes the breakpoint unless keepBreakpoint=true.",
+            "This tool reports objective debugger state and scope previews; it does not decide whether code behavior is vulnerable.",
+          ],
+          note: "Managed Browser uses a short-lived CDP session; use probeBreakpointByUrl or pauseOnExpression for capture-and-resume inspection, or raw CDP for specialized flows.",
         };
       }));
     },

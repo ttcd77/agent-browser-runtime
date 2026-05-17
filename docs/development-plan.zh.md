@@ -87,7 +87,7 @@
 开发项:
 
 - HAR 导出继续接近 DevTools: 更完整 timing、body handle、redirect/body 证据。第一步先落地 `devtools_har_completeness`，让 Agent 知道当前 HAR 证据完整到什么程度。
-- Sources/Debugger: source map 原始文件导航已补 `devtools_source_map_source_get`；下一步继续 breakpoint 管理和 paused scope 深挖。
+- Sources/Debugger: source map 原始文件导航已补 `devtools_source_map_source_get`；breakpoint probe 已并入 `devtools_debugger_control action=probeBreakpointByUrl`；下一步继续 paused scope 深挖。
 - Performance: trace event 到 frame/layout/paint 的更好分组，不做性能风险判断，只做证据整理。
 - Application: CHIPS / partitioned cookie、quota/storage bucket、Cache/IndexedDB drill-down。
 - Replay: 更明确 forbidden header、browser fetch replay 与 raw socket-level replay 边界。
@@ -204,3 +204,23 @@
 - `npm run smoke:f12`: 通过。
 - `npm run smoke:personal`: 通过。
 - `npm run check`: 通过。
+
+### 2026-05-17: Phase 2 Sources/Debugger 断点探针完成
+
+已经完成:
+
+- `devtools_debugger_control` 新增 `action=probeBreakpointByUrl`。
+- Managed Browser 和 Personal Chrome 都支持同一动作:
+  - 设置临时 URL / URL regex 断点。
+  - 可选择 `triggerExpression` 或 reload 触发。
+  - 命中后返回 paused call frames、scope previews、hitBreakpoints。
+  - 默认自动 resume，并在 `keepBreakpoint=true` 以外自动清理断点。
+- 返回 `captureBoundaries`，只报告客观 debugger 状态，不判断漏洞。
+
+验证结果:
+
+- `npm run smoke:f12`: 通过，fixture 命中了 `agent-breakpoint-smoke.js` 的临时断点并采集 local scope marker。
+- `npm run contract:devtools`: 通过，Managed / Personal 仍为 91 / 91。
+- `npm run check`: 通过。
+- Personal Chrome 断点探针用当前真实 Chrome 非破坏性单独调用验证通过。
+- `npm run smoke:personal`: 当前失败在 `security_research_pack` 对真实 Gmail 页生成 bundle path，属于环境/页面依赖问题，不是本次断点探针失败；后续应把 Personal smoke 改成独立测试页以减少对用户当前标签页的依赖。

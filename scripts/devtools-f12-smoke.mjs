@@ -516,6 +516,30 @@ try {
   });
   assert(debuggerPause.paused?.callFrameCount >= 1, `debugger control did not capture paused frames: ${JSON.stringify(debuggerPause)}`);
   assert(debuggerPause.autoResumed === true, "debugger control did not auto-resume after pauseOnExpression");
+  await callTool(baseUrl, "devtools_cdp_command", {
+    profile: "default",
+    method: "Runtime.evaluate",
+    params: {
+      expression: `eval('globalThis.agentBreakpointTarget = function agentBreakpointTarget() {\\n  const agentBreakpointScopeMarker = "AGENT_BREAKPOINT_SCOPE_MARKER";\\n  return agentBreakpointScopeMarker;\\n};\\n//# sourceURL=agent-breakpoint-smoke.js')`,
+      returnByValue: true,
+    },
+  });
+  const breakpointProbe = await callTool(baseUrl, "devtools_debugger_control", {
+    profile: "default",
+    action: "probeBreakpointByUrl",
+    urlRegex: "agent-breakpoint-smoke\\.js$",
+    lineNumber: 2,
+    triggerExpression: "agentBreakpointTarget()",
+    waitMs: 600,
+    autoResume: true,
+    maxFrames: 5,
+    maxScopes: 5,
+    maxProperties: 20,
+  });
+  assert(breakpointProbe.commandResult?.breakpointId, `breakpoint probe did not create breakpoint: ${JSON.stringify(breakpointProbe)}`);
+  assert(breakpointProbe.paused?.hitBreakpoints?.includes(breakpointProbe.commandResult.breakpointId), `breakpoint probe did not hit expected breakpoint: ${JSON.stringify(breakpointProbe)}`);
+  assert(JSON.stringify(breakpointProbe.paused).includes("AGENT_BREAKPOINT_SCOPE_MARKER"), "breakpoint probe did not capture local scope marker");
+  assert(breakpointProbe.autoResumed === true, "breakpoint probe did not auto-resume");
   const tokenFlow = await callTool(baseUrl, "devtools_token_flow_trace", {
     profile: "default",
     durationMs: 600,

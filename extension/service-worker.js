@@ -3797,6 +3797,8 @@ async function chromeDebuggerControl(params) {
   const waitMs = Math.min(Math.max(Number(params.waitMs || 1000), 50), 10000);
   let commandResult = null;
   let pendingCommand = null;
+  let triggerResult = null;
+  let cleanupResult = null;
   if (action === "setBreakpointByUrl") {
     commandResult = await chromeDebuggerSendCommand(target, "Debugger.setBreakpointByUrl", {
       lineNumber: Number(params.lineNumber || 0),
@@ -3835,31 +3837,67 @@ async function chromeDebuggerControl(params) {
     }).catch((error) => ({ error: String(error?.message || error) }));
     commandResult = { pending: true, reason: "Runtime.evaluate may remain pending while JavaScript is paused." };
     await delay(waitMs);
+  } else if (action === "probeBreakpointByUrl") {
+    commandResult = await chromeDebuggerSendCommand(target, "Debugger.setBreakpointByUrl", {
+      lineNumber: Number(params.lineNumber || 0),
+      url: params.url ? String(params.url) : undefined,
+      urlRegex: params.urlRegex ? String(params.urlRegex) : undefined,
+      columnNumber: Number(params.columnNumber || 0),
+      condition: params.condition ? String(params.condition) : undefined,
+    });
+    if (params.reload) {
+      await chromeDebuggerSendCommand(target, "Page.enable").catch(() => {});
+      pendingCommand = chromeDebuggerSendCommand(target, "Page.reload", { ignoreCache: Boolean(params.ignoreCache) })
+        .catch((error) => ({ error: String(error?.message || error) }));
+    } else if (params.triggerExpression) {
+      pendingCommand = chromeDebuggerSendCommand(target, "Runtime.evaluate", {
+        expression: String(params.triggerExpression),
+        awaitPromise: false,
+        returnByValue: false,
+      }).catch((error) => ({ error: String(error?.message || error) }));
+    }
+    await delay(waitMs);
   } else if (action !== "snapshot") {
     throw new Error(`unsupported debugger action: ${action}`);
   }
 
   const paused = await debuggerPausedSummary(target, session.paused, params || {});
-  const shouldResume = params.autoResume !== false && ["pause", "pauseOnExpression", "stepOver", "stepInto", "stepOut"].includes(action);
+  const shouldResume = params.autoResume !== false && ["pause", "pauseOnExpression", "stepOver", "stepInto", "stepOut", "probeBreakpointByUrl"].includes(action);
   let resumeResult = null;
   if (paused && shouldResume) {
     resumeResult = await chromeDebuggerSendCommand(target, "Debugger.resume").catch((error) => ({ error: String(error?.message || error) }));
     await delay(50);
   }
   if (pendingCommand) {
-    commandResult = await Promise.race([
+    const settledPendingCommand = await Promise.race([
       pendingCommand,
       delay(1000).then(() => ({ pending: true, reason: "Runtime.evaluate did not settle after resume timeout." })),
     ]);
+    if (action === "probeBreakpointByUrl") {
+      triggerResult = settledPendingCommand;
+    } else {
+      commandResult = settledPendingCommand;
+    }
+  }
+  if (action === "probeBreakpointByUrl" && params.keepBreakpoint !== true && commandResult?.breakpointId) {
+    cleanupResult = await chromeDebuggerSendCommand(target, "Debugger.removeBreakpoint", { breakpointId: commandResult.breakpointId })
+      .catch((error) => ({ error: String(error?.message || error) }));
   }
   return {
     tab: pickTab(tab),
     action,
     commandResult,
+    triggerResult,
     paused,
     debuggerEvents: (session.debuggerEvents || []).slice(-20),
     autoResumed: Boolean(paused && shouldResume),
     resumeResult,
+    cleanupResult,
+    captureBoundaries: [
+      "Breakpoint evidence is collected from the active chrome.debugger session and current parsed scripts.",
+      "probeBreakpointByUrl sets a temporary breakpoint, triggers reload or triggerExpression when supplied, captures paused frames/scopes, then removes the breakpoint unless keepBreakpoint=true.",
+      "This tool reports objective debugger state and scope previews; it does not decide whether code behavior is vulnerable.",
+    ],
   };
 }
 
