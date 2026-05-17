@@ -241,6 +241,7 @@ Chrome Extension Mode and Managed Browser Mode:
 - `devtools_performance_observer`
 - `devtools_chrome_trace`
 - `devtools_trace_query`
+- `devtools_trace_compare`
 - `devtools_cpu_profile`
 - `devtools_coverage_snapshot`
 - `devtools_coverage_detail`

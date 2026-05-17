@@ -239,6 +239,22 @@ try {
   assert(Array.isArray(traceQuery.events), "trace query missing events array");
   assert(Array.isArray(traceQuery.captureBoundaries), "trace query missing capture boundaries");
 
+  const secondTrace = await callTool(baseUrl, "devtools_chrome_trace", {
+    profile: "default",
+    durationMs: 250,
+    maxEvents: 5,
+    maxScreenshots: 1,
+  });
+  const traceCompare = await callTool(baseUrl, "devtools_trace_compare", {
+    profile: "default",
+    beforeTracePath: trace.tracePath,
+    afterTracePath: secondTrace.tracePath,
+    limit: 5,
+  });
+  assert(traceCompare.backend === "managed-cdp", `trace compare wrong backend: ${JSON.stringify(traceCompare)}`);
+  assert(typeof traceCompare.deltas?.eventCount === "number", "trace compare missing event delta");
+  assert(Array.isArray(traceCompare.deltas?.names), "trace compare missing name deltas");
+
   const performanceInsights = await callTool(baseUrl, "devtools_performance_insights", {
     profile: "default",
     durationMs: 250,

@@ -99,6 +99,19 @@ assert(traceQuery.backend === "personal-chrome", `Personal Chrome trace query wr
 assert(traceQuery.totalEvents > 0, "Personal Chrome trace query missing total event count");
 assert(Array.isArray(traceQuery.events), "Personal Chrome trace query missing events array");
 
+const secondChromeTrace = await callTool("devtools_chrome_trace", {
+  durationMs: 250,
+  maxEvents: 5,
+  saveScreenshots: false,
+});
+const traceCompare = await callTool("devtools_trace_compare", {
+  beforeTracePath: chromeTrace.tracePath,
+  afterTracePath: secondChromeTrace.tracePath,
+  limit: 5,
+});
+assert(traceCompare.backend === "personal-chrome", `Personal Chrome trace compare wrong backend: ${JSON.stringify(traceCompare)}`);
+assert(typeof traceCompare.deltas?.eventCount === "number", "Personal Chrome trace compare missing event delta");
+
 console.log("Personal Chrome smoke passed:");
 console.log(`- bridge: ${baseUrl}`);
 console.log(`- active tab: ${status.tab.title || "(untitled)"} ${status.tab.url}`);

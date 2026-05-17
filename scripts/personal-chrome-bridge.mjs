@@ -124,6 +124,7 @@ function normalizeCommand(toolName) {
     devtools_performance_observer: "chrome_performance_observer",
     devtools_chrome_trace: "chrome_chrome_trace",
     devtools_trace_query: "chrome_trace_query",
+    devtools_trace_compare: "chrome_trace_compare",
     devtools_cpu_profile: "chrome_cpu_profile",
     devtools_coverage_snapshot: "chrome_coverage_snapshot",
     devtools_coverage_detail: "chrome_coverage_detail",
@@ -257,6 +258,95 @@ function findLatestTracePath(directory) {
   return files[0]?.path || null;
 }
 
+function findRecentTracePaths(directory, count = 2) {
+  if (!directory || !existsSync(directory)) return [];
+  return readdirSync(directory)
+    .filter((name) => name.endsWith(".json"))
+    .map((name) => {
+      const path = join(directory, name);
+      let mtimeMs = 0;
+      try {
+        mtimeMs = statSync(path).mtimeMs;
+      } catch {
+        // Ignore files that disappear between readdir and stat.
+      }
+      return { path, mtimeMs };
+    })
+    .sort((a, b) => b.mtimeMs - a.mtimeMs)
+    .slice(0, count)
+    .map((entry) => entry.path);
+}
+
+function traceProfile(events = []) {
+  const countMap = (getKey, getValue = () => 1) => {
+    const map = new Map();
+    for (const event of events) {
+      const key = getKey(event) || "(none)";
+      map.set(key, (map.get(key) || 0) + getValue(event));
+    }
+    return map;
+  };
+  return {
+    names: countMap((event) => event.name),
+    categories: countMap((event) => String(event.cat || "").split(",")[0]),
+    phases: countMap((event) => event.ph),
+    threads: countMap((event) => `${event.pid}:${event.tid}`),
+    durationsByName: countMap((event) => event.name, (event) => Number(event.dur || 0) / 1000),
+  };
+}
+
+function diffMap(before = new Map(), after = new Map(), limit = 25) {
+  const keys = new Set([...before.keys(), ...after.keys()]);
+  return [...keys].map((key) => ({
+    key,
+    before: Math.round(Number(before.get(key) || 0) * 100) / 100,
+    after: Math.round(Number(after.get(key) || 0) * 100) / 100,
+    delta: Math.round((Number(after.get(key) || 0) - Number(before.get(key) || 0)) * 100) / 100,
+  }))
+    .filter((row) => row.delta !== 0)
+    .sort((a, b) => Math.abs(b.delta) - Math.abs(a.delta))
+    .slice(0, limit);
+}
+
+function traceTimeRangeMs(events = []) {
+  const timestamps = events.map((event) => Number(event.ts)).filter(Number.isFinite);
+  if (!timestamps.length) return null;
+  return Math.round(((Math.max(...timestamps) - Math.min(...timestamps)) / 1000) * 100) / 100;
+}
+
+function compareTraceEvents(beforeEvents = [], afterEvents = [], params = {}) {
+  const limit = Math.max(1, Math.min(typeof params.limit === "number" ? params.limit : 25, 500));
+  const before = traceProfile(beforeEvents);
+  const after = traceProfile(afterEvents);
+  const beforeRange = traceTimeRangeMs(beforeEvents);
+  const afterRange = traceTimeRangeMs(afterEvents);
+  return {
+    before: {
+      eventCount: beforeEvents.length,
+      timeRangeMs: beforeRange,
+    },
+    after: {
+      eventCount: afterEvents.length,
+      timeRangeMs: afterRange,
+    },
+    deltas: {
+      eventCount: afterEvents.length - beforeEvents.length,
+      timeRangeMs: afterRange != null && beforeRange != null ? Math.round((afterRange - beforeRange) * 100) / 100 : null,
+      names: diffMap(before.names, after.names, limit),
+      categories: diffMap(before.categories, after.categories, limit),
+      phases: diffMap(before.phases, after.phases, limit),
+      threads: diffMap(before.threads, after.threads, limit),
+      durationByNameMs: diffMap(before.durationsByName, after.durationsByName, limit),
+    },
+    captureBoundaries: [
+      "Trace comparison is only meaningful when both traces captured comparable actions and durations.",
+      "This compares observed trace event counts and durations; it does not decide root cause.",
+      "Use devtools_trace_query on specific changed event names for drill-down.",
+    ],
+    nextTools: ["devtools_trace_query", "devtools_chrome_trace", "devtools_cpu_profile"],
+  };
+}
+
 function summarizeTraceQuery(events = [], params = {}) {
   const query = String(params.query || "").trim().toLowerCase();
   const nameFilter = String(params.name || "").trim().toLowerCase();
@@ -359,6 +449,33 @@ function traceQuery(params = {}) {
   };
 }
 
+function traceCompare(params = {}) {
+  let beforeTracePath = params.beforeTracePath;
+  let afterTracePath = params.afterTracePath;
+  if (!beforeTracePath || !afterTracePath) {
+    const recent = findRecentTracePaths(traceDir, 2);
+    afterTracePath = afterTracePath || recent[0];
+    beforeTracePath = beforeTracePath || recent[1];
+  }
+  if (!beforeTracePath || !afterTracePath) {
+    throw new Error("beforeTracePath and afterTracePath are required, or at least two saved personal Chrome traces must exist");
+  }
+  const beforeText = readFileSync(beforeTracePath, "utf8");
+  const afterText = readFileSync(afterTracePath, "utf8");
+  const beforeTrace = JSON.parse(beforeText);
+  const afterTrace = JSON.parse(afterText);
+  const beforeEvents = Array.isArray(beforeTrace?.traceEvents) ? beforeTrace.traceEvents : [];
+  const afterEvents = Array.isArray(afterTrace?.traceEvents) ? afterTrace.traceEvents : [];
+  return {
+    backend: "personal-chrome",
+    beforeTracePath,
+    afterTracePath,
+    beforeTraceBytes: Buffer.byteLength(beforeText, "utf8"),
+    afterTraceBytes: Buffer.byteLength(afterText, "utf8"),
+    ...compareTraceEvents(beforeEvents, afterEvents, params),
+  };
+}
+
 function persistCpuProfile(result, params = {}) {
   if (!result?.profile) return result;
   const path = params.path || join(cpuProfileDir, `${Date.now()}-cpu-profile.json`);
@@ -448,6 +565,9 @@ async function callBridgeTool(toolName, params = {}) {
   if (toolName === "personal_chrome_trace_query" || toolName === "devtools_trace_query") {
     return traceQuery(params);
   }
+  if (toolName === "personal_chrome_trace_compare" || toolName === "devtools_trace_compare") {
+    return traceCompare(params);
+  }
   const command = normalizeCommand(toolName);
   const result = await callExtension(command, params);
   return postProcessToolResult(toolName, result, params);
@@ -509,7 +629,7 @@ function buildAgentInspectToolPlan(focus, options = {}) {
     return {
       ...base,
       firstPass: ["devtools_memory_snapshot", "devtools_performance_observer", "devtools_performance_insights", "devtools_performance_trace"],
-      drillDown: ["devtools_chrome_trace", "devtools_trace_query", "devtools_cpu_profile", "devtools_coverage_detail"],
+      drillDown: ["devtools_chrome_trace", "devtools_trace_query", "devtools_trace_compare", "devtools_cpu_profile", "devtools_coverage_detail"],
       captureHint: "Use heavier traces only around the smallest reproducible action.",
       objectiveBoundary: "Trace summaries expose timing evidence, not root-cause conclusions.",
     };
@@ -759,6 +879,7 @@ const tools = {
   personal_chrome_performance_observer: "Capture PerformanceObserver entries such as LCP, layout shifts, long tasks, event timing, and long animation frames from the user's real Chrome tab.",
   personal_chrome_chrome_trace: "Capture Chrome Tracing data from the user's real Chrome tab and write the full trace locally.",
   personal_chrome_trace_query: "Query a saved Personal Chrome trace JSON file by event name, category, phase, duration, thread, or time range.",
+  personal_chrome_trace_compare: "Compare two saved Personal Chrome trace JSON files by event names, categories, phases, threads, and duration buckets.",
   personal_chrome_cpu_profile: "Capture a JavaScript CPU profile from the user's real Chrome tab and write the full profile locally.",
   personal_chrome_coverage_snapshot: "Capture short JavaScript precise coverage and CSS rule usage from the user's real Chrome tab.",
   personal_chrome_coverage_detail: "Capture Coverage-panel JavaScript/CSS range drilldown data from the user's real Chrome tab.",
@@ -834,6 +955,7 @@ const tools = {
   devtools_performance_observer: "Unified Agent DevTools API: capture PerformanceObserver entries such as LCP, layout shifts, long tasks, event timing, and long animation frames.",
   devtools_chrome_trace: "Unified Agent DevTools API: capture Chrome Tracing data and return a summary plus full trace path.",
   devtools_trace_query: "Unified Agent DevTools API: query saved Chrome trace events by name, category, duration, thread, or time range.",
+  devtools_trace_compare: "Unified Agent DevTools API: compare two saved Chrome traces by event names, categories, phases, threads, and duration buckets.",
   devtools_cpu_profile: "Unified Agent DevTools API: capture a JavaScript CPU profile and hotspot summary.",
   devtools_coverage_snapshot: "Unified Agent DevTools API: capture short JavaScript and CSS coverage data.",
   devtools_coverage_detail: "Unified Agent DevTools API: capture Coverage-panel JavaScript/CSS range drilldown data.",

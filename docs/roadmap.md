@@ -42,9 +42,9 @@
 - Performance panel: objective agent-readable performance insights,
   PerformanceObserver entries for LCP, layout shifts, long tasks, event timing,
   and long animation frames, Chrome Tracing stream capture, trace screenshot
-  frame extraction, saved-trace querying, trace duration phase summaries,
-  busiest thread/process summaries, top duration events, and CPU profiles are
-  now in the unified tool contract.
+  frame extraction, saved-trace querying/comparison, trace duration phase
+  summaries, busiest thread/process summaries, top duration events, and CPU
+  profiles are now in the unified tool contract.
   Next work is deeper layout/paint flame chart summaries.
 
 ## 0.3: Open-Source Polish

@@ -1064,6 +1064,90 @@ function findLatestTracePath(directory) {
   return files[0]?.path || null;
 }
 
+function findRecentTracePaths(directory, count = 2) {
+  if (!directory || !existsSync(directory)) return [];
+  return readdirSync(directory)
+    .filter((name) => name.endsWith(".json"))
+    .map((name) => {
+      const path = join(directory, name);
+      let mtimeMs = 0;
+      try {
+        mtimeMs = statSync(path).mtimeMs;
+      } catch {
+        // Ignore files that disappear between readdir and stat.
+      }
+      return { path, mtimeMs };
+    })
+    .sort((a, b) => b.mtimeMs - a.mtimeMs)
+    .slice(0, count)
+    .map((entry) => entry.path);
+}
+
+function traceProfile(events = []) {
+  const countMap = (getKey, getValue = () => 1) => {
+    const map = new Map();
+    for (const event of events) {
+      const key = getKey(event) || "(none)";
+      map.set(key, (map.get(key) || 0) + getValue(event));
+    }
+    return map;
+  };
+  const names = countMap((event) => event.name);
+  const categories = countMap((event) => String(event.cat || "").split(",")[0]);
+  const phases = countMap((event) => event.ph);
+  const threads = countMap((event) => `${event.pid}:${event.tid}`);
+  const durationsByName = countMap((event) => event.name, (event) => Number(event.dur || 0) / 1000);
+  return { names, categories, phases, threads, durationsByName };
+}
+
+function diffMap(before = new Map(), after = new Map(), limit = 25) {
+  const keys = new Set([...before.keys(), ...after.keys()]);
+  return [...keys].map((key) => ({
+    key,
+    before: Math.round(Number(before.get(key) || 0) * 100) / 100,
+    after: Math.round(Number(after.get(key) || 0) * 100) / 100,
+    delta: Math.round((Number(after.get(key) || 0) - Number(before.get(key) || 0)) * 100) / 100,
+  }))
+    .filter((row) => row.delta !== 0)
+    .sort((a, b) => Math.abs(b.delta) - Math.abs(a.delta))
+    .slice(0, limit);
+}
+
+function compareTraceEvents(beforeEvents = [], afterEvents = [], params = {}) {
+  const limit = Math.max(1, Math.min(typeof params.limit === "number" ? params.limit : 25, 500));
+  const before = traceProfile(beforeEvents);
+  const after = traceProfile(afterEvents);
+  const beforeSummary = summarizeTraceEvents(beforeEvents, limit);
+  const afterSummary = summarizeTraceEvents(afterEvents, limit);
+  return {
+    before: {
+      eventCount: beforeEvents.length,
+      timeRangeMs: beforeSummary.timeRangeMs,
+    },
+    after: {
+      eventCount: afterEvents.length,
+      timeRangeMs: afterSummary.timeRangeMs,
+    },
+    deltas: {
+      eventCount: afterEvents.length - beforeEvents.length,
+      timeRangeMs: afterSummary.timeRangeMs != null && beforeSummary.timeRangeMs != null
+        ? Math.round((afterSummary.timeRangeMs - beforeSummary.timeRangeMs) * 100) / 100
+        : null,
+      names: diffMap(before.names, after.names, limit),
+      categories: diffMap(before.categories, after.categories, limit),
+      phases: diffMap(before.phases, after.phases, limit),
+      threads: diffMap(before.threads, after.threads, limit),
+      durationByNameMs: diffMap(before.durationsByName, after.durationsByName, limit),
+    },
+    captureBoundaries: [
+      "Trace comparison is only meaningful when both traces captured comparable actions and durations.",
+      "This compares observed trace event counts and durations; it does not decide root cause.",
+      "Use devtools_trace_query on specific changed event names for drill-down.",
+    ],
+    nextTools: ["devtools_trace_query", "devtools_chrome_trace", "devtools_cpu_profile"],
+  };
+}
+
 function summarizeTraceQuery(events = [], params = {}) {
   const query = String(params.query || "").trim().toLowerCase();
   const nameFilter = String(params.name || "").trim().toLowerCase();
@@ -1225,7 +1309,7 @@ function buildAgentInspectToolPlan(focus, options = {}) {
     return {
       ...base,
       firstPass: ["devtools_memory_snapshot", "devtools_performance_observer", "devtools_performance_insights", "devtools_performance_trace"],
-      drillDown: ["devtools_chrome_trace", "devtools_trace_query", "devtools_cpu_profile", "devtools_coverage_detail"],
+      drillDown: ["devtools_chrome_trace", "devtools_trace_query", "devtools_trace_compare", "devtools_cpu_profile", "devtools_coverage_detail"],
       captureHint: "Use heavier traces only around the smallest reproducible action.",
       objectiveBoundary: "Trace summaries expose timing evidence, not root-cause conclusions.",
     };
@@ -6894,6 +6978,48 @@ function registerStandaloneBrowserTools(tools, cdpPort, profileRegistry, default
     },
   });
 
+  tools.set("browser_trace_compare", {
+    name: "browser_trace_compare",
+    description: "Compare two saved Chrome trace JSON files and report objective differences in event names, categories, phases, threads, and duration buckets.",
+    parameters: {
+      type: "object",
+      properties: {
+        profile: { type: "string" },
+        beforeTracePath: { type: "string" },
+        afterTracePath: { type: "string" },
+        limit: { type: "number" },
+      },
+    },
+    async execute(_id, params) {
+      const profile = await resolveProfile(params?.profile);
+      let beforeTracePath = params?.beforeTracePath;
+      let afterTracePath = params?.afterTracePath;
+      if (!beforeTracePath || !afterTracePath) {
+        const recent = findRecentTracePaths(join(profile.evidenceDir, "traces"), 2);
+        afterTracePath = afterTracePath || recent[0];
+        beforeTracePath = beforeTracePath || recent[1];
+      }
+      if (!beforeTracePath || !afterTracePath) {
+        throw new Error("beforeTracePath and afterTracePath are required, or at least two saved traces must exist for this profile");
+      }
+      const beforeText = readFileSync(beforeTracePath, "utf8");
+      const afterText = readFileSync(afterTracePath, "utf8");
+      const beforeTrace = JSON.parse(beforeText);
+      const afterTrace = JSON.parse(afterText);
+      const beforeEvents = Array.isArray(beforeTrace?.traceEvents) ? beforeTrace.traceEvents : [];
+      const afterEvents = Array.isArray(afterTrace?.traceEvents) ? afterTrace.traceEvents : [];
+      return toolResult({
+        backend: "managed-cdp",
+        profile: profile.name,
+        beforeTracePath,
+        afterTracePath,
+        beforeTraceBytes: Buffer.byteLength(beforeText, "utf8"),
+        afterTraceBytes: Buffer.byteLength(afterText, "utf8"),
+        ...compareTraceEvents(beforeEvents, afterEvents, params || {}),
+      });
+    },
+  });
+
   tools.set("browser_performance_insights", {
     name: "browser_performance_insights",
     description: "Summarize Performance panel timing, slow resources, long tasks, and optional Chrome trace evidence for agents.",
@@ -7792,6 +7918,7 @@ function registerStandaloneBrowserTools(tools, cdpPort, profileRegistry, default
   aliasTool("devtools_performance_trace", "browser_performance_trace", "Unified Agent DevTools API: capture navigation/resource/paint/long-task performance data.");
   aliasTool("devtools_chrome_trace", "browser_chrome_trace", "Unified Agent DevTools API: capture Chrome Tracing data and return a summary plus full trace path.");
   aliasTool("devtools_trace_query", "browser_trace_query", "Unified Agent DevTools API: query saved Chrome trace events by name, category, duration, thread, or time range.");
+  aliasTool("devtools_trace_compare", "browser_trace_compare", "Unified Agent DevTools API: compare two saved Chrome traces by event names, categories, phases, threads, and duration buckets.");
   aliasTool("devtools_performance_insights", "browser_performance_insights", "Unified Agent DevTools API: summarize Performance panel timing, resources, long tasks, and optional trace evidence.");
   aliasTool("devtools_performance_observer", "browser_performance_observer", "Unified Agent DevTools API: capture PerformanceObserver entries such as LCP, layout shifts, long tasks, event timing, and long animation frames.");
   aliasTool("devtools_cpu_profile", "browser_cpu_profile", "Unified Agent DevTools API: capture a JavaScript CPU profile and hotspot summary.");
