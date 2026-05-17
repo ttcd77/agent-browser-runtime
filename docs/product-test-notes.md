@@ -97,6 +97,8 @@ extension, `devtools_backend_capabilities`, `chrome.debugger` attachment,
 `Runtime.evaluate`, frame tree access, and Application storage-boundary summary
 for the currently active tab. It also verifies non-navigating facade calls:
 `browser_inspect`, `browser_capture`, `browser_raw`, and `browser_security_pack`.
+It verifies `devtools_capture_bisect` as a non-judgmental captured-evidence
+splitter for Network, page/frame, and realtime buckets.
 
 ## Managed F12 Smoke
 
@@ -113,6 +115,7 @@ It starts an isolated temporary managed browser and verifies:
 - dashboard-friendly page diagnostics,
 - Network summary from an explicit F12 capture,
 - Network Timing/Initiator-style timeline rows,
+- captured-evidence bisection into Network, page/frame, and realtime buckets,
 - WebSocket frame and EventSource/SSE evidence through `devtools_realtime_log`,
 - per-request Network detail including headers, cookies, timing, initiator, and
   ExtraInfo fields where Chrome exposes them,

@@ -147,6 +147,7 @@ DevTools/F12 data layer:
 - `devtools_capture_stop`
 - `devtools_capture_clear`
 - `devtools_capture_status`
+- `devtools_capture_bisect`
 - `devtools_network_log`
 - `devtools_network_summary`
 - `devtools_network_timeline`

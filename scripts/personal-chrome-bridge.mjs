@@ -11,6 +11,7 @@ const screenshotDir = process.env.PERSONAL_CHROME_SCREENSHOT_DIR || join(process
 const bodyDir = process.env.PERSONAL_CHROME_BODY_DIR || join(process.cwd(), "tmp", "personal-chrome-bodies");
 const traceDir = process.env.PERSONAL_CHROME_TRACE_DIR || join(process.cwd(), "tmp", "personal-chrome-traces");
 const harDir = process.env.PERSONAL_CHROME_HAR_DIR || join(process.cwd(), "tmp", "personal-chrome-har");
+const captureDir = process.env.PERSONAL_CHROME_CAPTURE_DIR || join(process.cwd(), "tmp", "personal-chrome-captures");
 const applicationExportDir = process.env.PERSONAL_CHROME_APPLICATION_EXPORT_DIR || join(process.cwd(), "tmp", "personal-chrome-application");
 const cpuProfileDir = process.env.PERSONAL_CHROME_CPU_PROFILE_DIR || join(process.cwd(), "tmp", "personal-chrome-cpu-profiles");
 const sourceMapDir = process.env.PERSONAL_CHROME_SOURCE_MAP_DIR || join(process.cwd(), "tmp", "personal-chrome-sources");
@@ -84,6 +85,7 @@ function normalizeCommand(toolName) {
     devtools_network_summary: "chrome_network_summary",
     devtools_network_timeline: "chrome_network_timeline",
     devtools_realtime_log: "chrome_realtime_log",
+    devtools_capture_bisect: "chrome_capture_bisect",
     devtools_export_har: "chrome_export_har",
     devtools_save_har: "chrome_export_har",
     devtools_request_body: "chrome_request_body",
@@ -532,6 +534,124 @@ function urlOrigin(url) {
 function urlPath(url) {
   try { return new URL(url).pathname || "/"; }
   catch { return String(url || ""); }
+}
+
+function captureHostname(url) {
+  try { return new URL(url).hostname; }
+  catch { return ""; }
+}
+
+function captureGroupCount(rows = [], keyFn = () => "") {
+  const counts = new Map();
+  for (const row of rows || []) {
+    const key = keyFn(row) || "(none)";
+    counts.set(key, (counts.get(key) || 0) + 1);
+  }
+  return [...counts.entries()]
+    .sort((a, b) => b[1] - a[1])
+    .map(([key, count]) => ({ key, count }));
+}
+
+function capturePageKey(entry = {}) {
+  return entry.frameId || entry.loaderId || entry.documentURL || entry.url || "(unknown-page)";
+}
+
+function buildPersonalCaptureBisect({ requests = [], realtime = {}, status = {}, limit = 200, save = true, path = null }) {
+  const requestRows = Array.isArray(requests) ? requests : [];
+  const websockets = Array.isArray(realtime.websockets) ? realtime.websockets : [];
+  const eventSources = Array.isArray(realtime.eventSources) ? realtime.eventSources : [];
+  const pages = new Map();
+  for (const request of requestRows) {
+    const key = capturePageKey(request);
+    const page = pages.get(key) || {
+      pageKey: key,
+      frameId: request.frameId || null,
+      loaderId: request.loaderId || null,
+      documentURL: request.documentURL || null,
+      firstUrl: request.url || null,
+      requestCount: 0,
+      failedCount: 0,
+      statusCounts: {},
+      resourceTypeCounts: {},
+      hostCounts: {},
+      requests: [],
+    };
+    page.requestCount += 1;
+    if (request.failed) page.failedCount += 1;
+    const statusKey = request.status == null ? "(pending)" : String(request.status);
+    page.statusCounts[statusKey] = (page.statusCounts[statusKey] || 0) + 1;
+    const typeKey = request.resourceType || "(unknown)";
+    page.resourceTypeCounts[typeKey] = (page.resourceTypeCounts[typeKey] || 0) + 1;
+    const host = captureHostname(request.url) || "(unknown)";
+    page.hostCounts[host] = (page.hostCounts[host] || 0) + 1;
+    page.requests.push({
+      requestId: request.requestId,
+      url: request.url,
+      method: request.method,
+      status: request.status,
+      failed: Boolean(request.failed),
+      resourceType: request.resourceType,
+      mimeType: request.mimeType,
+      initiatorType: request.initiator?.type || request.initiatorType || null,
+      bodyReadable: Boolean(request.bodyReadable),
+      bodyBytes: request.bodyBytes ?? null,
+    });
+    pages.set(key, page);
+  }
+  const failed = requestRows.filter((entry) => entry.failed || (typeof entry.status === "number" && entry.status >= 400));
+  const result = {
+    backend: "personal-chrome",
+    generatedAt: new Date().toISOString(),
+    captureStatus: status,
+    totalEvents: requestRows.length + websockets.length + eventSources.length,
+    bucketCount: 3,
+    buckets: {
+      network: {
+        requestCount: requestRows.length,
+        failedCount: failed.length,
+        byHost: captureGroupCount(requestRows, (entry) => captureHostname(entry.url)),
+        byStatus: captureGroupCount(requestRows, (entry) => entry.status == null ? "(pending)" : String(entry.status)),
+        byResourceType: captureGroupCount(requestRows, (entry) => entry.resourceType || "(unknown)"),
+        byMethod: captureGroupCount(requestRows, (entry) => entry.method || "(unknown)"),
+        failed: failed.slice(-limit).map((entry) => ({
+          requestId: entry.requestId,
+          url: entry.url,
+          method: entry.method,
+          status: entry.status,
+          errorText: entry.errorText || entry.failReason || null,
+          blockedReason: entry.blockedReason || null,
+        })),
+      },
+      realtime: {
+        websocketCount: websockets.length,
+        websocketFrameCount: websockets.reduce((sum, socket) => sum + Number(socket.frameCount || (Array.isArray(socket.frames) ? socket.frames.length : 0)), 0),
+        eventSourceMessageCount: eventSources.length,
+        websockets: websockets.slice(-limit),
+        eventSources: eventSources.slice(-limit),
+      },
+      pages: {
+        pageCount: pages.size,
+        items: [...pages.values()].map((page) => ({
+          ...page,
+          requests: page.requests.slice(-limit),
+        })),
+      },
+    },
+    captureBoundaries: [
+      "This bisects evidence currently available through the Personal Chrome bridge.",
+      "Network response bodies are referenced by request tools/body paths; they are not embedded in this summary.",
+      "If rows are missing, start capture before reproducing the browser action.",
+    ],
+    nextTools: ["devtools_request_detail", "devtools_request_body", "devtools_realtime_log", "devtools_save_har"],
+  };
+  if (save) {
+    const outPath = path || join(captureDir, `${Date.now()}-capture-bisect.json`);
+    mkdirSync(dirname(outPath), { recursive: true });
+    writeFileSync(outPath, `${JSON.stringify(result, null, 2)}\n`, "utf8");
+    result.bisectPath = outPath;
+    result.bisectBytes = statSync(outPath).size;
+  }
+  return result;
 }
 
 function headerValue(headers = {}, name) {
@@ -1168,6 +1288,20 @@ async function callBridgeTool(toolName, params = {}) {
   if (toolName === "personal_chrome_trace_compare" || toolName === "devtools_trace_compare") {
     return traceCompare(params);
   }
+  if (toolName === "personal_chrome_capture_bisect" || toolName === "devtools_capture_bisect") {
+    const limit = typeof params.limit === "number" ? params.limit : 200;
+    const status = await safeBridgeTool("devtools_capture_status", params);
+    const network = await safeBridgeTool("devtools_network_log", { ...params, limit: 1000000 });
+    const realtime = await safeBridgeTool("devtools_realtime_log", { ...params, limit });
+    return buildPersonalCaptureBisect({
+      requests: Array.isArray(network.requests) ? network.requests : [],
+      realtime: realtime || {},
+      status,
+      limit,
+      save: params.save !== false,
+      path: params.path || null,
+    });
+  }
   if (toolName === "personal_chrome_security_research_pack" || toolName === "devtools_security_research_pack") {
     return await securityResearchPack(params);
   }
@@ -1592,6 +1726,7 @@ const tools = {
   personal_chrome_capture_stop: "Stop explicit F12 capture for a real Chrome tab.",
   personal_chrome_capture_clear: "Clear captured F12 events for a real Chrome tab.",
   personal_chrome_capture_status: "Show explicit F12 capture status for a real Chrome tab.",
+  personal_chrome_capture_bisect: "Bisect captured F12 evidence into Network, page/frame, realtime, and summary buckets.",
   personal_chrome_network_log: "Return structured Network events captured through chrome.debugger.",
   personal_chrome_network_summary: "Summarize captured Network events for agent dashboards and triage.",
   personal_chrome_network_timeline: "Return F12 Network Timing/Initiator-style rows from the user's real Chrome tab.",
@@ -1679,6 +1814,7 @@ const tools = {
   devtools_capture_stop: "Unified Agent DevTools API: stop explicit F12 capture.",
   devtools_capture_clear: "Unified Agent DevTools API: clear captured F12 events.",
   devtools_capture_status: "Unified Agent DevTools API: inspect explicit F12 capture status.",
+  devtools_capture_bisect: "Unified Agent DevTools API: bisect captured F12 evidence into page/network/realtime buckets.",
   devtools_network_log: "Unified Agent DevTools API: read Network panel-style request log.",
   devtools_network_summary: "Unified Agent DevTools API: summarize captured Network traffic for dashboards and triage.",
   devtools_network_timeline: "Unified Agent DevTools API: read Network Timing/Initiator-style rows.",

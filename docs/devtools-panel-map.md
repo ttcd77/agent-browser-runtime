@@ -47,6 +47,7 @@ evidence.
 | Stop recording | `devtools_capture_stop` |
 | Clear recording | `devtools_capture_clear` |
 | Reload with cache disabled | `devtools_hard_reload` |
+| Split captured evidence into page, network, and realtime buckets | `devtools_capture_bisect` |
 | Inspect request table | `devtools_network_log` |
 | Summarize request table | `devtools_network_summary` |
 | Inspect Timing/Initiator rows | `devtools_network_timeline` |

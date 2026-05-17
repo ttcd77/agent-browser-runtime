@@ -831,6 +831,137 @@ function buildNetworkTimeline(requests, limit = 100) {
   });
 }
 
+function groupCount(rows = [], keyFn = () => "") {
+  const counts = new Map();
+  for (const row of rows || []) {
+    const key = keyFn(row) || "(none)";
+    counts.set(key, (counts.get(key) || 0) + 1);
+  }
+  return [...counts.entries()]
+    .sort((a, b) => b[1] - a[1])
+    .map(([key, count]) => ({ key, count }));
+}
+
+function capturePageKey(entry = {}) {
+  return entry.frameId || entry.loaderId || entry.documentURL || entry.url || "(unknown-page)";
+}
+
+function buildCaptureBisect({ profile, evidenceDir, capture = {}, requests = [], websockets = [], eventSources = [], limit = 200, save = true, path = null }) {
+  const requestRows = Array.isArray(requests) ? requests : [];
+  const websocketRows = Array.isArray(websockets) ? websockets : [];
+  const eventSourceRows = Array.isArray(eventSources) ? eventSources : [];
+  const pages = new Map();
+  for (const request of requestRows) {
+    const key = capturePageKey(request);
+    const page = pages.get(key) || {
+      pageKey: key,
+      frameId: request.frameId || null,
+      loaderId: request.loaderId || null,
+      documentURL: request.documentURL || null,
+      firstUrl: request.url || null,
+      requestCount: 0,
+      failedCount: 0,
+      statusCounts: {},
+      resourceTypeCounts: {},
+      hostCounts: {},
+      requests: [],
+    };
+    page.requestCount += 1;
+    if (request.failed) page.failedCount += 1;
+    const statusKey = request.status == null ? "(pending)" : String(request.status);
+    page.statusCounts[statusKey] = (page.statusCounts[statusKey] || 0) + 1;
+    const typeKey = request.resourceType || "(unknown)";
+    page.resourceTypeCounts[typeKey] = (page.resourceTypeCounts[typeKey] || 0) + 1;
+    const host = hostnameForUrl(request.url) || "(unknown)";
+    page.hostCounts[host] = (page.hostCounts[host] || 0) + 1;
+    page.requests.push({
+      requestId: request.requestId,
+      url: request.url,
+      method: request.method,
+      status: request.status,
+      failed: Boolean(request.failed),
+      resourceType: request.resourceType,
+      mimeType: request.mimeType,
+      initiatorType: request.initiator?.type || request.initiatorType || null,
+      bodyReadable: Boolean(request.bodyReadable),
+      bodyBytes: request.bodyBytes ?? null,
+    });
+    pages.set(key, page);
+  }
+  const failed = requestRows.filter((entry) => entry.failed || (typeof entry.status === "number" && entry.status >= 400));
+  const timeline = buildNetworkTimeline(requestRows, limit);
+  const buckets = {
+    network: {
+      requestCount: requestRows.length,
+      failedCount: failed.length,
+      byHost: groupCount(requestRows, (entry) => hostnameForUrl(entry.url)),
+      byStatus: groupCount(requestRows, (entry) => entry.status == null ? "(pending)" : String(entry.status)),
+      byResourceType: groupCount(requestRows, (entry) => entry.resourceType || "(unknown)"),
+      byMethod: groupCount(requestRows, (entry) => entry.method || "(unknown)"),
+      failed: failed.slice(-limit).map((entry) => ({
+        requestId: entry.requestId,
+        url: entry.url,
+        method: entry.method,
+        status: entry.status,
+        errorText: entry.errorText || entry.failReason || null,
+        blockedReason: entry.blockedReason || null,
+      })),
+      timeline,
+    },
+    realtime: {
+      websocketCount: websocketRows.length,
+      websocketFrameCount: websocketRows.reduce((sum, socket) => sum + (Array.isArray(socket.frames) ? socket.frames.length : 0), 0),
+      eventSourceMessageCount: eventSourceRows.length,
+      websockets: websocketRows.slice(-limit).map((socket) => ({
+        requestId: socket.requestId,
+        url: socket.url,
+        status: socket.status,
+        frameCount: Array.isArray(socket.frames) ? socket.frames.length : 0,
+        closedAt: socket.closedAt || null,
+        errorMessage: socket.errorMessage || null,
+      })),
+      eventSources: eventSourceRows.slice(-limit).map((entry) => ({
+        requestId: entry.requestId,
+        eventName: entry.eventName,
+        eventId: entry.eventId,
+        dataLength: entry.dataLength,
+        timestamp: entry.timestamp,
+      })),
+    },
+    pages: {
+      pageCount: pages.size,
+      items: [...pages.values()].map((page) => ({
+        ...page,
+        requests: page.requests.slice(-limit),
+      })),
+    },
+  };
+  const result = {
+    backend: "managed-cdp",
+    profile,
+    evidenceDir,
+    generatedAt: new Date().toISOString(),
+    capture,
+    totalEvents: requestRows.length + websocketRows.length + eventSourceRows.length,
+    bucketCount: Object.keys(buckets).length,
+    buckets,
+    captureBoundaries: [
+      "This bisects evidence that was actually captured for the selected profile.",
+      "Network response bodies are referenced by request tools/body paths; they are not embedded in this summary.",
+      "If rows are missing, start capture before reproducing the browser action.",
+    ],
+    nextTools: ["devtools_request_detail", "devtools_request_body", "devtools_realtime_log", "devtools_save_har"],
+  };
+  if (save) {
+    const outPath = path || join(evidenceDir, "captures", `${Date.now()}-capture-bisect.json`);
+    mkdirSync(dirname(outPath), { recursive: true });
+    writeFileSync(outPath, `${JSON.stringify(result, null, 2)}\n`, "utf8");
+    result.bisectPath = outPath;
+    result.bisectBytes = statSync(outPath).size;
+  }
+  return result;
+}
+
 function parseCookieHeader(headerValue = "") {
   return String(headerValue || "")
     .split(";")
@@ -3605,6 +3736,35 @@ function registerStandaloneBrowserTools(tools, cdpPort, profileRegistry, default
         count: rows.length,
         timeline: buildNetworkTimeline(rows, limit),
       });
+    },
+  });
+
+  tools.set("browser_capture_bisect", {
+    name: "browser_capture_bisect",
+    description: "Bisect captured managed-browser F12 evidence into Network, page/frame, realtime, and summary buckets.",
+    parameters: {
+      type: "object",
+      properties: {
+        profile: { type: "string" },
+        limit: { type: "number" },
+        save: { type: "boolean" },
+        path: { type: "string" },
+      },
+    },
+    async execute(_id, params) {
+      const profile = await resolveProfile(params?.profile);
+      const limit = typeof params?.limit === "number" ? params.limit : 200;
+      return toolResult(buildCaptureBisect({
+        profile: profile.name,
+        evidenceDir: profile.evidenceDir,
+        capture: profileRegistry.getCapture(profile.name),
+        requests: profileRegistry.queryTraffic(profile.name, { limit: 1000000 }),
+        websockets: profileRegistry.readWebSockets(profile.name),
+        eventSources: profileRegistry.readEventSources(profile.name),
+        limit,
+        save: params?.save !== false,
+        path: params?.path || null,
+      }));
     },
   });
 
@@ -9048,6 +9208,7 @@ function registerStandaloneBrowserTools(tools, cdpPort, profileRegistry, default
   aliasTool("devtools_network_summary", "profile_traffic_summary", "Unified Agent DevTools API: summarize captured Network traffic for dashboards and triage.");
   aliasTool("devtools_network_timeline", "profile_network_timeline", "Unified Agent DevTools API: read Network Timing/Initiator-style rows.");
   aliasTool("devtools_realtime_log", "profile_realtime_log", "Unified Agent DevTools API: read WebSocket frames and EventSource/SSE messages.");
+  aliasTool("devtools_capture_bisect", "browser_capture_bisect", "Unified Agent DevTools API: bisect captured F12 evidence into page/network/realtime buckets.");
   aliasTool("devtools_export_har", "profile_export_har", "Unified Agent DevTools API: export captured Network events as HAR.");
   aliasTool("devtools_save_har", "profile_save_har", "Unified Agent DevTools API: save captured Network events as a HAR file.");
   aliasTool("devtools_request_body", "profile_traffic_get", "Unified Agent DevTools API: read captured request/response detail by requestId.");

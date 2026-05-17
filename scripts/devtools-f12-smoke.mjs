@@ -825,6 +825,15 @@ try {
   assert(facadePack.facade === "browser_security_pack", `browser_security_pack facade marker missing: ${JSON.stringify(facadePack)}`);
   assert(facadePack.summary?.evidenceBundlePath, "browser_security_pack missing evidence bundle path");
 
+  const captureBisect = await callTool(baseUrl, "devtools_capture_bisect", {
+    profile: "default",
+    limit: 20,
+  });
+  assert(captureBisect.backend === "managed-cdp", `capture bisect wrong backend: ${JSON.stringify(captureBisect)}`);
+  assert(captureBisect.buckets?.network?.requestCount >= 1, `capture bisect missing network bucket: ${JSON.stringify(captureBisect)}`);
+  assert(captureBisect.buckets?.pages?.pageCount >= 1, `capture bisect missing page bucket: ${JSON.stringify(captureBisect)}`);
+  assert(captureBisect.bisectPath, "capture bisect did not save an artifact");
+
   const savedHar = await callTool(baseUrl, "devtools_save_har", {
     profile: "default",
     limit: 20,
@@ -847,6 +856,7 @@ try {
   console.log(`- diagnostics page: ${diagnostics.page.url}`);
   console.log(`- network requests: ${networkSummary.requestCount}`);
   console.log(`- network timeline rows: ${networkTimeline.timeline.length}`);
+  console.log(`- capture bisect: ${captureBisect.buckets.network.requestCount} requests -> ${captureBisect.bisectPath}`);
   console.log(`- request detail id: ${requestDetail.detail.requestId}`);
   console.log(`- DevTools issues: ${issuesLog.issueCount}`);
   console.log(`- accessibility nodes: ${accessibility.nodeCount}`);

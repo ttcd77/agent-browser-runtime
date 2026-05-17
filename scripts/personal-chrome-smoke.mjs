@@ -163,6 +163,14 @@ const facadePack = await callTool("browser_security_pack", {
 assert(facadePack.facade === "browser_security_pack", `Personal Chrome browser_security_pack facade marker missing: ${JSON.stringify(facadePack)}`);
 assert(facadePack.summary?.evidenceBundlePath, "Personal Chrome browser_security_pack missing bundle path");
 
+const captureBisect = await callTool("devtools_capture_bisect", {
+  limit: 20,
+  save: false,
+});
+assert(captureBisect.backend === "personal-chrome", `Personal Chrome capture bisect wrong backend: ${JSON.stringify(captureBisect)}`);
+assert(captureBisect.buckets?.network, "Personal Chrome capture bisect missing network bucket");
+assert(captureBisect.buckets?.pages, "Personal Chrome capture bisect missing page bucket");
+
 const toolCatalog = await callTool("devtools_tool_catalog", { query: "auth" });
 assert(toolCatalog.toolCount >= 1, "Personal Chrome tool catalog did not return auth tools");
 assert(toolCatalog.tools.some((tool) => tool.name === "devtools_auth_boundary_report"), "Personal Chrome tool catalog missing auth boundary report");
@@ -177,4 +185,5 @@ console.log(`- active tab: ${status.tab.title || "(untitled)"} ${status.tab.url}
 console.log(`- allowed domains: ${capabilities.domainAccess.allowedDomains.length}`);
 console.log(`- layer: ${capabilities.layer}`);
 console.log(`- facade tools: ${facadeInspect.facade}/${facadeCapture.facade}/${facadePack.facade}`);
+console.log(`- capture bisect buckets: ${captureBisect.buckets.network.requestCount}/${captureBisect.buckets.pages.pageCount}`);
 console.log(`- realtime channels ws/sse: ${realtimeLog.websocketCount}/${realtimeLog.eventSourceMessageCount}`);
