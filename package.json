@@ -14,6 +14,7 @@
     "agent:server": "npm run build && node scripts/agent-cdp-server.mjs",
     "personal:browser": "node scripts/launch-personal-browser.mjs",
     "personal:chrome": "node scripts/personal-chrome-bridge.mjs",
+    "smoke:personal": "node scripts/personal-chrome-smoke.mjs",
     "contract:devtools": "node scripts/devtools-contract-check.mjs",
     "smoke:server": "npm run build && node scripts/agent-server-smoke.mjs",
     "smoke:f12": "npm run build && node scripts/devtools-f12-smoke.mjs",

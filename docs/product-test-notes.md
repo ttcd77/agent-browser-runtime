@@ -83,6 +83,19 @@ Current verified contract:
 The contract smoke uses an isolated temporary browser profile so it does not
 collide with a long-running browser on port 9222.
 
+## Personal Chrome Smoke
+
+Run after the extension bridge is running and the unpacked extension is loaded:
+
+```bash
+npm run smoke:personal
+```
+
+This smoke does not navigate the user's browser. It checks the connected
+extension, `devtools_backend_capabilities`, `chrome.debugger` attachment,
+`Runtime.evaluate`, frame tree access, and Application storage-boundary summary
+for the currently active tab.
+
 ## Managed F12 Smoke
 
 Run:

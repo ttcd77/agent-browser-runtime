@@ -42,6 +42,12 @@ Invoke-RestMethod http://127.0.0.1:17337/health
 
 You should see `connected: 1`.
 
+For a deeper non-navigating smoke against the current active tab:
+
+```powershell
+npm run smoke:personal
+```
+
 ## Tool Examples
 
 ```powershell
