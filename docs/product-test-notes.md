@@ -92,11 +92,13 @@ Run after the extension bridge is running and the unpacked extension is loaded:
 npm run smoke:personal
 ```
 
-This smoke does not navigate the user's browser. It checks the connected
-extension, `devtools_backend_capabilities`, `chrome.debugger` attachment,
-`Runtime.evaluate`, frame tree access, and Application storage-boundary summary
-for the currently active tab. It also verifies non-navigating facade calls:
-`browser_inspect`, `browser_capture`, `browser_raw`, and `browser_security_pack`.
+This smoke starts a local HTTP fixture and opens it in a new Personal Chrome tab.
+It checks the connected extension, `devtools_backend_capabilities`,
+`chrome.debugger` attachment, `Runtime.evaluate`, frame tree access, and
+Application storage-boundary summary against that repeatable fixture instead of
+whatever page the user already had focused. It also verifies facade calls:
+`browser_open`, `browser_inspect`, `browser_capture`, `browser_raw`, and
+`browser_security_pack`.
 It verifies `devtools_capture_bisect` as a non-judgmental captured-evidence
 splitter for Network, page/frame, and realtime buckets.
 It verifies `devtools_capability_map` as the panel-level navigation contract.
@@ -163,6 +165,10 @@ It starts an isolated temporary managed browser and verifies:
 
 Verified manually during development:
 
+- `scripts/personal-chrome-smoke.mjs`
+  - Starts a local fixture with script execution, storage, cookies, fetch
+    traffic, and a same-origin iframe, then opens it in a new Personal Chrome
+    tab for repeatable F12 evidence.
 - `devtools_accessibility_snapshot`
   - Managed Browser on `https://example.com`: returned AX nodes including
     `RootWebArea`, heading, and paragraph roles.

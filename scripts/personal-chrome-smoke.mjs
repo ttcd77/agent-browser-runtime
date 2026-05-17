@@ -1,8 +1,75 @@
+import http from "node:http";
+
 function assert(condition, message) {
   if (!condition) throw new Error(message);
 }
 
 const baseUrl = process.env.PERSONAL_CHROME_HTTP_URL || "http://127.0.0.1:17337";
+
+async function startFixtureServer() {
+  const server = http.createServer((req, res) => {
+    const url = new URL(req.url || "/", "http://127.0.0.1");
+    if (url.pathname === "/") {
+      res.writeHead(200, {
+        "content-type": "text/html; charset=utf-8",
+        "set-cookie": "agent_personal_smoke=session-fixture; Path=/; SameSite=Lax",
+      });
+      res.end(`<!doctype html>
+        <title>Agent Browser Runtime Personal Smoke</title>
+        <link rel="stylesheet" href="/style.css">
+        <h1 id="title">Agent Browser Runtime Personal Smoke</h1>
+        <button id="action">Run fixture action</button>
+        <iframe id="same-origin-frame" src="/frame.html"></iframe>
+        <script src="/app.js"></script>`);
+      return;
+    }
+    if (url.pathname === "/style.css") {
+      res.writeHead(200, { "content-type": "text/css; charset=utf-8" });
+      res.end(`#action { color: rgb(20, 80, 140); padding: 4px; }`);
+      return;
+    }
+    if (url.pathname === "/app.js") {
+      res.writeHead(200, {
+        "content-type": "application/javascript; charset=utf-8",
+        "cache-control": "no-store",
+      });
+      res.end(`
+        window.AGENT_PERSONAL_SMOKE_MARKER = "fixture-ready";
+        localStorage.setItem("agent-personal-smoke-local", "local-fixture-value");
+        sessionStorage.setItem("agent-personal-smoke-session", "session-fixture-value");
+        document.getElementById("action").addEventListener("click", () => {
+          document.body.dataset.clicked = "yes";
+        });
+        fetch("/api/data", { headers: { "X-Agent-Smoke": "fixture" } })
+          .then((response) => response.json())
+          .then((value) => { window.AGENT_PERSONAL_SMOKE_API = value; })
+          .catch((error) => { window.AGENT_PERSONAL_SMOKE_ERROR = String(error && error.message || error); });
+      `);
+      return;
+    }
+    if (url.pathname === "/api/data") {
+      res.writeHead(200, {
+        "content-type": "application/json; charset=utf-8",
+        "cache-control": "no-store",
+      });
+      res.end(JSON.stringify({ ok: true, marker: "agent-personal-smoke-api" }));
+      return;
+    }
+    if (url.pathname === "/frame.html") {
+      res.writeHead(200, { "content-type": "text/html; charset=utf-8" });
+      res.end(`<!doctype html><title>Fixture Frame</title><p id="frame-marker">agent-personal-smoke-frame</p>`);
+      return;
+    }
+    res.writeHead(404, { "content-type": "text/plain; charset=utf-8" });
+    res.end("not found");
+  });
+  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+  const address = server.address();
+  return {
+    server,
+    url: `http://127.0.0.1:${address.port}/`,
+  };
+}
 
 async function callTool(name, body = {}) {
   const response = await fetch(`${baseUrl}/tool/${encodeURIComponent(name)}`, {
@@ -24,6 +91,16 @@ async function fetchHealth() {
 
 const health = await fetchHealth();
 assert(health.connected >= 1, `personal Chrome extension is not connected: ${JSON.stringify(health)}`);
+
+const fixture = await startFixtureServer();
+process.once("exit", () => fixture.server.close());
+
+const opened = await callTool("browser_open", {
+  url: fixture.url,
+  newTab: true,
+  waitMs: 1000,
+});
+assert(opened.diagnostics?.page?.url?.startsWith(fixture.url), `Personal Chrome did not navigate to fixture page: ${JSON.stringify(opened)}`);
 
 const capabilities = await callTool("devtools_backend_capabilities");
 assert(capabilities.backend === "personal-chrome", `wrong backend: ${JSON.stringify(capabilities)}`);
@@ -195,6 +272,7 @@ assert(workflowGuide.steps?.some((step) => step.tool === "devtools_auth_boundary
 
 console.log("Personal Chrome smoke passed:");
 console.log(`- bridge: ${baseUrl}`);
+console.log(`- fixture: ${fixture.url}`);
 console.log(`- active tab: ${status.tab.title || "(untitled)"} ${status.tab.url}`);
 console.log(`- allowed domains: ${capabilities.domainAccess.allowedDomains.length}`);
 console.log(`- layer: ${capabilities.layer}`);
@@ -203,3 +281,5 @@ console.log(`- capture bisect buckets: ${captureBisect.buckets.network.requestCo
 console.log(`- HAR completeness entries/body-included: ${harCompleteness.entryCount}/${harCompleteness.body.includedCount}`);
 console.log(`- capability panels: ${capabilityMap.panelCount}`);
 console.log(`- realtime channels ws/sse: ${realtimeLog.websocketCount}/${realtimeLog.eventSourceMessageCount}`);
+
+fixture.server.close();

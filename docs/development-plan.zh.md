@@ -224,3 +224,16 @@
 - `npm run check`: 通过。
 - Personal Chrome 断点探针用当前真实 Chrome 非破坏性单独调用验证通过。
 - `npm run smoke:personal`: 当前失败在 `security_research_pack` 对真实 Gmail 页生成 bundle path，属于环境/页面依赖问题，不是本次断点探针失败；后续应把 Personal smoke 改成独立测试页以减少对用户当前标签页的依赖。
+
+### 2026-05-17: Personal Chrome smoke 独立测试页完成
+
+已经完成:
+
+- `scripts/personal-chrome-smoke.mjs` 启动本地 HTTP fixture 页面。
+- smoke 运行时通过 `browser_open` 打开新 tab，不再依赖用户当前真实网页。
+- fixture 包含 script、cookie、localStorage、sessionStorage、fetch、same-origin iframe，覆盖 Personal Chrome 的主要 F12 证据面。
+- Personal Chrome `browser_open` 改为使用扩展侧 `chrome.tabs.update/create`，不再依赖页面内 `location.assign`。
+
+验证结果:
+
+- `npm run smoke:personal`: 通过。

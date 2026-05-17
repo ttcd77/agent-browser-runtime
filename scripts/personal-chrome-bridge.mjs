@@ -1261,10 +1261,10 @@ async function browserOpenFacade(params = {}) {
   if (params.url) {
     const url = new URL(String(params.url));
     if (!/^https?:$/.test(url.protocol)) throw new Error("url must use http or https");
-    await safeBridgeTool("devtools_eval", {
-      expression: `(() => { location.assign(${JSON.stringify(url.toString())}); return true; })()`,
+    await safeBridgeTool("personal_chrome_open", {
+      ...params,
+      url: url.toString(),
     });
-    await new Promise((resolve) => setTimeout(resolve, typeof params.waitMs === "number" ? params.waitMs : 1000));
   }
   const diagnostics = await safeBridgeTool("devtools_page_diagnostics", {});
   return {
@@ -2054,6 +2054,7 @@ const tools = {
   browser_raw: "Facade: advanced escape hatch for one exact devtools_* tool.",
   agent_inspect: "Agent-facing F12 router. Pick a focus and get the right DevTools evidence without choosing from dozens of low-level tools.",
   personal_chrome_status: "Check whether the real Chrome extension is connected.",
+  personal_chrome_open: "Open a URL in the user's real Chrome through chrome.tabs.update/create, then return tab metadata.",
   personal_chrome_extension_reload: "Reload the unpacked extension service worker after local development changes.",
   personal_chrome_tabs: "List tabs from the user's real Chrome.",
   personal_chrome_active_tab_snapshot: "Read title, URL, visible text, selected text, and controls from the active tab.",

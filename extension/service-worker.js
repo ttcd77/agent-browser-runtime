@@ -164,6 +164,8 @@ async function executeCommand(command, params) {
       return chrome.runtime.reload();
     case "chrome_tabs":
       return await chromeTabs();
+    case "chrome_open":
+      return await chromeOpen(params);
     case "chrome_active_tab_snapshot":
       return await chromeSnapshot(params);
     case "chrome_screenshot":
@@ -474,6 +476,26 @@ function normalizeAccessibilityNode(node) {
 async function chromeTabs() {
   const tabs = await tabsQuery({});
   return { tabs: tabs.map(pickTab) };
+}
+
+async function chromeOpen(params = {}) {
+  const url = new URL(String(params.url || "about:blank"));
+  if (!/^https?:$/.test(url.protocol)) throw new Error("url must use http or https");
+  const waitMs = Math.min(Math.max(Number(params.waitMs || 1000), 0), 10000);
+  let tab = null;
+  if (params.newTab) {
+    tab = await chrome.tabs.create({ url: url.toString(), active: params.active !== false });
+  } else {
+    const target = await getTargetTab(params);
+    tab = await chrome.tabs.update(target.id, { url: url.toString(), active: params.active !== false });
+  }
+  if (waitMs) await delay(waitMs);
+  const current = tab?.id ? await chrome.tabs.get(tab.id).catch(() => tab) : tab;
+  return {
+    tab: pickTab(current || tab),
+    requestedUrl: url.toString(),
+    newTab: Boolean(params.newTab),
+  };
 }
 
 async function chromeSnapshot(params) {
