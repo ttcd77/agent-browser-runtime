@@ -805,6 +805,11 @@ try {
   assert(Array.isArray(storageOrigin.frames) && storageOrigin.frames.length >= 1, "storage origin summary missing frames");
   assert(storageOrigin.storageBoundarySummary?.frameCount >= 1, `storage boundary summary missing frame count: ${JSON.stringify(storageOrigin)}`);
   assert(storageOrigin.storageBoundarySummary?.originCount >= 1, `storage boundary summary missing origin count: ${JSON.stringify(storageOrigin)}`);
+  assert(typeof storageOrigin.storageBoundarySummary?.quotaUsageBytes === "number", `storage boundary summary missing quota usage bytes: ${JSON.stringify(storageOrigin)}`);
+  assert(storageOrigin.storageBoundarySummary?.quotaByOrigin && typeof storageOrigin.storageBoundarySummary.quotaByOrigin === "object", `storage boundary summary missing quota by origin: ${JSON.stringify(storageOrigin)}`);
+  assert(typeof storageOrigin.storageBucketSummary?.supported === "boolean", `storage bucket summary missing support flag: ${JSON.stringify(storageOrigin)}`);
+  assert(typeof storageOrigin.storageBucketSummary?.bucketCount === "number", `storage bucket summary missing bucket count: ${JSON.stringify(storageOrigin)}`);
+  assert(Array.isArray(storageOrigin.captureBoundaries), `storage origin summary missing capture boundaries: ${JSON.stringify(storageOrigin)}`);
   assert(storageOrigin.cookiePartitionSummary?.cookieCount >= 1, `cookie partition summary missing cookie count: ${JSON.stringify(storageOrigin)}`);
   assert(typeof storageOrigin.cookiePartitionSummary?.partitionMetadataExposed === "boolean", `cookie partition summary missing metadata flag: ${JSON.stringify(storageOrigin)}`);
 

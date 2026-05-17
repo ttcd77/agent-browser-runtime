@@ -240,7 +240,7 @@ Implemented:
 - Security: page secure-context summary and TLS/certificate details collected from Network security metadata.
 - Accessibility: AX tree nodes, roles, names, values, descriptions, properties, child ids, and backend DOM node ids where Chrome exposes them.
 - Frames: frame tree, same-origin frame accessibility map, inaccessible/sandboxed frame boundary reporting, and recent frame lifecycle events.
-- Storage: localStorage, sessionStorage, document-visible cookies, backend cookie API/CDP cookies, cookie security summaries, origin/storage-key/quota evidence, explicit storage-boundary summaries, cookie partition metadata summaries where Chrome exposes them, IndexedDB database/object-store/index/sample records, IndexedDB paged record reads, Cache Storage request/response metadata and body reads, Service Worker registrations, Service Worker script/status detail, Service Worker target summary, CacheStorage summary/detail, and Application panel JSON export.
+- Storage: localStorage, sessionStorage, document-visible cookies, backend cookie API/CDP cookies, cookie security summaries, origin/storage-key/quota evidence, explicit storage-boundary summaries with quota usage breakdowns, Storage Buckets support/bucket summaries where the browser exposes them, cookie partition metadata summaries where Chrome exposes them, IndexedDB database/object-store/index/sample records, IndexedDB paged record reads, Cache Storage request/response metadata and body reads, Service Worker registrations, Service Worker script/status detail, Service Worker target summary, CacheStorage summary/detail, and Application panel JSON export.
 - Token scan: full-value scan across headers, payloads, storage, and cookies in authorized browser mode.
 
 Not fully implemented yet:
@@ -248,7 +248,7 @@ Not fully implemented yet:
 - Fully lossless HAR export with exact timings and all bodies. Current HAR completeness reporting identifies which body/timing/redirect/security fields are present or missing.
 - Sources panel parity beyond raw/searchable script source: breakpoints, scopes, live debugging, and AST-lossless formatting. Heuristic pretty-print and source map metadata are already exposed.
 - Performance panel parity beyond current tracing: deeper layout/paint flame chart reconstruction.
-- Application panel deep browsing beyond current reads: CHIPS/partitioned-cookie write scenarios in smoke fixtures and richer quota/storage bucket coverage where Chrome exposes it.
+- Application panel deep browsing beyond current reads: CHIPS/partitioned-cookie write scenarios in smoke fixtures and deeper Cache/IndexedDB drill-down fixtures.
 - Network replay edge cases: raw socket-level replay and replay UI. Browser fetch replay already reports forbidden/skipped headers, supports raw/form/json/multipart body helpers, and can run batch variants with response diffs.
 - Browser UI/system dialogs and Chrome internal pages.
 - Complete JavaScript heap/closure interpretation. Managed Browser can save HeapProfiler snapshots, but interpreting object-retainer paths and closure-only secrets remains analysis work for the agent or human.

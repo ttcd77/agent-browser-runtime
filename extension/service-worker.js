@@ -839,10 +839,14 @@ function summarizeStorageBoundaries(frames = []) {
   const list = Array.isArray(frames) ? frames : [];
   const byOrigin = {};
   const byStorageKey = {};
+  const quotaByOrigin = {};
+  const usageBreakdownByType = {};
   const storageKeyErrors = [];
   const quotaErrors = [];
   let framesWithStorageKey = 0;
   let framesWithQuota = 0;
+  let quotaUsageBytes = 0;
+  let quotaBytes = 0;
   for (const frame of list) {
     const origin = frame.origin || frame.securityOrigin || "(unknown)";
     byOrigin[origin] = (byOrigin[origin] || 0) + 1;
@@ -857,6 +861,20 @@ function summarizeStorageBoundaries(frames = []) {
       quotaErrors.push({ frameId: frame.id, origin: frame.origin, error: frame.usageAndQuota.error });
     } else if (frame.usageAndQuota) {
       framesWithQuota += 1;
+      const usage = Number(frame.usageAndQuota.usage || 0);
+      const quota = Number(frame.usageAndQuota.quota || 0);
+      quotaUsageBytes += usage;
+      quotaBytes += quota;
+      quotaByOrigin[origin] = {
+        usage,
+        quota,
+        overrideActive: frame.usageAndQuota.overrideActive ?? null,
+        usageBreakdown: Array.isArray(frame.usageAndQuota.usageBreakdown) ? frame.usageAndQuota.usageBreakdown : [],
+      };
+      for (const item of quotaByOrigin[origin].usageBreakdown) {
+        const type = item.storageType || item.type || "(unknown)";
+        usageBreakdownByType[type] = (usageBreakdownByType[type] || 0) + Number(item.usage || 0);
+      }
     }
   }
   return {
@@ -869,9 +887,36 @@ function summarizeStorageBoundaries(frames = []) {
     framesWithoutQuota: list.length - framesWithQuota,
     byOrigin,
     byStorageKey,
+    quotaUsageBytes,
+    quotaBytes,
+    quotaByOrigin,
+    usageBreakdownByType,
     storageKeyErrors,
     quotaErrors,
     incomplete: storageKeyErrors.length > 0 || quotaErrors.length > 0,
+  };
+}
+
+function summarizeStorageBuckets(storageBuckets = {}) {
+  const buckets = Array.isArray(storageBuckets?.buckets) ? storageBuckets.buckets : [];
+  const errors = buckets.filter((bucket) => bucket?.error).map((bucket) => ({
+    name: bucket.name,
+    error: bucket.error,
+  }));
+  let estimatedUsageBytes = 0;
+  let estimatedQuotaBytes = 0;
+  for (const bucket of buckets) {
+    estimatedUsageBytes += Number(bucket?.estimate?.usage || 0);
+    estimatedQuotaBytes += Number(bucket?.estimate?.quota || 0);
+  }
+  return {
+    supported: Boolean(storageBuckets?.supported),
+    bucketCount: buckets.length,
+    names: Array.isArray(storageBuckets?.names) ? storageBuckets.names : buckets.map((bucket) => bucket.name).filter(Boolean),
+    estimatedUsageBytes,
+    estimatedQuotaBytes,
+    errors,
+    incomplete: Boolean(storageBuckets?.error) || errors.length > 0,
   };
 }
 
@@ -2951,6 +2996,30 @@ async function chromeStorageOriginSummary(params) {
     host: location.host,
     storageEstimateSupported: Boolean(navigator.storage?.estimate),
     storageEstimate: navigator.storage?.estimate ? await navigator.storage.estimate().catch((error) => ({ error: String(error?.message || error) })) : null,
+    storageBuckets: await (async () => {
+      const storageBuckets = { supported: Boolean(navigator.storageBuckets), names: [], buckets: [] };
+      try {
+        if (navigator.storageBuckets?.keys) {
+          storageBuckets.names = Array.from(await navigator.storageBuckets.keys());
+          for (const name of storageBuckets.names.slice(0, 20)) {
+            try {
+              const bucket = await navigator.storageBuckets.open(name);
+              storageBuckets.buckets.push({
+                name,
+                estimate: bucket?.estimate ? await bucket.estimate().catch((error) => ({ error: String(error?.message || error) })) : null,
+                persisted: bucket?.persisted ? await bucket.persisted().catch((error) => ({ error: String(error?.message || error) })) : null,
+                expires: bucket?.expires ? await bucket.expires().catch((error) => ({ error: String(error?.message || error) })) : null,
+              });
+            } catch (error) {
+              storageBuckets.buckets.push({ name, error: String(error?.message || error) });
+            }
+          }
+        }
+      } catch (error) {
+        storageBuckets.error = String(error?.message || error);
+      }
+      return storageBuckets;
+    })(),
     cookieEnabled: navigator.cookieEnabled,
   }));
   const frameTree = await chromeDebuggerSendCommand(target, "Page.getFrameTree").catch(() => null);
@@ -2992,8 +3061,14 @@ async function chromeStorageOriginSummary(params) {
     page,
     frames: framesWithStorage,
     storageBoundarySummary: summarizeStorageBoundaries(framesWithStorage),
+    storageBucketSummary: summarizeStorageBuckets(page.storageBuckets),
     cookieCount: cookieList.length,
     cookiePartitionSummary: summarizeCookiePartitions(cookieList),
+    captureBoundaries: [
+      "current-state Application evidence; earlier storage writes are not replayed unless separately captured",
+      "Storage Buckets are reported only when the page/browser exposes navigator.storageBuckets",
+      "Cookie partition metadata is reported only when Chrome exposes partitionKey or partitionKeyOpaque",
+    ],
     cookiePartitions: Array.isArray(cookies) ? cookies.map((cookie) => ({
       name: cookie.name,
       domain: cookie.domain,

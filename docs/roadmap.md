@@ -22,10 +22,11 @@
   reporting, raw/form/json/multipart replay helpers, and batch replay response
   diffs are now in the unified tool contract.
 - Application panel: Service Worker summaries/detail, CacheStorage summaries/detail,
-  Application JSON export, storage-boundary summaries, and cookie partition
-  summaries where Chrome exposes metadata are now in the unified tool contract.
-  Next work is CHIPS/partitioned-cookie write scenarios in smoke fixtures and
-  richer quota/storage bucket coverage where Chrome exposes it.
+  Application JSON export, storage-boundary summaries, quota usage breakdowns,
+  Storage Buckets support/bucket summaries where the browser exposes them, and
+  cookie partition summaries where Chrome exposes metadata are now in the
+  unified tool contract. Next work is CHIPS/partitioned-cookie write scenarios
+  in smoke fixtures and deeper Cache/IndexedDB drill-down coverage.
 - Elements panel: same-origin iframe-aware DOM search, iframe selector targeting
   for click/type/styles/listeners, forced pseudo-state style inspection,
   Accessibility snapshot, and raw Chrome DOMSnapshot are now in the unified tool

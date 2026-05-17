@@ -333,10 +333,14 @@ function summarizeStorageBoundaries(frames = []) {
   const list = Array.isArray(frames) ? frames : [];
   const byOrigin = {};
   const byStorageKey = {};
+  const quotaByOrigin = {};
+  const usageBreakdownByType = {};
   const storageKeyErrors = [];
   const quotaErrors = [];
   let framesWithStorageKey = 0;
   let framesWithQuota = 0;
+  let quotaUsageBytes = 0;
+  let quotaBytes = 0;
   for (const frame of list) {
     const origin = frame.origin || frame.securityOrigin || "(unknown)";
     byOrigin[origin] = (byOrigin[origin] || 0) + 1;
@@ -351,6 +355,20 @@ function summarizeStorageBoundaries(frames = []) {
       quotaErrors.push({ frameId: frame.id, origin: frame.origin, error: frame.usageAndQuota.error });
     } else if (frame.usageAndQuota) {
       framesWithQuota += 1;
+      const usage = Number(frame.usageAndQuota.usage || 0);
+      const quota = Number(frame.usageAndQuota.quota || 0);
+      quotaUsageBytes += usage;
+      quotaBytes += quota;
+      quotaByOrigin[origin] = {
+        usage,
+        quota,
+        overrideActive: frame.usageAndQuota.overrideActive ?? null,
+        usageBreakdown: Array.isArray(frame.usageAndQuota.usageBreakdown) ? frame.usageAndQuota.usageBreakdown : [],
+      };
+      for (const item of quotaByOrigin[origin].usageBreakdown) {
+        const type = item.storageType || item.type || "(unknown)";
+        usageBreakdownByType[type] = (usageBreakdownByType[type] || 0) + Number(item.usage || 0);
+      }
     }
   }
   return {
@@ -363,9 +381,36 @@ function summarizeStorageBoundaries(frames = []) {
     framesWithoutQuota: list.length - framesWithQuota,
     byOrigin,
     byStorageKey,
+    quotaUsageBytes,
+    quotaBytes,
+    quotaByOrigin,
+    usageBreakdownByType,
     storageKeyErrors,
     quotaErrors,
     incomplete: storageKeyErrors.length > 0 || quotaErrors.length > 0,
+  };
+}
+
+function summarizeStorageBuckets(storageBuckets = {}) {
+  const buckets = Array.isArray(storageBuckets?.buckets) ? storageBuckets.buckets : [];
+  const errors = buckets.filter((bucket) => bucket?.error).map((bucket) => ({
+    name: bucket.name,
+    error: bucket.error,
+  }));
+  let estimatedUsageBytes = 0;
+  let estimatedQuotaBytes = 0;
+  for (const bucket of buckets) {
+    estimatedUsageBytes += Number(bucket?.estimate?.usage || 0);
+    estimatedQuotaBytes += Number(bucket?.estimate?.quota || 0);
+  }
+  return {
+    supported: Boolean(storageBuckets?.supported),
+    bucketCount: buckets.length,
+    names: Array.isArray(storageBuckets?.names) ? storageBuckets.names : buckets.map((bucket) => bucket.name).filter(Boolean),
+    estimatedUsageBytes,
+    estimatedQuotaBytes,
+    errors,
+    incomplete: Boolean(storageBuckets?.error) || errors.length > 0,
   };
 }
 
@@ -5758,15 +5803,40 @@ function registerStandaloneBrowserTools(tools, cdpPort, profileRegistry, default
         await client.Page.enable().catch(() => {});
         await client.Storage?.enable?.().catch(() => {});
         const page = await client.Runtime.evaluate({
-          expression: `({
-            url: location.href,
-            origin: location.origin,
-            protocol: location.protocol,
-            host: location.host,
-            storageEstimateSupported: Boolean(navigator.storage?.estimate),
-            cookieEnabled: navigator.cookieEnabled,
-          })`,
+          expression: `(async () => {
+            const storageBuckets = { supported: Boolean(navigator.storageBuckets), names: [], buckets: [] };
+            try {
+              if (navigator.storageBuckets?.keys) {
+                storageBuckets.names = Array.from(await navigator.storageBuckets.keys());
+                for (const name of storageBuckets.names.slice(0, 20)) {
+                  try {
+                    const bucket = await navigator.storageBuckets.open(name);
+                    storageBuckets.buckets.push({
+                      name,
+                      estimate: bucket?.estimate ? await bucket.estimate().catch((error) => ({ error: String(error?.message || error) })) : null,
+                      persisted: bucket?.persisted ? await bucket.persisted().catch((error) => ({ error: String(error?.message || error) })) : null,
+                      expires: bucket?.expires ? await bucket.expires().catch((error) => ({ error: String(error?.message || error) })) : null,
+                    });
+                  } catch (error) {
+                    storageBuckets.buckets.push({ name, error: String(error?.message || error) });
+                  }
+                }
+              }
+            } catch (error) {
+              storageBuckets.error = String(error?.message || error);
+            }
+            return {
+              url: location.href,
+              origin: location.origin,
+              protocol: location.protocol,
+              host: location.host,
+              storageEstimateSupported: Boolean(navigator.storage?.estimate),
+              storageBuckets,
+              cookieEnabled: navigator.cookieEnabled,
+            };
+          })()`,
           returnByValue: true,
+          awaitPromise: true,
         });
         const frameTree = await client.Page.getFrameTree().catch(() => null);
         const frames = [];
@@ -5805,6 +5875,7 @@ function registerStandaloneBrowserTools(tools, cdpPort, profileRegistry, default
         const cookiesResult = await client.Network.getCookies().catch(() => ({ cookies: [] }));
         const cookies = Array.isArray(cookiesResult.cookies) ? cookiesResult.cookies : [];
         const storageBoundarySummary = summarizeStorageBoundaries(framesWithStorage);
+        const storageBucketSummary = summarizeStorageBuckets(page.result?.value?.storageBuckets);
         const cookiePartitionSummary = summarizeCookiePartitions(cookies);
         await profileRegistry.touchProfile(profile.name, { tabId: target.id });
         return {
@@ -5813,8 +5884,14 @@ function registerStandaloneBrowserTools(tools, cdpPort, profileRegistry, default
           page: page.result?.value,
           frames: framesWithStorage,
           storageBoundarySummary,
+          storageBucketSummary,
           cookieCount: cookies.length,
           cookiePartitionSummary,
+          captureBoundaries: [
+            "current-state Application evidence; earlier storage writes are not replayed unless separately captured",
+            "Storage Buckets are reported only when the page/browser exposes navigator.storageBuckets",
+            "Cookie partition metadata is reported only when Chrome exposes partitionKey or partitionKeyOpaque",
+          ],
           cookiePartitions: cookies.map((cookie) => ({
             name: cookie.name,
             domain: cookie.domain,

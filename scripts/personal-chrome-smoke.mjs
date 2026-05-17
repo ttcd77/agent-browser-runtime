@@ -141,6 +141,11 @@ assert(frameTree.frameCount >= 1 || frameTree.frames?.length >= 1 || frameTree.f
 const storage = await callTool("devtools_storage_origin_summary");
 assert(storage.page?.url || storage.page?.origin, `storage summary missing page evidence: ${JSON.stringify(storage)}`);
 assert(storage.storageBoundarySummary?.frameCount >= 1, `storage boundary summary missing frames: ${JSON.stringify(storage)}`);
+assert(typeof storage.storageBoundarySummary?.quotaUsageBytes === "number", `storage boundary summary missing quota usage bytes: ${JSON.stringify(storage)}`);
+assert(storage.storageBoundarySummary?.quotaByOrigin && typeof storage.storageBoundarySummary.quotaByOrigin === "object", `storage boundary summary missing quota by origin: ${JSON.stringify(storage)}`);
+assert(typeof storage.storageBucketSummary?.supported === "boolean", `storage bucket summary missing support flag: ${JSON.stringify(storage)}`);
+assert(typeof storage.storageBucketSummary?.bucketCount === "number", `storage bucket summary missing bucket count: ${JSON.stringify(storage)}`);
+assert(Array.isArray(storage.captureBoundaries), `storage origin summary missing capture boundaries: ${JSON.stringify(storage)}`);
 
 const performanceInsights = await callTool("devtools_performance_insights", {
   durationMs: 250,
