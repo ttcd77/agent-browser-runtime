@@ -86,7 +86,7 @@
 
 开发项:
 
-- HAR 导出继续接近 DevTools: 更完整 timing、body handle、redirect/body 证据。
+- HAR 导出继续接近 DevTools: 更完整 timing、body handle、redirect/body 证据。第一步先落地 `devtools_har_completeness`，让 Agent 知道当前 HAR 证据完整到什么程度。
 - Sources/Debugger: breakpoint 管理、paused scope 深挖、source map 原始文件导航。
 - Performance: trace event 到 frame/layout/paint 的更好分组，不做性能风险判断，只做证据整理。
 - Application: CHIPS / partitioned cookie、quota/storage bucket、Cache/IndexedDB drill-down。
@@ -182,3 +182,25 @@
 - 新增 `scripts/agent-auto-loop.mjs`。
 - 新增 `npm run agent:auto-once` 和 `npm run agent:auto-loop`。
 - `logs/` 已加入 `.gitignore`，避免自动开发日志进入公开仓库。
+
+### 2026-05-17: Phase 2 第一段完成
+
+已经完成:
+
+- 新增 `devtools_har_completeness`。
+- Managed Browser 新增 `profile_har_completeness` 并通过统一 `devtools_*` 暴露。
+- Personal Chrome 新增 `devtools_har_completeness` 和 `personal_chrome_har_completeness`。
+- 报告 HAR 的客观完整度:
+  - body readable / included / truncated / unavailable / errored
+  - timing total time 和各 phase availability
+  - redirect evidence
+  - securityDetails evidence
+- 工具只报告证据覆盖，不判断漏洞。
+
+验证结果:
+
+- `npm run build`: 通过。
+- `npm run contract:devtools`: Managed 90 / Personal 90。
+- `npm run smoke:f12`: 通过。
+- `npm run smoke:personal`: 通过。
+- `npm run check`: 通过。

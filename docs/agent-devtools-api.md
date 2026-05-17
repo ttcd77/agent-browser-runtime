@@ -155,6 +155,7 @@ DevTools/F12 data layer:
 - `devtools_network_timeline`
 - `devtools_export_har`
 - `devtools_save_har`
+- `devtools_har_completeness`
 - `devtools_request_body`
 - `devtools_request_detail`
 - `devtools_request_payload`
@@ -230,7 +231,7 @@ Implemented:
 - Elements/Page snapshot: visible text, controls, screenshots, click/type/scroll including same-origin iframe targeting, DOM tree, selected element inspection, layout boxes, key computed styles, forced pseudo-state style inspection (`:hover`, `:focus`, etc.), raw Chrome DOMSnapshot data, live DOM search with same-origin iframe fallback context, Elements-panel Event Listeners, Styles/Computed/Box Model evidence, and selected-node DOM mutation watch for breakpoint-style evidence.
 - Sources/Debugger/Search: parsed script metadata, source map URL metadata, module flag, script source by script id, heuristic pretty-printing, inline/external source map metadata, Debugger pause/resume/step/breakpoint controls with paused frame/scope previews, temporary token-flow instrumentation across fetch/XHR/storage/cookie APIs, literal source search, global literal search across Network/Sources/Application evidence, and compact F12 evidence bundle export with optional HAR, token scan, and token-flow sections.
 - Performance/Memory: navigation timing, resource timing, paint timing, marks/measures, long-task entries, PerformanceObserver entries including LCP/layout-shift/event-timing/long-animation-frame where Chrome exposes them, objective performance-insight summaries for agents, Chrome Tracing capture with full trace file output, trace querying and trace-to-trace comparison by event/category/duration/thread/time range, trace screenshot frame extraction where Chrome emits frames, trace event summaries, phase duration buckets, busiest thread/process summaries, top duration events, JavaScript heap snapshot artifacts where HeapProfiler is exposed, short JS/CSS coverage snapshots, Coverage-panel range drilldown with bounded source snippets, JS heap usage, DOM counters, and Performance Monitor metrics.
-- Network: request URL, method, headers, status, response headers, request-detail evidence including cookies and ExtraInfo events, initiator stack summaries, lifecycle flags, Timing/Initiator-style rows, frame id, redirect chain, cache/service-worker flags, TLS details where exposed, WebSocket lifecycle and frames, EventSource/SSE messages, request replay/edit-and-resend with explicit forbidden-header reporting plus raw/form/json/multipart body helpers, batch replay variants with response diffs, HAR-like object export with timing phase extensions, HAR file save, and low-token summary for dashboards/triage.
+- Network: request URL, method, headers, status, response headers, request-detail evidence including cookies and ExtraInfo events, initiator stack summaries, lifecycle flags, Timing/Initiator-style rows, frame id, redirect chain, cache/service-worker flags, TLS details where exposed, WebSocket lifecycle and frames, EventSource/SSE messages, request replay/edit-and-resend with explicit forbidden-header reporting plus raw/form/json/multipart body helpers, batch replay variants with response diffs, HAR-like object export with timing phase extensions, HAR file save, objective HAR completeness reports, and low-token summary for dashboards/triage.
 - Payload/Body: response body by request id; request postData/payload by request id when Chrome exposes it.
 - Console/Issues: console API, log entries, exceptions, stack traces, source
   context around stack frames, and Chrome DevTools Issues-panel events where
@@ -243,7 +244,7 @@ Implemented:
 
 Not fully implemented yet:
 
-- Fully lossless HAR export with exact timings and all bodies.
+- Fully lossless HAR export with exact timings and all bodies. Current HAR completeness reporting identifies which body/timing/redirect/security fields are present or missing.
 - Sources panel parity beyond raw/searchable script source: breakpoints, scopes, live debugging, and AST-lossless formatting. Heuristic pretty-print and source map metadata are already exposed.
 - Performance panel parity beyond current tracing: deeper layout/paint flame chart reconstruction.
 - Application panel deep browsing beyond current reads: CHIPS/partitioned-cookie write scenarios in smoke fixtures and richer quota/storage bucket coverage where Chrome exposes it.

@@ -115,6 +115,7 @@ Unified Agent DevTools tools:
 - `devtools_realtime_log`
 - `devtools_export_har`
 - `devtools_save_har`
+- `devtools_har_completeness`
 - `devtools_request_body`
 - `devtools_request_detail`
 - `devtools_request_payload`
@@ -205,6 +206,7 @@ Backend-specific aliases:
 - `personal_chrome_network_timeline`
 - `personal_chrome_export_har`
 - `personal_chrome_save_har`
+- `personal_chrome_har_completeness`
 - `personal_chrome_request_body`
 - `personal_chrome_request_detail`
 - `personal_chrome_request_payload`

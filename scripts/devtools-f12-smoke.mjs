@@ -857,6 +857,17 @@ try {
   const bodyEntries = harWithBodies.har?.log?.entries?.filter((entry) => entry.response?.content?._bodyIncluded) || [];
   assert(bodyEntries.length >= 1, `HAR body export did not include any response bodies: ${JSON.stringify(harWithBodies.har?.log?.entries || [])}`);
   assert((harWithBodies.har?.log?.entries || []).some((entry) => "_timingPhases" in entry && "_durationMs" in entry), "HAR export missing timing phase extensions");
+  const harCompleteness = await callTool(baseUrl, "devtools_har_completeness", {
+    profile: "default",
+    limit: 20,
+    includeBodies: true,
+    maxBodyBytes: 2000,
+  });
+  assert(harCompleteness.backend === "managed-cdp", `HAR completeness wrong backend: ${JSON.stringify(harCompleteness)}`);
+  assert(harCompleteness.entryCount >= 1, "HAR completeness missing entries");
+  assert(harCompleteness.body?.includedCount >= 1, `HAR completeness missing included bodies: ${JSON.stringify(harCompleteness.body)}`);
+  assert(harCompleteness.timing?.entriesWithTotalTime >= 1, `HAR completeness missing timing evidence: ${JSON.stringify(harCompleteness.timing)}`);
+  assert(harCompleteness.reportPath, "HAR completeness did not save a report");
 
   console.log("F12 smoke passed:");
   console.log(`- security page: ${security.page.url}`);
@@ -897,6 +908,7 @@ try {
   console.log(`- facade tools: ${facadeOpen.facade}/${facadeInspect.facade}/${facadeCapture.facade}/${facadePack.facade}`);
   console.log(`- saved HAR entries/bytes: ${savedHar.entryCount}/${savedHar.harBytes}`);
   console.log(`- HAR entries with bodies: ${bodyEntries.length}`);
+  console.log(`- HAR completeness bodies/timing: ${harCompleteness.body.includedCount}/${harCompleteness.timing.entriesWithTotalTime}`);
 } finally {
   await fetch(`http://127.0.0.1:${serverPort}/shutdown`, { method: "POST" }).catch(() => {});
   await new Promise((resolve) => wsServer.close(resolve));

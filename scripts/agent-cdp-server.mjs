@@ -591,6 +591,101 @@ function extractBundleNetworkRecords(payload = {}) {
   return Array.isArray(records) ? records : extractHarRecords(payload);
 }
 
+function countBy(rows = [], keyFn = () => "") {
+  const counts = {};
+  for (const row of rows || []) {
+    const key = keyFn(row) || "(none)";
+    counts[key] = (counts[key] || 0) + 1;
+  }
+  return counts;
+}
+
+function analyzeHarCompleteness(har = {}, options = {}) {
+  const entries = Array.isArray(har?.log?.entries) ? har.log.entries : [];
+  const phases = ["blocked", "dns", "connect", "ssl", "send", "wait", "receive"];
+  const phaseAvailability = {};
+  for (const phase of phases) {
+    phaseAvailability[phase] = entries.filter((entry) => typeof entry.timings?.[phase] === "number" && entry.timings[phase] >= 0).length;
+  }
+  const bodyRows = entries.map((entry) => ({
+    requestId: entry._requestId || null,
+    url: entry.request?.url || "",
+    method: entry.request?.method || "",
+    status: entry.response?.status ?? null,
+    mimeType: entry.response?.content?.mimeType || "",
+    contentSize: entry.response?.content?.size ?? -1,
+    bodySize: entry.response?.bodySize ?? -1,
+    bodyReadable: Boolean(entry._bodyReadable),
+    bodyIncluded: entry.response?.content?._bodyIncluded === true,
+    bodyTruncated: entry.response?.content?._bodyTruncated === true,
+    bodyUnavailable: entry.response?.content?._bodyUnavailable === true,
+    bodyError: entry.response?.content?._bodyError || null,
+    bodyPath: entry.response?.content?._bodyPath || null,
+  }));
+  const timingRows = entries.map((entry) => ({
+    requestId: entry._requestId || null,
+    url: entry.request?.url || "",
+    time: entry.time ?? -1,
+    timingSource: entry._timingSource || null,
+    missingPhases: phases.filter((phase) => !(typeof entry.timings?.[phase] === "number" && entry.timings[phase] >= 0)),
+  }));
+  const redirectRows = entries
+    .filter((entry) => entry.response?.redirectURL || (entry.response?.status >= 300 && entry.response?.status < 400))
+    .map((entry) => ({
+      requestId: entry._requestId || null,
+      url: entry.request?.url || "",
+      status: entry.response?.status ?? null,
+      redirectURL: entry.response?.redirectURL || "",
+    }));
+  const securityRows = entries
+    .filter((entry) => entry._securityDetails)
+    .map((entry) => ({
+      requestId: entry._requestId || null,
+      url: entry.request?.url || "",
+      protocol: entry._securityDetails?.protocol || null,
+      subjectName: entry._securityDetails?.subjectName || null,
+      issuer: entry._securityDetails?.issuer || null,
+      validFrom: entry._securityDetails?.validFrom || null,
+      validTo: entry._securityDetails?.validTo || null,
+    }));
+  const maxRows = typeof options.maxRows === "number" ? options.maxRows : 50;
+  return {
+    generatedAt: new Date().toISOString(),
+    entryCount: entries.length,
+    includeBodies: Boolean(options.includeBodies),
+    maxBodyBytes: options.maxBodyBytes ?? null,
+    body: {
+      readableCount: bodyRows.filter((row) => row.bodyReadable).length,
+      includedCount: bodyRows.filter((row) => row.bodyIncluded).length,
+      truncatedCount: bodyRows.filter((row) => row.bodyTruncated).length,
+      unavailableCount: bodyRows.filter((row) => row.bodyUnavailable).length,
+      erroredCount: bodyRows.filter((row) => row.bodyError).length,
+      byMimeType: countBy(bodyRows, (row) => row.mimeType || "(unknown)"),
+      incomplete: bodyRows.filter((row) => !row.bodyIncluded || row.bodyTruncated || row.bodyError).slice(0, maxRows),
+    },
+    timing: {
+      entriesWithTotalTime: entries.filter((entry) => typeof entry.time === "number" && entry.time >= 0).length,
+      byTimingSource: countBy(entries, (entry) => entry._timingSource || "(unknown)"),
+      phaseAvailability,
+      incomplete: timingRows.filter((row) => row.missingPhases.length > 0).slice(0, maxRows),
+    },
+    redirects: {
+      count: redirectRows.length,
+      entries: redirectRows.slice(0, maxRows),
+    },
+    security: {
+      securityDetailsCount: securityRows.length,
+      entries: securityRows.slice(0, maxRows),
+    },
+    boundaries: [
+      "HAR completeness is evidence coverage metadata, not a vulnerability verdict.",
+      "Response bodies require body capture/getResponseBody; absent bodies may reflect Chrome availability or capture timing.",
+      "Missing timing phases mean Chrome did not expose those phases for that request, not necessarily a site issue.",
+    ],
+    nextTools: ["devtools_request_detail", "devtools_request_body", "devtools_save_har", "devtools_capture_bisect"],
+  };
+}
+
 function diffObjectKeys(before = {}, after = {}) {
   const beforeKeys = new Set(Object.keys(before || {}));
   const afterKeys = new Set(Object.keys(after || {}));
@@ -1744,7 +1839,7 @@ const DEVTOOLS_CAPABILITY_META = {
   network: {
     panel: "Network",
     purpose: "Record request traffic, inspect timing/initiators/bodies, replay captured requests, and export HAR evidence.",
-    firstPass: ["devtools_capture_start", "devtools_hard_reload", "agent_inspect", "devtools_network_summary", "devtools_capture_bisect"],
+    firstPass: ["devtools_capture_start", "devtools_hard_reload", "agent_inspect", "devtools_network_summary", "devtools_capture_bisect", "devtools_har_completeness"],
   },
   diagnostics: {
     panel: "Console / Issues / Security",
@@ -1864,6 +1959,7 @@ function devtoolsWorkflowGuide(task = "first-pass") {
         { tool: "devtools_capture_start", input: { clear: true, label: "reproduce" }, why: "Start an explicit F12 recording window." },
         { tool: "devtools_hard_reload", input: { waitMs: 1000 }, why: "Reload with cache disabled and Service Worker bypass where supported." },
         { tool: "agent_inspect", input: { focus: "network", limit: 20 }, why: "Find request ids and request shapes." },
+        { tool: "devtools_har_completeness", input: { includeBodies: true, maxBodyBytes: 2000 }, why: "Check objective HAR body/timing/redirect/security evidence completeness before drilling down." },
         { tool: "devtools_request_detail", input: { requestId: "<request-id>" }, why: "Inspect headers, cookies, timing, initiator, and body availability." },
       ],
     },
@@ -1892,6 +1988,7 @@ function devtoolsWorkflowGuide(task = "first-pass") {
         { tool: "devtools_evidence_bundle", input: { save: true }, why: "Save the before snapshot." },
         { tool: "devtools_capture_start", input: { clear: true, label: "after-action" }, why: "Record the action window." },
         { tool: "devtools_capture_diff", input: { beforePath: "<before-bundle-path>", save: true }, why: "Compare before snapshot to current captured traffic." },
+        { tool: "devtools_har_completeness", input: { includeBodies: true, maxBodyBytes: 2000 }, why: "Check whether the HAR evidence is complete enough for the claim." },
       ],
     },
     "source-debug": {
@@ -4637,6 +4734,49 @@ function registerStandaloneBrowserTools(tools, cdpPort, profileRegistry, default
         harBytes: Buffer.byteLength(harText, "utf8"),
         entryCount: payload.har?.log?.entries?.length || 0,
       });
+    },
+  });
+
+  tools.set("profile_har_completeness", {
+    name: "profile_har_completeness",
+    description: "Report objective HAR evidence completeness for captured traffic: bodies, truncation, timing phases, redirects, and security details.",
+    parameters: {
+      type: "object",
+      properties: {
+        profile: { type: "string" },
+        limit: { type: "number" },
+        includeBodies: { type: "boolean" },
+        maxBodyBytes: { type: "number" },
+        maxRows: { type: "number" },
+        save: { type: "boolean" },
+        path: { type: "string" },
+      },
+    },
+    async execute(id, params) {
+      const profile = await resolveProfile(params?.profile);
+      const exportResult = await tools.get("profile_export_har").execute(id, {
+        ...params,
+        includeBodies: params?.includeBodies === true,
+      });
+      const payload = JSON.parse(exportResult.content?.[0]?.text || "{}");
+      const report = {
+        backend: "managed-cdp",
+        profile: profile.name,
+        evidenceDir: profile.evidenceDir,
+        ...analyzeHarCompleteness(payload.har, {
+          includeBodies: params?.includeBodies === true,
+          maxBodyBytes: typeof params?.maxBodyBytes === "number" ? params.maxBodyBytes : 200000,
+          maxRows: typeof params?.maxRows === "number" ? params.maxRows : 50,
+        }),
+      };
+      if (params?.save !== false) {
+        const outPath = params?.path || join(profile.evidenceDir, "har", `${Date.now()}-har-completeness.json`);
+        mkdirSync(dirname(outPath), { recursive: true });
+        writeFileSync(outPath, `${JSON.stringify(report, null, 2)}\n`, "utf8");
+        report.reportPath = outPath;
+        report.reportBytes = statSync(outPath).size;
+      }
+      return toolResult(report);
     },
   });
 
@@ -9317,6 +9457,7 @@ function registerStandaloneBrowserTools(tools, cdpPort, profileRegistry, default
   aliasTool("devtools_capture_bisect", "browser_capture_bisect", "Unified Agent DevTools API: bisect captured F12 evidence into page/network/realtime buckets.");
   aliasTool("devtools_export_har", "profile_export_har", "Unified Agent DevTools API: export captured Network events as HAR.");
   aliasTool("devtools_save_har", "profile_save_har", "Unified Agent DevTools API: save captured Network events as a HAR file.");
+  aliasTool("devtools_har_completeness", "profile_har_completeness", "Unified Agent DevTools API: report objective HAR body/timing/redirect/security evidence completeness.");
   aliasTool("devtools_request_body", "profile_traffic_get", "Unified Agent DevTools API: read captured request/response detail by requestId.");
   aliasTool("devtools_request_detail", "profile_request_detail", "Unified Agent DevTools API: read F12 request-detail evidence by requestId.");
   aliasTool("devtools_request_payload", "profile_request_payload", "Unified Agent DevTools API: read request payload/postData for a requestId.");

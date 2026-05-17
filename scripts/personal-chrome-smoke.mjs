@@ -170,6 +170,15 @@ const captureBisect = await callTool("devtools_capture_bisect", {
 assert(captureBisect.backend === "personal-chrome", `Personal Chrome capture bisect wrong backend: ${JSON.stringify(captureBisect)}`);
 assert(captureBisect.buckets?.network, "Personal Chrome capture bisect missing network bucket");
 assert(captureBisect.buckets?.pages, "Personal Chrome capture bisect missing page bucket");
+const harCompleteness = await callTool("devtools_har_completeness", {
+  limit: 20,
+  includeBodies: false,
+  save: false,
+});
+assert(harCompleteness.backend === "personal-chrome", `Personal Chrome HAR completeness wrong backend: ${JSON.stringify(harCompleteness)}`);
+assert(typeof harCompleteness.entryCount === "number", "Personal Chrome HAR completeness missing entry count");
+assert(harCompleteness.body, "Personal Chrome HAR completeness missing body summary");
+assert(harCompleteness.timing, "Personal Chrome HAR completeness missing timing summary");
 
 const toolCatalog = await callTool("devtools_tool_catalog", { query: "auth" });
 assert(toolCatalog.toolCount >= 1, "Personal Chrome tool catalog did not return auth tools");
@@ -191,5 +200,6 @@ console.log(`- allowed domains: ${capabilities.domainAccess.allowedDomains.lengt
 console.log(`- layer: ${capabilities.layer}`);
 console.log(`- facade tools: ${facadeInspect.facade}/${facadeCapture.facade}/${facadePack.facade}`);
 console.log(`- capture bisect buckets: ${captureBisect.buckets.network.requestCount}/${captureBisect.buckets.pages.pageCount}`);
+console.log(`- HAR completeness entries/body-included: ${harCompleteness.entryCount}/${harCompleteness.body.includedCount}`);
 console.log(`- capability panels: ${capabilityMap.panelCount}`);
 console.log(`- realtime channels ws/sse: ${realtimeLog.websocketCount}/${realtimeLog.eventSourceMessageCount}`);

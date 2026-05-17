@@ -247,6 +247,7 @@ Chrome Extension Mode and Managed Browser Mode:
 - `devtools_network_timeline`
 - `devtools_export_har`
 - `devtools_save_har`
+- `devtools_har_completeness`
 - `devtools_request_body`
 - `devtools_request_detail`
 - `devtools_request_payload`

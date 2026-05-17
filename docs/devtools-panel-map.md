@@ -60,6 +60,7 @@ evidence.
 | Replay request variants and compare responses | `devtools_request_replay_batch` |
 | Export HAR object | `devtools_export_har` |
 | Save HAR file | `devtools_save_har` |
+| Check HAR body/timing/redirect/security completeness | `devtools_har_completeness` |
 
 ## Elements And Accessibility Panels
 

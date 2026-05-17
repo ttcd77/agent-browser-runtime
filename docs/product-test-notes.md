@@ -117,6 +117,7 @@ It starts an isolated temporary managed browser and verifies:
 - Network summary from an explicit F12 capture,
 - Network Timing/Initiator-style timeline rows,
 - captured-evidence bisection into Network, page/frame, and realtime buckets,
+- HAR completeness reporting for body, timing, redirect, and security evidence,
 - panel-level capability map for agent navigation,
 - WebSocket frame and EventSource/SSE evidence through `devtools_realtime_log`,
 - per-request Network detail including headers, cookies, timing, initiator, and
