@@ -145,6 +145,7 @@ Unified Agent DevTools tools:
 - `devtools_debugger_control`
 - `devtools_token_flow_trace`
 - `devtools_memory_snapshot`
+- `devtools_heap_snapshot`
 - `devtools_sources_list`
 - `devtools_source_get`
 - `devtools_source_pretty_print`

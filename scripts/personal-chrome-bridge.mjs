@@ -773,7 +773,7 @@ function devtoolsToolCategory(name) {
   if (/storage|cookie|service_worker|application|indexeddb|cache|auth_boundary/.test(name)) return "application";
   if (/frame|accessibility|elements|dom|css|event_listeners|worker_frame/.test(name)) return "dom-frame";
   if (/source|debugger|token_flow|global_search/.test(name)) return "sources-debugger";
-  if (/performance|trace|cpu|coverage|memory/.test(name)) return "performance";
+  if (/performance|trace|cpu|coverage|memory|heap/.test(name)) return "performance";
   if (/evidence|manifest|correlation|diff|research_pack/.test(name)) return "evidence-workflow";
   if (/cdp_command|browser_version|browser_targets|system_info/.test(name)) return "raw-cdp";
   return "other";
@@ -1145,6 +1145,17 @@ async function callBridgeTool(toolName, params = {}) {
   }
   if (toolName === "devtools_workflow_guide" || toolName === "personal_chrome_workflow_guide") {
     return workflowGuide(params?.task);
+  }
+  if (toolName === "devtools_heap_snapshot" || toolName === "personal_chrome_heap_snapshot") {
+    return {
+      backend: "personal-chrome",
+      notApplicable: true,
+      layer: "chrome.debugger",
+      tool: toolName,
+      reason: "Personal Chrome uses the extension chrome.debugger transport, which does not expose HeapProfiler heap snapshot capture. Use Managed Browser devtools_heap_snapshot for this F12 Memory panel artifact.",
+      fallbackTool: "devtools_memory_snapshot",
+      managedFallbackTool: "devtools_heap_snapshot",
+    };
   }
   const command = normalizeCommand(toolName);
   const result = await callExtension(command, params);
@@ -1558,6 +1569,7 @@ const tools = {
   personal_chrome_debugger_control: "Use Debugger pause/resume/step/breakpoint controls and inspect paused frames/scopes in the user's real Chrome tab.",
   personal_chrome_token_flow_trace: "Instrument fetch, XHR, storage, and cookies in the user's real Chrome tab to capture token-like data flow evidence.",
   personal_chrome_memory_snapshot: "Return Memory/Performance Monitor counters from the user's real Chrome tab.",
+  personal_chrome_heap_snapshot: "Structured not-applicable response for HeapProfiler heap snapshots in Personal Chrome mode.",
   personal_chrome_sources_list: "Return Sources panel-style script metadata captured through chrome.debugger.",
   personal_chrome_source_get: "Return JavaScript source for a scriptId captured through chrome.debugger.",
   personal_chrome_source_pretty_print: "Return a DevTools-style heuristic pretty-printed JavaScript source from the user's real Chrome tab.",
@@ -1643,6 +1655,7 @@ const tools = {
   devtools_debugger_control: "Unified Agent DevTools API: use Debugger pause/resume/step/breakpoint controls and inspect paused frames/scopes.",
   devtools_token_flow_trace: "Unified Agent DevTools API: instrument fetch, XHR, storage, and cookies to capture token-like data flow evidence.",
   devtools_memory_snapshot: "Unified Agent DevTools API: read Memory/Performance Monitor counters.",
+  devtools_heap_snapshot: "Unified Agent DevTools API: capture a JavaScript heap snapshot where the backend exposes HeapProfiler; structured no-op in Personal Chrome.",
   devtools_sources_list: "Unified Agent DevTools API: list parsed scripts and source maps.",
   devtools_source_get: "Unified Agent DevTools API: read script source by scriptId.",
   devtools_source_pretty_print: "Unified Agent DevTools API: pretty-print parsed JavaScript source.",

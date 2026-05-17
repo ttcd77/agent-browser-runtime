@@ -521,6 +521,14 @@ try {
   assert(memorySnapshot.heap?.usedSize >= 0 || memorySnapshot.heap?.error, "memory snapshot missing heap usage or explicit heap error");
   assert(memorySnapshot.domCounters?.nodes >= 0 || memorySnapshot.domCounters?.error, "memory snapshot missing DOM counters or explicit DOM counter error");
   assert(Array.isArray(memorySnapshot.performanceMetrics), "memory snapshot missing performance metrics array");
+  const heapSnapshot = await callTool(baseUrl, "devtools_heap_snapshot", {
+    profile: "default",
+    reportProgress: false,
+  });
+  assert(heapSnapshot.heapSnapshotPath, `heap snapshot path missing: ${JSON.stringify(heapSnapshot)}`);
+  assert(heapSnapshot.heapSnapshotBytes > 0, "heap snapshot was empty");
+  assert(heapSnapshot.chunkCount > 0, "heap snapshot did not report chunks");
+  assert(heapSnapshot.meta?.nodeCount === null || heapSnapshot.meta?.nodeCount >= 0, "heap snapshot metadata missing node count");
   const coverageDetail = await callTool(baseUrl, "devtools_coverage_detail", {
     profile: "default",
     durationMs: 800,
@@ -839,6 +847,7 @@ try {
   console.log(`- Chrome trace screenshot frames: ${trace.traceScreenshotCount}`);
   console.log(`- Chrome trace path: ${trace.tracePath}`);
   console.log(`- coverage scripts/rules: ${coverage.js.scriptCount}/${coverage.css.ruleCount}`);
+  console.log(`- heap snapshot bytes/chunks: ${heapSnapshot.heapSnapshotBytes}/${heapSnapshot.chunkCount}`);
   console.log(`- source search matches: ${sourceSearch.matchCount}`);
   console.log(`- source pretty bytes: ${prettySource.prettyBytes}`);
   console.log(`- source map results: ${sourceMapMetadata.count}`);

@@ -91,6 +91,9 @@ const realtimeLog = await callTool("devtools_realtime_log", {
 assert(realtimeLog.tab?.url, `Personal Chrome realtime log missing tab context: ${JSON.stringify(realtimeLog)}`);
 assert(Array.isArray(realtimeLog.websockets), "Personal Chrome realtime log missing websockets array");
 assert(Array.isArray(realtimeLog.eventSources), "Personal Chrome realtime log missing eventSources array");
+const heapSnapshot = await callTool("devtools_heap_snapshot");
+assert(heapSnapshot.notApplicable === true, `Personal Chrome heap snapshot should be structured notApplicable: ${JSON.stringify(heapSnapshot)}`);
+assert(heapSnapshot.managedFallbackTool === "devtools_heap_snapshot", "Personal Chrome heap snapshot missing managed fallback guidance");
 
 const chromeTrace = await callTool("devtools_chrome_trace", {
   durationMs: 250,

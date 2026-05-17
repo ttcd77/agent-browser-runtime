@@ -1521,7 +1521,7 @@ function buildAgentInspectToolPlan(focus, options = {}) {
     return {
       ...base,
       firstPass: ["devtools_memory_snapshot", "devtools_performance_observer", "devtools_performance_insights", "devtools_performance_trace"],
-      drillDown: ["devtools_chrome_trace", "devtools_trace_query", "devtools_trace_compare", "devtools_cpu_profile", "devtools_coverage_detail"],
+      drillDown: ["devtools_heap_snapshot", "devtools_chrome_trace", "devtools_trace_query", "devtools_trace_compare", "devtools_cpu_profile", "devtools_coverage_detail"],
       captureHint: "Use heavier traces only around the smallest reproducible action.",
       objectiveBoundary: "Trace summaries expose timing evidence, not root-cause conclusions.",
     };
@@ -1561,7 +1561,7 @@ function devtoolsToolCategory(name) {
   if (/storage|cookie|service_worker|application|indexeddb|cache|auth_boundary/.test(name)) return "application";
   if (/frame|accessibility|elements|dom|css|event_listeners|worker_frame/.test(name)) return "dom-frame";
   if (/source|debugger|token_flow|global_search/.test(name)) return "sources-debugger";
-  if (/performance|trace|cpu|coverage|memory/.test(name)) return "performance";
+  if (/performance|trace|cpu|coverage|memory|heap/.test(name)) return "performance";
   if (/evidence|manifest|correlation|diff|research_pack/.test(name)) return "evidence-workflow";
   if (/cdp_command|browser_version|browser_targets|system_info/.test(name)) return "raw-cdp";
   return "other";
@@ -6483,6 +6483,74 @@ function registerStandaloneBrowserTools(tools, cdpPort, profileRegistry, default
     },
   });
 
+  tools.set("browser_heap_snapshot", {
+    name: "browser_heap_snapshot",
+    description: "Capture a DevTools Memory panel JavaScript heap snapshot through HeapProfiler and save the full .heapsnapshot evidence file.",
+    parameters: {
+      type: "object",
+      properties: {
+        profile: { type: "string" },
+        tabId: { type: "string" },
+        reportProgress: { type: "boolean" },
+        exposeInternals: { type: "boolean" },
+      },
+    },
+    async execute(_id, params) {
+      const profile = await resolveProfile(params?.profile);
+      return toolResult(await withPageClient(cdpPort, params?.tabId || profile.tabId, async (client, target) => {
+        await client.HeapProfiler.enable();
+        const chunks = [];
+        let chunkCount = 0;
+        let totalBytes = 0;
+        client.HeapProfiler.addHeapSnapshotChunk((event) => {
+          const chunk = String(event.chunk || "");
+          chunks.push(chunk);
+          chunkCount += 1;
+          totalBytes += Buffer.byteLength(chunk, "utf8");
+        });
+        const startedAt = new Date().toISOString();
+        await client.HeapProfiler.takeHeapSnapshot({
+          reportProgress: params?.reportProgress !== false,
+          exposeInternals: Boolean(params?.exposeInternals),
+        });
+        const heapSnapshotText = chunks.join("");
+        const snapshotPath = join(profile.evidenceDir, "heap", `${Date.now()}-heap.heapsnapshot`);
+        mkdirSync(dirname(snapshotPath), { recursive: true });
+        writeFileSync(snapshotPath, heapSnapshotText, "utf8");
+        let meta = null;
+        try {
+          const parsed = JSON.parse(heapSnapshotText);
+          meta = {
+            nodeFieldCount: parsed.snapshot?.meta?.node_fields?.length || 0,
+            edgeFieldCount: parsed.snapshot?.meta?.edge_fields?.length || 0,
+            nodeCount: Array.isArray(parsed.nodes) && parsed.snapshot?.meta?.node_fields?.length
+              ? Math.floor(parsed.nodes.length / parsed.snapshot.meta.node_fields.length)
+              : null,
+            edgeCount: Array.isArray(parsed.edges) && parsed.snapshot?.meta?.edge_fields?.length
+              ? Math.floor(parsed.edges.length / parsed.snapshot.meta.edge_fields.length)
+              : null,
+            stringCount: Array.isArray(parsed.strings) ? parsed.strings.length : null,
+          };
+        } catch (error) {
+          meta = { parseError: String(error?.message || error) };
+        }
+        await client.HeapProfiler.disable().catch(() => {});
+        await profileRegistry.touchProfile(profile.name, { tabId: target.id });
+        return {
+          backend: "managed-cdp",
+          profile: profile.name,
+          tabId: target.id,
+          startedAt,
+          finishedAt: new Date().toISOString(),
+          heapSnapshotPath: snapshotPath,
+          heapSnapshotBytes: totalBytes,
+          chunkCount,
+          meta,
+        };
+      }));
+    },
+  });
+
   tools.set("browser_sources_list", {
     name: "browser_sources_list",
     description: "Return Sources panel-style script metadata for the current profile tab.",
@@ -7050,7 +7118,7 @@ function registerStandaloneBrowserTools(tools, cdpPort, profileRegistry, default
         out.evidence.performance = await safeCall("browser_performance_trace", { durationMs: 500 });
         if (params?.includeHeavy) out.evidence.cpuProfile = await safeCall("browser_cpu_profile", { durationMs: 500, maxNodes: limit });
         out.summary = "Performance route: memory counters plus objective timing, resource, long-task, and optional trace evidence.";
-        out.nextTools = ["devtools_performance_observer", "devtools_performance_insights", "devtools_chrome_trace", "devtools_cpu_profile", "devtools_coverage_detail"];
+        out.nextTools = ["devtools_performance_observer", "devtools_performance_insights", "devtools_heap_snapshot", "devtools_chrome_trace", "devtools_cpu_profile", "devtools_coverage_detail"];
       } else if (focus === "search") {
         if (!params?.query) throw new Error("query is required for focus=search");
         out.evidence.search = await safeCall("browser_global_search", { query: params.query, maxMatches: limit });
@@ -8807,6 +8875,7 @@ function registerStandaloneBrowserTools(tools, cdpPort, profileRegistry, default
   aliasTool("devtools_debugger_control", "browser_debugger_control", "Unified Agent DevTools API: use Debugger pause/resume/step/breakpoint controls and inspect paused frames/scopes.");
   aliasTool("devtools_token_flow_trace", "browser_token_flow_trace", "Unified Agent DevTools API: instrument fetch, XHR, storage, and cookies to capture token-like data flow evidence.");
   aliasTool("devtools_memory_snapshot", "browser_memory_snapshot", "Unified Agent DevTools API: read Memory/Performance Monitor counters.");
+  aliasTool("devtools_heap_snapshot", "browser_heap_snapshot", "Unified Agent DevTools API: capture a JavaScript heap snapshot and save the full .heapsnapshot artifact.");
   aliasTool("devtools_sources_list", "browser_sources_list", "Unified Agent DevTools API: list parsed scripts and source maps.");
   aliasTool("devtools_source_get", "browser_source_get", "Unified Agent DevTools API: read script source by scriptId.");
   aliasTool("devtools_source_pretty_print", "browser_source_pretty_print", "Unified Agent DevTools API: pretty-print parsed JavaScript source.");

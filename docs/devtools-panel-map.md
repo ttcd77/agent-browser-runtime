@@ -133,6 +133,7 @@ original-source tree.
 | JS/CSS coverage summary | `devtools_coverage_snapshot` |
 | JS/CSS coverage range drilldown | `devtools_coverage_detail` |
 | Memory/Performance Monitor counters | `devtools_memory_snapshot` |
+| JavaScript heap snapshot artifact | `devtools_heap_snapshot` |
 
 `devtools_performance_insights` is the first-pass agent route: it combines
 browser-exposed performance entries with optional trace summaries and reports

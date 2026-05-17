@@ -76,8 +76,8 @@ not running, it still validates that Managed Browser exposes the contract.
 
 Current verified contract:
 
-- Managed Browser: 85 `devtools_*` tools.
-- Personal Chrome: 85 `devtools_*` tools.
+- Managed Browser: 86 `devtools_*` tools.
+- Personal Chrome: 86 `devtools_*` tools.
 - Drift: none.
 - Agent facade: 9 `browser_*` default tools over the detailed DevTools layer.
 
@@ -132,6 +132,8 @@ It starts an isolated temporary managed browser and verifies:
 - Performance insights summary for agent first-pass triage,
 - PerformanceObserver entries for LCP, layout shift, long tasks, event timing,
   and long animation frames where Chrome exposes them,
+- JavaScript heap snapshot artifact capture in Managed Browser, with structured
+  `notApplicable` fallback in Personal Chrome,
 - JavaScript CPU profile capture, saved full profile, and hotspot summary,
 - short JavaScript/CSS coverage snapshot and range drilldown,
 - Sources-panel literal source search, heuristic pretty-print, and source map metadata,
