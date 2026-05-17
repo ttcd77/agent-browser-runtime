@@ -106,6 +106,7 @@ DevTools/F12 data layer:
 - `devtools_detach`
 - `devtools_status`
 - `devtools_backend_capabilities`
+- `devtools_protocol_schema`
 - `devtools_browser_cdp_command`
 - `devtools_browser_version`
 - `devtools_browser_targets`
@@ -172,10 +173,12 @@ Backend compatibility rule: every runtime should expose this full `devtools_*`
 set. If a tool is meaningful only in one backend, the other backend should still
 return a successful structured no-op with `notApplicable: true`, not disappear.
 
-`devtools_cdp_command` is the escape hatch for F12 parity: when Chrome exposes a
-DevTools Protocol method that does not yet have a friendly wrapper, agents can
-call that CDP method directly against the selected tab and still keep the same
-Managed/Personal backend contract.
+`devtools_protocol_schema` lets an agent discover CDP domains, commands, events,
+and parameters where the backend exposes the protocol schema. `devtools_cdp_command`
+is the escape hatch for F12 parity: when Chrome exposes a DevTools Protocol
+method that does not yet have a friendly wrapper, agents can call that CDP method
+directly against the selected tab and still keep the same Managed/Personal
+backend contract.
 
 ## Current F12 Coverage
 

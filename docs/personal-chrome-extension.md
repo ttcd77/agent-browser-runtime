@@ -83,6 +83,7 @@ Unified Agent DevTools tools:
 - `devtools_detach`
 - `devtools_status`
 - `devtools_backend_capabilities`
+- `devtools_protocol_schema`
 - `devtools_browser_cdp_command`
 - `devtools_browser_version`
 - `devtools_browser_targets`
@@ -159,6 +160,7 @@ Backend-specific aliases:
 - `personal_chrome_devtools_detach`
 - `personal_chrome_devtools_status`
 - `personal_chrome_backend_capabilities`
+- `personal_chrome_protocol_schema`
 - `personal_chrome_browser_cdp_command`
 - `personal_chrome_browser_version`
 - `personal_chrome_browser_targets`

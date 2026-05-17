@@ -4,6 +4,7 @@
 
 - Local HTTP tool server for Codex, Claude, SDKs, and OpenClaw.
 - Unified `devtools_*` contract across Personal Chrome and Managed Browser.
+- Agent-facing protocol schema discovery for raw CDP command planning.
 - Profile-scoped browser actions: navigate, click, type, eval, screenshot, snapshot.
 - Explicit Agent DevTools capture switch: capture is off by default, and the agent
   starts/stops recording when it needs F12-style evidence.

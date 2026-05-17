@@ -30,6 +30,9 @@ assert(capabilities.backend === "personal-chrome", `wrong backend: ${JSON.string
 assert(capabilities.layer === "chrome.debugger", `wrong layer: ${JSON.stringify(capabilities)}`);
 assert(capabilities.domainAccess?.allowedDomains?.includes("Network"), "capabilities missing Network domain");
 assert(capabilities.domainAccess?.allowedDomains?.includes("Runtime"), "capabilities missing Runtime domain");
+const protocolSchema = await callTool("devtools_protocol_schema", { domain: "Network", query: "getResponseBody" });
+assert(protocolSchema.notApplicable === true, `Personal Chrome protocol schema should be structured notApplicable: ${JSON.stringify(protocolSchema)}`);
+assert(protocolSchema.allowedDomains?.includes("Network"), "Personal Chrome protocol schema missing allowed domain guidance");
 const browserCdp = await callTool("devtools_browser_cdp_command", { method: "Browser.getVersion" });
 assert(browserCdp.notApplicable === true, `Personal Chrome browser-process CDP should be structured notApplicable: ${JSON.stringify(browserCdp)}`);
 const browserVersion = await callTool("devtools_browser_version");

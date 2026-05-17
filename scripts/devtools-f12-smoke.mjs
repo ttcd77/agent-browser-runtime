@@ -147,6 +147,10 @@ try {
   const backendCapabilities = await callTool(baseUrl, "devtools_backend_capabilities", { profile: "default" });
   assert(backendCapabilities.backend === "managed-cdp", `backend capabilities reported wrong backend: ${JSON.stringify(backendCapabilities)}`);
   assert(backendCapabilities.domainAccess?.expectedBroaderThanChromeDebugger === true, "backend capabilities missing managed CDP domain access marker");
+  const protocolSchema = await callTool(baseUrl, "devtools_protocol_schema", { domain: "Network", query: "getResponseBody", limit: 5 });
+  assert(protocolSchema.backend === "managed-cdp", `protocol schema wrong backend: ${JSON.stringify(protocolSchema)}`);
+  assert(protocolSchema.domains?.some((domain) => domain.domain === "Network"), "protocol schema missing Network domain");
+  assert(protocolSchema.domains?.[0]?.commands?.some((command) => command.method === "Network.getResponseBody"), "protocol schema missing Network.getResponseBody command");
   const browserCdp = await callTool(baseUrl, "devtools_browser_cdp_command", { method: "Browser.getVersion" });
   assert(browserCdp.result?.product, `browser-process CDP command missing Browser.getVersion product: ${JSON.stringify(browserCdp)}`);
   const browserVersion = await callTool(baseUrl, "devtools_browser_version");

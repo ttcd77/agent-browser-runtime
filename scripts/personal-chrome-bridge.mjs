@@ -65,6 +65,7 @@ function normalizeCommand(toolName) {
     devtools_detach: "chrome_devtools_detach",
     devtools_status: "chrome_devtools_status",
     devtools_backend_capabilities: "chrome_backend_capabilities",
+    devtools_protocol_schema: "chrome_protocol_schema",
     devtools_browser_cdp_command: "chrome_browser_cdp_command",
     devtools_browser_version: "chrome_browser_version",
     devtools_browser_targets: "chrome_browser_targets",
@@ -340,6 +341,7 @@ function buildAgentInspectToolPlan(focus, options = {}) {
   const base = {
     intent: "Use agent_inspect as the first-screen router; call low-level devtools_* tools only for drill-down.",
     escapeHatch: "devtools_cdp_command",
+    schemaTool: "devtools_protocol_schema",
   };
   if (focus === "network") {
     return {
@@ -574,6 +576,7 @@ const tools = {
   personal_chrome_devtools_detach: "Detach Chrome debugger from a real Chrome tab.",
   personal_chrome_devtools_status: "Show debugger attachment and captured event counts for a real Chrome tab.",
   personal_chrome_backend_capabilities: "Explain the Personal Chrome chrome.debugger layer, allowed CDP domains, recording semantics, and boundaries.",
+  personal_chrome_protocol_schema: "Return a structured not-applicable response for full CDP protocol schema discovery in Personal Chrome mode.",
   personal_chrome_browser_cdp_command: "Return a structured not-applicable response for browser-process CDP commands in Personal Chrome mode.",
   personal_chrome_browser_version: "Return Personal Chrome browser/user-agent metadata and explain exact Browser.getVersion fallback.",
   personal_chrome_browser_targets: "List Personal Chrome tabs as target-like evidence for agent discovery.",
@@ -647,6 +650,7 @@ const tools = {
   devtools_detach: "Unified Agent DevTools API: detach from DevTools/F12 data layer.",
   devtools_status: "Unified Agent DevTools API: inspect attachment and capture status.",
   devtools_backend_capabilities: "Unified Agent DevTools API: explain current backend layer, CDP transport, supported domains, and evidence boundaries.",
+  devtools_protocol_schema: "Unified Agent DevTools API: discover CDP domains, commands, events, and parameters where the backend exposes the protocol schema.",
   devtools_browser_cdp_command: "Unified Agent DevTools API: run browser-process CDP commands in Managed Browser mode; structured no-op in Personal Chrome.",
   devtools_browser_version: "Unified Agent DevTools API: return browser version metadata.",
   devtools_browser_targets: "Unified Agent DevTools API: list browser targets or tab-equivalent target evidence.",

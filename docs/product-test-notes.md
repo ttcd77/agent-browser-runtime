@@ -76,8 +76,8 @@ not running, it still validates that Managed Browser exposes the contract.
 
 Current verified contract:
 
-- Managed Browser: 73 `devtools_*` tools.
-- Personal Chrome: 73 `devtools_*` tools.
+- Managed Browser: 74 `devtools_*` tools.
+- Personal Chrome: 74 `devtools_*` tools.
 - Drift: none.
 
 The contract smoke uses an isolated temporary browser profile so it does not
@@ -107,6 +107,7 @@ npm run smoke:f12
 It starts an isolated temporary managed browser and verifies:
 
 - Security summary on a real HTTPS page,
+- CDP protocol schema discovery for raw command planning,
 - dashboard-friendly page diagnostics,
 - Network summary from an explicit F12 capture,
 - Network Timing/Initiator-style timeline rows,

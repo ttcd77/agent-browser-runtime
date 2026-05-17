@@ -184,6 +184,8 @@ async function executeCommand(command, params) {
       return await chromeDevtoolsStatus(params);
     case "chrome_backend_capabilities":
       return await chromeBackendCapabilities(params);
+    case "chrome_protocol_schema":
+      return chromeProtocolSchema(params);
     case "chrome_browser_cdp_command":
       return await chromeBrowserCdpCommand(params);
     case "chrome_browser_version":
@@ -339,6 +341,7 @@ async function chromeBackendCapabilities(params = {}) {
     targetStatus,
     rawCommandTool: "devtools_cdp_command",
     rawCommandTransport: "chrome.debugger.sendCommand",
+    protocolSchemaTool: "devtools_protocol_schema",
     domainAccess: {
       mode: "allowlisted-extension-cdp-transport",
       allowedDomains: CHROME_DEBUGGER_ALLOWED_DOMAINS,
@@ -360,6 +363,23 @@ async function chromeBackendCapabilities(params = {}) {
       "Some CDP domains available through direct remote debugging are not exposed through chrome.debugger.",
     ],
     fallbackLayer: "managed-cdp",
+  };
+}
+
+function chromeProtocolSchema(params = {}) {
+  return {
+    backend: "personal-chrome",
+    layer: "chrome.debugger",
+    notApplicable: true,
+    query: params.query || null,
+    domain: params.domain || null,
+    reason: "Chrome extensions do not expose the full /json/protocol browser endpoint through chrome.debugger.",
+    allowedDomains: CHROME_DEBUGGER_ALLOWED_DOMAINS,
+    fallbackTool: "Use Managed Browser devtools_protocol_schema for full protocol domain/method/event discovery.",
+    captureBoundaries: [
+      "Personal Chrome can still run allowlisted page-target methods through devtools_cdp_command.",
+      "Use devtools_backend_capabilities to see the chrome.debugger domain boundary.",
+    ],
   };
 }
 

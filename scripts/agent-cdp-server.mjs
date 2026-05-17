@@ -1075,6 +1075,7 @@ function buildAgentInspectToolPlan(focus, options = {}) {
   const base = {
     intent: "Use agent_inspect as the first-screen router; call low-level devtools_* tools only for drill-down.",
     escapeHatch: "devtools_cdp_command",
+    schemaTool: "devtools_protocol_schema",
   };
   if (focus === "network") {
     return {
@@ -7332,6 +7333,7 @@ function registerStandaloneBrowserTools(tools, cdpPort, profileRegistry, default
         capture: profileRegistry.getCapture(profile.name),
         rawCommandTool: "devtools_cdp_command",
         rawCommandTransport: "chrome-remote-interface client.send against the selected page target",
+        protocolSchemaTool: "devtools_protocol_schema",
         domainAccess: {
           mode: "direct-remote-debugging-cdp",
           expectedBroaderThanChromeDebugger: true,
@@ -7398,6 +7400,123 @@ function registerStandaloneBrowserTools(tools, cdpPort, profileRegistry, default
         cdpEndpoint: `http://127.0.0.1:${cdpPort}`,
         method,
         result,
+      });
+    },
+  });
+
+  tools.set("devtools_protocol_schema", {
+    name: "devtools_protocol_schema",
+    description: "Managed CDP: discover Chrome DevTools Protocol domains, commands, events, and parameters exposed by the current browser.",
+    parameters: {
+      type: "object",
+      properties: {
+        domain: { type: "string" },
+        query: { type: "string" },
+        includeExperimental: { type: "boolean" },
+        includeDeprecated: { type: "boolean" },
+        limit: { type: "number" },
+      },
+    },
+    async execute(_id, params) {
+      const response = await fetch(`http://127.0.0.1:${cdpPort}/json/protocol`);
+      if (!response.ok) {
+        throw new Error(`CDP protocol endpoint failed: ${response.status} ${await response.text()}`);
+      }
+      const protocol = await response.json();
+      const query = String(params?.query || "").trim().toLowerCase();
+      const domainFilter = String(params?.domain || "").trim().toLowerCase();
+      const limit = Math.max(1, typeof params?.limit === "number" ? params.limit : 50);
+      const includeExperimental = params?.includeExperimental !== false;
+      const includeDeprecated = params?.includeDeprecated !== false;
+      const domains = Array.isArray(protocol.domains) ? protocol.domains : [];
+      const rows = [];
+      for (const domain of domains) {
+        if (domainFilter && String(domain.domain || "").toLowerCase() !== domainFilter) continue;
+        if (!includeExperimental && domain.experimental) continue;
+        if (!includeDeprecated && domain.deprecated) continue;
+        const commands = Array.isArray(domain.commands) ? domain.commands : [];
+        const events = Array.isArray(domain.events) ? domain.events : [];
+        const types = Array.isArray(domain.types) ? domain.types : [];
+        const methods = commands
+          .filter((command) => includeExperimental || !command.experimental)
+          .filter((command) => includeDeprecated || !command.deprecated)
+          .map((command) => ({
+            method: `${domain.domain}.${command.name}`,
+            name: command.name,
+            description: command.description || "",
+            experimental: Boolean(command.experimental),
+            deprecated: Boolean(command.deprecated),
+            parameters: Array.isArray(command.parameters) ? command.parameters.map((param) => ({
+              name: param.name,
+              type: param.type || param.$ref || "object",
+              optional: Boolean(param.optional),
+              description: param.description || "",
+            })) : [],
+            returns: Array.isArray(command.returns) ? command.returns.map((param) => ({
+              name: param.name,
+              type: param.type || param.$ref || "object",
+              optional: Boolean(param.optional),
+              description: param.description || "",
+            })) : [],
+          }));
+        const eventRows = events
+          .filter((event) => includeExperimental || !event.experimental)
+          .filter((event) => includeDeprecated || !event.deprecated)
+          .map((event) => ({
+            event: `${domain.domain}.${event.name}`,
+            name: event.name,
+            description: event.description || "",
+            experimental: Boolean(event.experimental),
+            deprecated: Boolean(event.deprecated),
+            parameters: Array.isArray(event.parameters) ? event.parameters.map((param) => ({
+              name: param.name,
+              type: param.type || param.$ref || "object",
+              optional: Boolean(param.optional),
+              description: param.description || "",
+            })) : [],
+          }));
+        const typeRows = types.map((type) => ({
+          id: type.id,
+          type: type.type,
+          description: type.description || "",
+          experimental: Boolean(type.experimental),
+          deprecated: Boolean(type.deprecated),
+        }));
+        const haystack = JSON.stringify({ domain: domain.domain, methods, events: eventRows, types: typeRows }).toLowerCase();
+        if (query && !haystack.includes(query)) continue;
+        const queryMatches = (value) => !query || JSON.stringify(value).toLowerCase().includes(query);
+        const outputCommands = query ? methods.filter(queryMatches) : methods;
+        const outputEvents = query ? eventRows.filter(queryMatches) : eventRows;
+        const outputTypes = query ? typeRows.filter(queryMatches) : typeRows;
+        rows.push({
+          domain: domain.domain,
+          description: domain.description || "",
+          experimental: Boolean(domain.experimental),
+          deprecated: Boolean(domain.deprecated),
+          commandCount: methods.length,
+          eventCount: eventRows.length,
+          typeCount: types.length,
+          commands: outputCommands.slice(0, limit),
+          events: outputEvents.slice(0, limit),
+          types: outputTypes.slice(0, limit),
+          filtered: Boolean(query),
+          truncated: outputCommands.length > limit || outputEvents.length > limit || outputTypes.length > limit,
+        });
+      }
+      return toolResult({
+        backend: "managed-cdp",
+        layer: "direct-cdp-protocol",
+        version: protocol.version || null,
+        domainCount: domains.length,
+        matchedDomainCount: rows.length,
+        query: query || null,
+        domain: domainFilter || null,
+        domains: rows,
+        captureBoundaries: [
+          "This reports Chrome's protocol schema, not live page evidence.",
+          "Use devtools_cdp_command for page-target methods and devtools_browser_cdp_command for browser-process methods.",
+          "Method availability can still depend on the selected target type and enabled domains.",
+        ],
       });
     },
   });
