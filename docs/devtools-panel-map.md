@@ -52,6 +52,7 @@ Use this for an agent dashboard or a quick diagnosis before drilling down:
 | Inspect selected node Styles/Computed/Box Model | `devtools_css_styles` |
 | Watch selected-node DOM mutations | `devtools_dom_mutation_watch` |
 | Unwrapped CDP/F12 feature | `devtools_cdp_command` |
+| Browser-process CDP feature in Managed Browser | `devtools_browser_cdp_command` |
 | Click/type/scroll | `devtools_click`, `devtools_type`, `devtools_scroll` |
 | Screenshot | `devtools_screenshot` |
 

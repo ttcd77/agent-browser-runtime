@@ -30,6 +30,8 @@ assert(capabilities.backend === "personal-chrome", `wrong backend: ${JSON.string
 assert(capabilities.layer === "chrome.debugger", `wrong layer: ${JSON.stringify(capabilities)}`);
 assert(capabilities.domainAccess?.allowedDomains?.includes("Network"), "capabilities missing Network domain");
 assert(capabilities.domainAccess?.allowedDomains?.includes("Runtime"), "capabilities missing Runtime domain");
+const browserCdp = await callTool("devtools_browser_cdp_command", { method: "Browser.getVersion" });
+assert(browserCdp.notApplicable === true, `Personal Chrome browser-process CDP should be structured notApplicable: ${JSON.stringify(browserCdp)}`);
 
 const attached = await callTool("devtools_attach");
 assert(attached.ok === true || attached.attached === true, `debugger did not attach: ${JSON.stringify(attached)}`);

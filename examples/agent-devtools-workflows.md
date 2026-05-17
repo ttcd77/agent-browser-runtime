@@ -13,6 +13,14 @@ curl -X POST http://127.0.0.1:17335/tool/devtools_backend_capabilities \
   -d "{\"profile\":\"default\"}"
 ```
 
+In Managed Browser mode, browser-process CDP commands are available:
+
+```bash
+curl -X POST http://127.0.0.1:17335/tool/devtools_browser_cdp_command \
+  -H "content-type: application/json" \
+  -d "{\"method\":\"Browser.getVersion\"}"
+```
+
 ```bash
 curl -X POST http://127.0.0.1:17335/tool/agent_inspect \
   -H "content-type: application/json" \

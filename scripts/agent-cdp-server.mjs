@@ -6988,6 +6988,46 @@ function registerStandaloneBrowserTools(tools, cdpPort, profileRegistry, default
     },
   });
 
+  tools.set("devtools_browser_cdp_command", {
+    name: "devtools_browser_cdp_command",
+    description: "Managed CDP only: run a raw Chrome DevTools Protocol command against the browser-process endpoint for Browser/SystemInfo/Target-level features.",
+    parameters: {
+      type: "object",
+      properties: {
+        method: { type: "string" },
+        params: { type: "object" },
+      },
+      required: ["method"],
+    },
+    async execute(_id, params) {
+      const method = String(params?.method || "").trim();
+      if (!/^[A-Za-z0-9_.]+$/.test(method) || !method.includes(".")) {
+        throw new Error("method must be a Chrome DevTools Protocol method like Browser.getVersion");
+      }
+      const versionResponse = await fetch(`http://127.0.0.1:${cdpPort}/json/version`);
+      if (!versionResponse.ok) {
+        throw new Error(`CDP version endpoint failed: ${versionResponse.status} ${await versionResponse.text()}`);
+      }
+      const version = await versionResponse.json();
+      if (!version.webSocketDebuggerUrl) {
+        throw new Error("CDP version endpoint did not expose webSocketDebuggerUrl");
+      }
+      const browserClient = await CDP({ target: version.webSocketDebuggerUrl });
+      try {
+        const result = await browserClient.send(method, params?.params && typeof params.params === "object" ? params.params : {});
+        return toolResult({
+          backend: "managed-cdp",
+          layer: "direct-cdp-browser-process",
+          cdpEndpoint: `http://127.0.0.1:${cdpPort}`,
+          method,
+          result,
+        });
+      } finally {
+        await browserClient.close().catch(() => {});
+      }
+    },
+  });
+
   tools.set("devtools_extension_reload", {
     name: "devtools_extension_reload",
     description: "Unified Agent DevTools API: reload the Personal Chrome extension when that backend is active. No-op for managed CDP.",

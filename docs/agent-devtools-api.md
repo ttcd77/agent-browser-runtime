@@ -106,6 +106,7 @@ DevTools/F12 data layer:
 - `devtools_detach`
 - `devtools_status`
 - `devtools_backend_capabilities`
+- `devtools_browser_cdp_command`
 - `devtools_capture_start`
 - `devtools_capture_stop`
 - `devtools_capture_clear`

@@ -184,6 +184,8 @@ async function executeCommand(command, params) {
       return await chromeDevtoolsStatus(params);
     case "chrome_backend_capabilities":
       return await chromeBackendCapabilities(params);
+    case "chrome_browser_cdp_command":
+      return await chromeBrowserCdpCommand(params);
     case "chrome_capture_start":
       return await chromeCaptureStart(params);
     case "chrome_capture_stop":
@@ -348,6 +350,17 @@ async function chromeBackendCapabilities(params = {}) {
       "Some CDP domains available through direct remote debugging are not exposed through chrome.debugger.",
     ],
     fallbackLayer: "managed-cdp",
+  };
+}
+
+async function chromeBrowserCdpCommand(params = {}) {
+  return {
+    backend: "personal-chrome",
+    layer: "chrome.debugger",
+    method: params.method || null,
+    notApplicable: true,
+    reason: "Personal Chrome uses chrome.debugger against tab targets. Browser-process CDP commands require the Managed Browser direct-CDP layer.",
+    fallbackTool: "Use Managed Browser devtools_browser_cdp_command for Browser/SystemInfo/Target-level commands.",
   };
 }
 

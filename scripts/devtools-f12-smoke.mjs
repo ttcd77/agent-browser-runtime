@@ -147,6 +147,8 @@ try {
   const backendCapabilities = await callTool(baseUrl, "devtools_backend_capabilities", { profile: "default" });
   assert(backendCapabilities.backend === "managed-cdp", `backend capabilities reported wrong backend: ${JSON.stringify(backendCapabilities)}`);
   assert(backendCapabilities.domainAccess?.expectedBroaderThanChromeDebugger === true, "backend capabilities missing managed CDP domain access marker");
+  const browserCdp = await callTool(baseUrl, "devtools_browser_cdp_command", { method: "Browser.getVersion" });
+  assert(browserCdp.result?.product, `browser-process CDP command missing Browser.getVersion product: ${JSON.stringify(browserCdp)}`);
 
   const diagnostics = await callTool(baseUrl, "devtools_page_diagnostics", {
     profile: "default",

@@ -29,6 +29,9 @@ This layer is for agent-owned browser profiles and repeatable target work.
 - Boundary: the friendly wrappers are still ordinary-web-page F12 tools. Use
   `devtools_cdp_command` as the escape hatch for page-target CDP methods that do
   not yet have a wrapper.
+- Extra CDP layer: use `devtools_browser_cdp_command` for browser-process
+  commands such as `Browser.getVersion`, `Target.getTargets`, or `SystemInfo.*`
+  where Chrome exposes them.
 
 ## Shared Rule
 
