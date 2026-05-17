@@ -154,6 +154,8 @@ It starts an isolated temporary managed browser and verifies:
 - HAR file save.
 - Service Worker registration and CacheStorage summary on a local page.
 - Application panel export to JSON, including IndexedDB and CacheStorage data.
+- Direct IndexedDB store reads and CacheStorage response-body reads on smoke
+  fixtures.
 - Cookie security summary, including Secure, HttpOnly, SameSite, session vs
   persistent, and objective attribute signals.
 - Origin/storage-key/quota evidence, quota usage breakdown, Storage Buckets support/bucket summary, and cookie partition evidence where Chrome exposes it.

@@ -792,6 +792,21 @@ try {
   assert(applicationExport.exportBytes > 0, "application export was empty");
   assert(applicationExport.indexedDbDatabaseCount >= 1, `application export missing IndexedDB: ${JSON.stringify(applicationExport)}`);
   assert(applicationExport.cacheCount >= 1, `application export missing CacheStorage: ${JSON.stringify(applicationExport)}`);
+  const indexedDbRead = await callTool(baseUrl, "devtools_indexeddb_read", {
+    profile: "default",
+    database: "agent-f12-smoke-db",
+    store: "records",
+    limit: 10,
+  });
+  assert(indexedDbRead.page?.ok === true, `IndexedDB read failed: ${JSON.stringify(indexedDbRead)}`);
+  assert(indexedDbRead.page?.records?.some((record) => record.value?.value === "indexeddb smoke"), `IndexedDB read missing smoke record: ${JSON.stringify(indexedDbRead)}`);
+  const cacheEntry = await callTool(baseUrl, "devtools_cache_entry_get", {
+    profile: "default",
+    cacheName: "agent-f12-smoke-cache",
+    url: `http://127.0.0.1:${appPort}/cached.txt`,
+  });
+  assert(cacheEntry.page?.ok === true, `Cache entry read failed: ${JSON.stringify(cacheEntry)}`);
+  assert(String(cacheEntry.page?.bodyText || "").includes("cached smoke"), `Cache entry body missing smoke text: ${JSON.stringify(cacheEntry)}`);
 
   const cookieSummary = await callTool(baseUrl, "devtools_cookie_summary", {
     profile: "default",

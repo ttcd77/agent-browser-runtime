@@ -37,6 +37,24 @@ async function startFixtureServer() {
         window.AGENT_PERSONAL_SMOKE_MARKER = "fixture-ready";
         localStorage.setItem("agent-personal-smoke-local", "local-fixture-value");
         sessionStorage.setItem("agent-personal-smoke-session", "session-fixture-value");
+        window.__idbReady = new Promise((resolve) => {
+          const open = indexedDB.open("agent-personal-smoke-db", 1);
+          open.onupgradeneeded = () => open.result.createObjectStore("records", { keyPath: "id" });
+          open.onerror = () => resolve("idb-error");
+          open.onsuccess = () => {
+            const db = open.result;
+            const tx = db.transaction("records", "readwrite");
+            tx.objectStore("records").put({ id: "one", value: "personal indexeddb smoke" });
+            tx.oncomplete = () => { db.close(); resolve("idb-ready"); };
+            tx.onerror = () => { db.close(); resolve("idb-tx-error"); };
+          };
+        });
+        window.__cacheReady = caches?.open
+          ? caches.open("agent-personal-smoke-cache")
+              .then((cache) => cache.put("/personal-cached.txt", new Response("personal cached smoke")))
+              .then(() => "cache-ready")
+              .catch((error) => String(error && error.message || error))
+          : Promise.resolve("cache-unsupported");
         document.getElementById("action").addEventListener("click", () => {
           document.body.dataset.clicked = "yes";
         });
@@ -135,6 +153,16 @@ const runtime = await callTool("devtools_cdp_command", {
 });
 assert(runtime.result?.result?.value?.ok === true, `Runtime.evaluate did not return expected value: ${JSON.stringify(runtime)}`);
 
+const applicationReady = await callTool("devtools_cdp_command", {
+  method: "Runtime.evaluate",
+  params: {
+    expression: "Promise.all([window.__idbReady, window.__cacheReady])",
+    awaitPromise: true,
+    returnByValue: true,
+  },
+});
+assert(Array.isArray(applicationReady.result?.result?.value), `Personal fixture storage did not settle: ${JSON.stringify(applicationReady)}`);
+
 const frameTree = await callTool("devtools_frame_tree");
 assert(frameTree.frameCount >= 1 || frameTree.frames?.length >= 1 || frameTree.frameTree?.frame?.id, `frame tree missing frames: ${JSON.stringify(frameTree)}`);
 
@@ -146,6 +174,19 @@ assert(storage.storageBoundarySummary?.quotaByOrigin && typeof storage.storageBo
 assert(typeof storage.storageBucketSummary?.supported === "boolean", `storage bucket summary missing support flag: ${JSON.stringify(storage)}`);
 assert(typeof storage.storageBucketSummary?.bucketCount === "number", `storage bucket summary missing bucket count: ${JSON.stringify(storage)}`);
 assert(Array.isArray(storage.captureBoundaries), `storage origin summary missing capture boundaries: ${JSON.stringify(storage)}`);
+const indexedDbRead = await callTool("devtools_indexeddb_read", {
+  database: "agent-personal-smoke-db",
+  store: "records",
+  limit: 10,
+});
+assert(indexedDbRead.page?.ok === true, `Personal IndexedDB read failed: ${JSON.stringify(indexedDbRead)}`);
+assert(indexedDbRead.page?.records?.some((record) => record.value?.value === "personal indexeddb smoke"), `Personal IndexedDB read missing smoke record: ${JSON.stringify(indexedDbRead)}`);
+const cacheEntry = await callTool("devtools_cache_entry_get", {
+  cacheName: "agent-personal-smoke-cache",
+  url: `${fixture.url}personal-cached.txt`,
+});
+assert(cacheEntry.page?.ok === true, `Personal CacheStorage entry read failed: ${JSON.stringify(cacheEntry)}`);
+assert(String(cacheEntry.page?.bodyText || "").includes("personal cached smoke"), `Personal CacheStorage body missing smoke text: ${JSON.stringify(cacheEntry)}`);
 
 const performanceInsights = await callTool("devtools_performance_insights", {
   durationMs: 250,
