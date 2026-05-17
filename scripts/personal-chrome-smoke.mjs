@@ -112,6 +112,17 @@ const traceCompare = await callTool("devtools_trace_compare", {
 assert(traceCompare.backend === "personal-chrome", `Personal Chrome trace compare wrong backend: ${JSON.stringify(traceCompare)}`);
 assert(typeof traceCompare.deltas?.eventCount === "number", "Personal Chrome trace compare missing event delta");
 
+const researchPack = await callTool("devtools_security_research_pack", {
+  limit: 5,
+  waitMs: 500,
+  includeTrace: false,
+  includeHar: true,
+  includeApplicationExport: true,
+});
+assert(researchPack.backend === "personal-chrome", `Personal Chrome security research pack wrong backend: ${JSON.stringify(researchPack)}`);
+assert(researchPack.summary?.evidenceBundlePath, "Personal Chrome security research pack missing bundle path");
+assert(typeof researchPack.summary?.requestCount === "number", "Personal Chrome security research pack missing request count");
+
 console.log("Personal Chrome smoke passed:");
 console.log(`- bridge: ${baseUrl}`);
 console.log(`- active tab: ${status.tab.title || "(untitled)"} ${status.tab.url}`);

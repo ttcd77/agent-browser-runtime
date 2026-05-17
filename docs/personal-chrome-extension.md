@@ -136,6 +136,7 @@ Unified Agent DevTools tools:
 - `devtools_source_map_metadata`
 - `devtools_global_search`
 - `devtools_evidence_bundle`
+- `devtools_security_research_pack`
 - `devtools_sources_search`
 - `devtools_performance_trace`
 - `devtools_performance_insights`
@@ -214,6 +215,7 @@ Backend-specific aliases:
 - `personal_chrome_source_map_metadata`
 - `personal_chrome_global_search`
 - `personal_chrome_evidence_bundle`
+- `personal_chrome_security_research_pack`
 - `personal_chrome_sources_search`
 - `personal_chrome_performance_trace`
 - `personal_chrome_performance_insights`

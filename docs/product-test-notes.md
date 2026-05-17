@@ -76,8 +76,8 @@ not running, it still validates that Managed Browser exposes the contract.
 
 Current verified contract:
 
-- Managed Browser: 76 `devtools_*` tools.
-- Personal Chrome: 76 `devtools_*` tools.
+- Managed Browser: 77 `devtools_*` tools.
+- Personal Chrome: 77 `devtools_*` tools.
 - Drift: none.
 
 The contract smoke uses an isolated temporary browser profile so it does not
@@ -134,6 +134,7 @@ It starts an isolated temporary managed browser and verifies:
 - Sources-panel literal source search, heuristic pretty-print, and source map metadata,
 - global literal search across Network, Sources, and Application evidence,
 - compact F12 evidence bundle export,
+- one-call security research pack workflow with artifact paths,
 - Console exceptions and source context around stack frames,
 - HAR file save.
 - Service Worker registration and CacheStorage summary on a local page.

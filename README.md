@@ -235,6 +235,7 @@ Chrome Extension Mode and Managed Browser Mode:
 - `devtools_source_map_metadata`
 - `devtools_global_search`
 - `devtools_evidence_bundle`
+- `devtools_security_research_pack`
 - `devtools_sources_search`
 - `devtools_performance_trace`
 - `devtools_performance_insights`

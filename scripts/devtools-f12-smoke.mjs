@@ -537,6 +537,19 @@ try {
   assert(evidenceBundle.summary?.harEntryCount >= 1, "evidence bundle missing HAR entries");
   assert(evidenceBundle.summary?.tokenFlowTokenLikeEventCount >= 1, "evidence bundle missing token flow evidence");
 
+  const researchPack = await callTool(baseUrl, "devtools_security_research_pack", {
+    profile: "default",
+    limit: 5,
+    waitMs: 500,
+    includeTrace: true,
+    includeHar: true,
+    includeApplicationExport: true,
+  });
+  assert(researchPack.backend === "managed-cdp", `security research pack wrong backend: ${JSON.stringify(researchPack)}`);
+  assert(researchPack.summary?.evidenceBundlePath, "security research pack missing bundle path");
+  assert(typeof researchPack.summary?.requestCount === "number", "security research pack missing request count");
+  assert(Array.isArray(researchPack.captureBoundaries), "security research pack missing capture boundaries");
+
   await callTool(baseUrl, "browser_navigate", {
     profile: "default",
     url: `http://127.0.0.1:${appPort}/`,

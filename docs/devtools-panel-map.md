@@ -73,6 +73,7 @@ Use this for an agent dashboard or a quick diagnosis before drilling down:
 | Trace token-like data through fetch/XHR/storage/cookies | `devtools_token_flow_trace` |
 | Search Network, Sources, and Application evidence | `devtools_global_search` |
 | Export compact F12 evidence bundle | `devtools_evidence_bundle` |
+| Run one-call security research evidence workflow | `devtools_security_research_pack` |
 | Read source context around a console stack frame | `devtools_console_source_context` |
 
 Current boundary: breakpoints, scopes, live debugging, and AST-lossless

@@ -6692,6 +6692,113 @@ function registerStandaloneBrowserTools(tools, cdpPort, profileRegistry, default
     },
   });
 
+  tools.set("browser_security_research_pack", {
+    name: "browser_security_research_pack",
+    description: "One-call security research evidence workflow: optionally navigate, start capture, reload, collect agent_inspect routes, save HAR/Application/trace evidence, and return artifact paths.",
+    parameters: {
+      type: "object",
+      properties: {
+        profile: { type: "string" },
+        url: { type: "string" },
+        waitMs: { type: "number" },
+        limit: { type: "number" },
+        includeTrace: { type: "boolean" },
+        includeHar: { type: "boolean" },
+        includeApplicationExport: { type: "boolean" },
+        includeTokenScan: { type: "boolean" },
+        includePerformanceHeavy: { type: "boolean" },
+      },
+    },
+    async execute(id, params) {
+      const profile = await resolveProfile(params?.profile);
+      const readPayload = (result) => JSON.parse(result.content?.[0]?.text || "{}");
+      const call = async (name, extra = {}) => readPayload(await tools.get(name).execute(id, { profile: profile.name, ...extra }));
+      const safeCall = async (name, extra = {}) => {
+        try {
+          return await call(name, extra);
+        } catch (error) {
+          return { unavailable: true, tool: name, error: String(error?.message || error) };
+        }
+      };
+      const waitMs = typeof params?.waitMs === "number" ? params.waitMs : 1200;
+      const limit = typeof params?.limit === "number" ? params.limit : 25;
+      const steps = [];
+      if (params?.url) {
+        const url = new URL(String(params.url));
+        if (!/^https?:$/.test(url.protocol)) throw new Error("url must use http or https");
+        steps.push({ step: "navigate", result: await safeCall("browser_navigate", { url: url.toString(), waitMs }) });
+      }
+      steps.push({ step: "capture_start", result: await safeCall("devtools_capture_start", { clear: true, label: "security-research-pack" }) });
+      steps.push({ step: "hard_reload", result: await safeCall("browser_hard_reload", { waitMs }) });
+      const overview = await safeCall("agent_inspect", { focus: "overview", limit });
+      const network = await safeCall("agent_inspect", { focus: "network", limit });
+      const storage = await safeCall("agent_inspect", { focus: "storage", limit, includeHeavy: true });
+      const consoleEvidence = await safeCall("agent_inspect", { focus: "console", limit });
+      const sources = await safeCall("agent_inspect", { focus: "sources", limit });
+      const performance = await safeCall("agent_inspect", { focus: "performance", limit, includeHeavy: Boolean(params?.includePerformanceHeavy) });
+      const artifacts = {};
+      if (params?.includeHar !== false) {
+        artifacts.har = await safeCall("devtools_save_har", { limit: 500, includeBodies: false });
+      }
+      if (params?.includeApplicationExport !== false) {
+        artifacts.application = await safeCall("devtools_application_export", {
+          maxIndexedDbRecords: 100,
+          maxCacheEntries: 100,
+        });
+      }
+      if (params?.includeTrace !== false) {
+        artifacts.trace = await safeCall("devtools_chrome_trace", { durationMs: 800, maxEvents: 20, maxScreenshots: 2 });
+        if (artifacts.trace?.tracePath) {
+          artifacts.traceQuery = await safeCall("devtools_trace_query", { tracePath: artifacts.trace.tracePath, limit: 10 });
+        }
+      }
+      artifacts.bundle = await safeCall("devtools_evidence_bundle", {
+        save: true,
+        networkLimit: 100,
+        sourceLimit: 100,
+        includeHar: false,
+        includeTokenScan: Boolean(params?.includeTokenScan),
+      });
+      const networkSummary = network?.evidence?.summary || {};
+      const page = overview?.evidence?.diagnostics?.page || {};
+      return toolResult({
+        backend: "managed-cdp",
+        profile: profile.name,
+        generatedAt: new Date().toISOString(),
+        page,
+        summary: {
+          url: page.url || params?.url || null,
+          requestCount: networkSummary.requestCount || 0,
+          failedRequestCount: networkSummary.failedRequestCount || networkSummary.errorCount || 0,
+          consoleEntryCount: overview?.evidence?.console?.entryCount || overview?.evidence?.console?.entries?.length || 0,
+          cookieCount: storage?.evidence?.cookies?.cookieCount ?? null,
+          sourceCount: sources?.evidence?.sources?.count ?? null,
+          performanceObserverEntryCount: performance?.evidence?.observer?.summary?.entryCount ?? null,
+          tracePath: artifacts.trace?.tracePath || null,
+          harPath: artifacts.har?.harPath || null,
+          applicationExportPath: artifacts.application?.exportPath || null,
+          evidenceBundlePath: artifacts.bundle?.bundlePath || null,
+        },
+        steps,
+        evidence: {
+          overview,
+          network,
+          storage,
+          console: consoleEvidence,
+          sources,
+          performance,
+        },
+        artifacts,
+        captureBoundaries: [
+          "This workflow records only evidence observable after capture starts and during the reload/reproduction window.",
+          "It organizes F12 evidence for security research but does not decide exploitability.",
+          "Use returned requestId/scriptId/tracePath values for low-level drill-down tools.",
+        ],
+        nextTools: ["agent_inspect", "devtools_request_detail", "devtools_request_replay_batch", "devtools_global_search", "devtools_trace_query"],
+      });
+    },
+  });
+
   tools.set("browser_sources_search", {
     name: "browser_sources_search",
     description: "Search parsed script sources for a literal query and return line/column snippets.",
@@ -7914,6 +8021,7 @@ function registerStandaloneBrowserTools(tools, cdpPort, profileRegistry, default
   aliasTool("devtools_source_map_metadata", "browser_source_map_metadata", "Unified Agent DevTools API: read source map reference and metadata.");
   aliasTool("devtools_global_search", "browser_global_search", "Unified Agent DevTools API: search F12 evidence surfaces for a literal query.");
   aliasTool("devtools_evidence_bundle", "browser_evidence_bundle", "Unified Agent DevTools API: export a compact objective F12 evidence bundle.");
+  aliasTool("devtools_security_research_pack", "browser_security_research_pack", "Unified Agent DevTools API: run a one-call security research evidence workflow and return artifact paths.");
   aliasTool("devtools_sources_search", "browser_sources_search", "Unified Agent DevTools API: search parsed JavaScript sources by literal query.");
   aliasTool("devtools_performance_trace", "browser_performance_trace", "Unified Agent DevTools API: capture navigation/resource/paint/long-task performance data.");
   aliasTool("devtools_chrome_trace", "browser_chrome_trace", "Unified Agent DevTools API: capture Chrome Tracing data and return a summary plus full trace path.");

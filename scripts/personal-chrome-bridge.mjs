@@ -568,6 +568,9 @@ async function callBridgeTool(toolName, params = {}) {
   if (toolName === "personal_chrome_trace_compare" || toolName === "devtools_trace_compare") {
     return traceCompare(params);
   }
+  if (toolName === "personal_chrome_security_research_pack" || toolName === "devtools_security_research_pack") {
+    return await securityResearchPack(params);
+  }
   const command = normalizeCommand(toolName);
   const result = await callExtension(command, params);
   return postProcessToolResult(toolName, result, params);
@@ -579,6 +582,91 @@ async function safeBridgeTool(toolName, params = {}) {
   } catch (error) {
     return { unavailable: true, tool: toolName, error: String(error?.message || error) };
   }
+}
+
+async function securityResearchPack(params = {}) {
+  const waitMs = typeof params.waitMs === "number" ? params.waitMs : 1200;
+  const limit = typeof params.limit === "number" ? params.limit : 25;
+  const steps = [];
+  if (params.url) {
+    const url = new URL(String(params.url));
+    if (!/^https?:$/.test(url.protocol)) throw new Error("url must use http or https");
+    steps.push({
+      step: "navigate",
+      result: await safeBridgeTool("devtools_eval", {
+        expression: `(() => { location.assign(${JSON.stringify(url.toString())}); return true; })()`,
+      }),
+    });
+    await new Promise((resolve) => setTimeout(resolve, waitMs));
+  }
+  steps.push({ step: "attach", result: await safeBridgeTool("devtools_attach") });
+  steps.push({ step: "capture_start", result: await safeBridgeTool("devtools_capture_start", { clear: true, label: "security-research-pack" }) });
+  steps.push({ step: "hard_reload", result: await safeBridgeTool("devtools_hard_reload", { waitMs }) });
+  const overview = await runAgentInspect({ focus: "overview", limit });
+  const network = await runAgentInspect({ focus: "network", limit });
+  const storage = await runAgentInspect({ focus: "storage", limit, includeHeavy: true });
+  const consoleEvidence = await runAgentInspect({ focus: "console", limit });
+  const sources = await runAgentInspect({ focus: "sources", limit });
+  const performance = await runAgentInspect({ focus: "performance", limit, includeHeavy: Boolean(params.includePerformanceHeavy) });
+  const artifacts = {};
+  if (params.includeHar !== false) {
+    artifacts.har = await safeBridgeTool("devtools_save_har", { limit: 500, includeBodies: false });
+  }
+  if (params.includeApplicationExport !== false) {
+    artifacts.application = await safeBridgeTool("devtools_application_export", {
+      maxIndexedDbRecords: 100,
+      maxCacheEntries: 100,
+    });
+  }
+  if (params.includeTrace !== false) {
+    artifacts.trace = await safeBridgeTool("devtools_chrome_trace", { durationMs: 800, maxEvents: 20, maxScreenshots: 2 });
+    if (artifacts.trace?.tracePath) {
+      artifacts.traceQuery = await safeBridgeTool("devtools_trace_query", { tracePath: artifacts.trace.tracePath, limit: 10 });
+    }
+  }
+  artifacts.bundle = await safeBridgeTool("devtools_evidence_bundle", {
+    save: true,
+    networkLimit: 100,
+    sourceLimit: 100,
+    includeHar: false,
+    includeTokenScan: Boolean(params.includeTokenScan),
+  });
+  const networkSummary = network?.evidence?.summary || {};
+  const page = overview?.evidence?.diagnostics?.page || overview?.evidence?.backendCapabilities?.activeTab || {};
+  return {
+    backend: "personal-chrome",
+    generatedAt: new Date().toISOString(),
+    page,
+    summary: {
+      url: page.url || params.url || null,
+      requestCount: networkSummary.requestCount || 0,
+      failedRequestCount: networkSummary.failedRequestCount || networkSummary.errorCount || 0,
+      consoleEntryCount: overview?.evidence?.console?.entryCount || overview?.evidence?.console?.entries?.length || 0,
+      cookieCount: storage?.evidence?.cookies?.cookieCount ?? null,
+      sourceCount: sources?.evidence?.sources?.count ?? null,
+      performanceObserverEntryCount: performance?.evidence?.observer?.summary?.entryCount ?? null,
+      tracePath: artifacts.trace?.tracePath || null,
+      harPath: artifacts.har?.harPath || null,
+      applicationExportPath: artifacts.application?.exportPath || null,
+      evidenceBundlePath: artifacts.bundle?.bundlePath || null,
+    },
+    steps,
+    evidence: {
+      overview,
+      network,
+      storage,
+      console: consoleEvidence,
+      sources,
+      performance,
+    },
+    artifacts,
+    captureBoundaries: [
+      "Personal Chrome mode runs against the user's active browser profile after local extension authorization.",
+      "This workflow records only evidence observable after capture starts and during the reload/reproduction window.",
+      "It organizes F12 evidence for security research but does not decide exploitability.",
+    ],
+    nextTools: ["agent_inspect", "devtools_request_detail", "devtools_request_replay_batch", "devtools_global_search", "devtools_trace_query"],
+  };
 }
 
 function buildAgentInspectToolPlan(focus, options = {}) {
@@ -873,6 +961,7 @@ const tools = {
   personal_chrome_source_map_metadata: "Return sourceMappingURL and source map metadata from the user's real Chrome tab.",
   personal_chrome_global_search: "Search F12 evidence surfaces in the user's real Chrome tab for a literal query.",
   personal_chrome_evidence_bundle: "Export a compact objective F12 evidence bundle from the user's real Chrome tab.",
+  personal_chrome_security_research_pack: "Run a one-call security research evidence workflow against the user's real Chrome tab and return artifact paths.",
   personal_chrome_sources_search: "Search parsed JavaScript sources captured through chrome.debugger.",
   personal_chrome_performance_trace: "Capture a short Performance panel-style snapshot from the user's real Chrome tab.",
   personal_chrome_performance_insights: "Summarize Performance panel timing, slow resources, long tasks, and optional Chrome trace evidence from the user's real Chrome tab.",
@@ -949,6 +1038,7 @@ const tools = {
   devtools_source_map_metadata: "Unified Agent DevTools API: read source map reference and metadata.",
   devtools_global_search: "Unified Agent DevTools API: search F12 evidence surfaces for a literal query.",
   devtools_evidence_bundle: "Unified Agent DevTools API: export a compact objective F12 evidence bundle.",
+  devtools_security_research_pack: "Unified Agent DevTools API: run a one-call security research evidence workflow and return artifact paths.",
   devtools_sources_search: "Unified Agent DevTools API: search parsed JavaScript sources by literal query.",
   devtools_performance_trace: "Unified Agent DevTools API: capture navigation/resource/paint/long-task performance data.",
   devtools_performance_insights: "Unified Agent DevTools API: summarize Performance panel timing, resources, long tasks, and optional trace evidence.",
