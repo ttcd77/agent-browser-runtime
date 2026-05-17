@@ -570,6 +570,94 @@ function readJsonFile(file) {
   return JSON.parse(readFileSync(file, "utf8"));
 }
 
+function inspectArtifactFile(params = {}) {
+  const artifactPath = params.path || params.artifactPath;
+  if (!artifactPath) throw new Error("path is required");
+  const file = resolve(String(artifactPath));
+  const maxBytes = Math.max(1, Math.min(Number(params.maxBytes) || 120000, 2_000_000));
+  const maxMatches = Math.max(0, Math.min(Number(params.maxMatches) || 20, 200));
+  const contextChars = Math.max(0, Math.min(Number(params.contextChars) || 160, 2000));
+  const query = params.query == null ? "" : String(params.query);
+  if (!existsSync(file)) {
+    return {
+      schema: "agent-browser-runtime.artifact-inspect.v1",
+      backend: params.backend || "managed-cdp",
+      path: String(artifactPath),
+      resolvedPath: file,
+      exists: false,
+      boundaries: ["This tool reads local evidence artifacts only; it does not interpret findings."],
+    };
+  }
+  const stat = statSync(file);
+  const out = {
+    schema: "agent-browser-runtime.artifact-inspect.v1",
+    backend: params.backend || "managed-cdp",
+    path: String(artifactPath),
+    resolvedPath: file,
+    exists: true,
+    isFile: stat.isFile(),
+    isDirectory: stat.isDirectory(),
+    bytes: stat.size,
+    modifiedAt: stat.mtime.toISOString(),
+    sha256: stat.isFile() && stat.size <= 25_000_000 ? fileSha256(file) : null,
+    hashSkipped: stat.isFile() && stat.size > 25_000_000,
+    readLimitBytes: maxBytes,
+    boundaries: [
+      "This is bounded local artifact inspection for agent drill-down.",
+      "It returns structure, previews, and literal matches; it does not decide vulnerability impact.",
+      "If an artifact was not captured earlier, this tool cannot reconstruct missing browser events.",
+    ],
+    nextTools: ["devtools_artifact_inspect path=<artifact> query=<literal>", "devtools_evidence_manifest", "devtools_global_search"],
+  };
+  if (!stat.isFile()) return out;
+
+  const ext = file.toLowerCase().split(".").pop() || "";
+  const textLike = new Set(["json", "har", "txt", "log", "md", "html", "htm", "js", "mjs", "ts", "css", "csv", "xml", "yml", "yaml", "map", "svg"]);
+  const buffer = readFileSync(file);
+  const previewBuffer = buffer.subarray(0, Math.min(buffer.length, maxBytes));
+  const text = previewBuffer.toString("utf8");
+  out.previewBytes = previewBuffer.length;
+  out.previewTruncated = buffer.length > previewBuffer.length;
+  out.kind = textLike.has(ext) || !text.includes("\u0000") ? "text" : "binary";
+  if (out.kind !== "text") return out;
+
+  const lines = text.split(/\r?\n/);
+  out.previewText = text;
+  out.previewLineCount = lines.length;
+  out.firstLines = lines.slice(0, Math.min(20, lines.length));
+  out.lastLines = lines.slice(Math.max(0, lines.length - 20));
+
+  if (["json", "har", "map"].includes(ext) && buffer.length <= Math.max(maxBytes, 2_000_000)) {
+    try {
+      const parsed = JSON.parse(buffer.toString("utf8"));
+      out.json = {
+        ok: true,
+        topLevelType: Array.isArray(parsed) ? "array" : typeof parsed,
+        keys: parsed && typeof parsed === "object" && !Array.isArray(parsed) ? Object.keys(parsed).slice(0, 80) : [],
+        arrayLength: Array.isArray(parsed) ? parsed.length : null,
+        harEntryCount: Array.isArray(parsed?.log?.entries) ? parsed.log.entries.length : null,
+        traceEventCount: Array.isArray(parsed?.traceEvents) ? parsed.traceEvents.length : null,
+      };
+    } catch (error) {
+      out.json = { ok: false, error: String(error?.message || error) };
+    }
+  } else if (["json", "har", "map"].includes(ext)) {
+    out.json = { ok: false, skipped: true, reason: "artifact exceeds bounded JSON parse limit" };
+  }
+
+  if (query) {
+    const searchText = buffer.length <= 5_000_000 ? buffer.toString("utf8") : text;
+    out.matches = findSourceMatches(searchText, query, {
+      caseSensitive: Boolean(params.caseSensitive),
+      maxMatches,
+      contextChars,
+    });
+    out.matchCount = out.matches.length;
+    out.searchTruncated = buffer.length > 5_000_000;
+  }
+  return out;
+}
+
 function requestOrigin(url) {
   try {
     return new URL(url).origin;
@@ -2249,7 +2337,7 @@ function devtoolsToolCategory(name) {
   if (/frame|accessibility|elements|dom|css|event_listeners|worker_frame/.test(name)) return "dom-frame";
   if (/source|debugger|token_flow|global_search/.test(name)) return "sources-debugger";
   if (/performance|trace|cpu|coverage|memory|heap/.test(name)) return "performance";
-  if (/evidence|manifest|correlation|diff|research_pack/.test(name)) return "evidence-workflow";
+  if (/evidence|manifest|artifact|correlation|diff|research_pack/.test(name)) return "evidence-workflow";
   if (/cdp_command|browser_version|browser_targets|system_info/.test(name)) return "raw-cdp";
   return "other";
 }
@@ -9167,6 +9255,27 @@ function registerStandaloneBrowserTools(tools, cdpPort, profileRegistry, default
     },
   });
 
+  tools.set("browser_artifact_inspect", {
+    name: "browser_artifact_inspect",
+    description: "Inspect a saved local evidence artifact without loading the whole file into context: metadata, bounded preview, JSON/HAR shape, and literal match windows.",
+    parameters: {
+      type: "object",
+      properties: {
+        path: { type: "string" },
+        artifactPath: { type: "string" },
+        query: { type: "string" },
+        maxBytes: { type: "number" },
+        maxMatches: { type: "number" },
+        contextChars: { type: "number" },
+        caseSensitive: { type: "boolean" },
+      },
+      required: ["path"],
+    },
+    async execute(_id, params) {
+      return toolResult(inspectArtifactFile({ ...params, backend: "managed-cdp" }));
+    },
+  });
+
   tools.set("browser_request_correlation_graph", {
     name: "browser_request_correlation_graph",
     description: "Build an objective graph connecting frames, scripts, Network requests, and Console entries observed in current F12 evidence.",
@@ -10770,6 +10879,7 @@ function registerStandaloneBrowserTools(tools, cdpPort, profileRegistry, default
   aliasTool("devtools_global_search", "browser_global_search", "Unified Agent DevTools API: search F12 evidence surfaces for a literal query.");
   aliasTool("devtools_evidence_bundle", "browser_evidence_bundle", "Unified Agent DevTools API: export a compact objective F12 evidence bundle.");
   aliasTool("devtools_evidence_manifest", "browser_evidence_manifest", "Unified Agent DevTools API: write a manifest with evidence paths, hashes, capture metadata, and provenance.");
+  aliasTool("devtools_artifact_inspect", "browser_artifact_inspect", "Unified Agent DevTools API: inspect a saved evidence artifact with bounded preview, structure, and literal matches.");
   aliasTool("devtools_request_correlation_graph", "browser_request_correlation_graph", "Unified Agent DevTools API: build a frame/script/request/console correlation graph from F12 evidence.");
   aliasTool("devtools_capture_diff", "browser_capture_diff", "Unified Agent DevTools API: compare before/after evidence artifacts or current captured traffic.");
   aliasTool("devtools_auth_boundary_report", "browser_auth_boundary_report", "Unified Agent DevTools API: collect objective auth boundary evidence without deciding vulnerability impact.");

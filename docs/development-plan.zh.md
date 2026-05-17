@@ -145,6 +145,14 @@
 
 ## 执行记录
 
+### 2026-05-17: Artifact Drilldown
+
+已经完成:
+
+- 新增 `devtools_artifact_inspect` / `personal_chrome_artifact_inspect`。
+- Agent 可以对 HAR、manifest、trace、bundle 等本地证据文件做 bounded 检查: 文件大小、哈希、文本预览、JSON/HAR 顶层结构、字面量匹配上下文。
+- 这个工具只负责读证据和定位片段，不判断漏洞、不输出 risk 结论。
+
 ### 2026-05-17: HAR response body index
 
 已经完成:

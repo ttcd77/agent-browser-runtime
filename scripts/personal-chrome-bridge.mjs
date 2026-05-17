@@ -602,6 +602,122 @@ function readJsonFile(file) {
   return JSON.parse(readFileSync(file, "utf8"));
 }
 
+function findTextMatches(text, query, options = {}) {
+  const haystack = String(text || "");
+  const needle = String(query || "");
+  if (!needle) return [];
+  const caseSensitive = Boolean(options.caseSensitive);
+  const source = caseSensitive ? haystack : haystack.toLowerCase();
+  const target = caseSensitive ? needle : needle.toLowerCase();
+  const maxMatches = Math.max(0, Number(options.maxMatches) || 20);
+  const contextChars = Math.max(0, Number(options.contextChars) || 160);
+  const out = [];
+  let offset = 0;
+  while (out.length < maxMatches) {
+    const index = source.indexOf(target, offset);
+    if (index < 0) break;
+    const start = Math.max(0, index - contextChars);
+    const end = Math.min(haystack.length, index + needle.length + contextChars);
+    out.push({
+      index,
+      match: haystack.slice(index, index + needle.length),
+      before: haystack.slice(start, index),
+      after: haystack.slice(index + needle.length, end),
+      context: haystack.slice(start, end),
+    });
+    offset = index + Math.max(1, target.length);
+  }
+  return out;
+}
+
+function inspectArtifactFile(params = {}) {
+  const artifactPath = params.path || params.artifactPath;
+  if (!artifactPath) throw new Error("path is required");
+  const file = resolve(String(artifactPath));
+  const maxBytes = Math.max(1, Math.min(Number(params.maxBytes) || 120000, 2_000_000));
+  const maxMatches = Math.max(0, Math.min(Number(params.maxMatches) || 20, 200));
+  const contextChars = Math.max(0, Math.min(Number(params.contextChars) || 160, 2000));
+  const query = params.query == null ? "" : String(params.query);
+  if (!existsSync(file)) {
+    return {
+      schema: "agent-browser-runtime.artifact-inspect.v1",
+      backend: "personal-chrome",
+      path: String(artifactPath),
+      resolvedPath: file,
+      exists: false,
+      boundaries: ["This tool reads local evidence artifacts only; it does not interpret findings."],
+    };
+  }
+  const stat = statSync(file);
+  const out = {
+    schema: "agent-browser-runtime.artifact-inspect.v1",
+    backend: "personal-chrome",
+    path: String(artifactPath),
+    resolvedPath: file,
+    exists: true,
+    isFile: stat.isFile(),
+    isDirectory: stat.isDirectory(),
+    bytes: stat.size,
+    modifiedAt: stat.mtime.toISOString(),
+    sha256: stat.isFile() && stat.size <= 25_000_000 ? sha256File(file) : null,
+    hashSkipped: stat.isFile() && stat.size > 25_000_000,
+    readLimitBytes: maxBytes,
+    boundaries: [
+      "This is bounded local artifact inspection for agent drill-down.",
+      "It returns structure, previews, and literal matches; it does not decide vulnerability impact.",
+      "If an artifact was not captured earlier, this tool cannot reconstruct missing browser events.",
+    ],
+    nextTools: ["devtools_artifact_inspect path=<artifact> query=<literal>", "devtools_evidence_manifest", "devtools_global_search"],
+  };
+  if (!stat.isFile()) return out;
+
+  const ext = file.toLowerCase().split(".").pop() || "";
+  const textLike = new Set(["json", "har", "txt", "log", "md", "html", "htm", "js", "mjs", "ts", "css", "csv", "xml", "yml", "yaml", "map", "svg"]);
+  const buffer = readFileSync(file);
+  const previewBuffer = buffer.subarray(0, Math.min(buffer.length, maxBytes));
+  const text = previewBuffer.toString("utf8");
+  out.previewBytes = previewBuffer.length;
+  out.previewTruncated = buffer.length > previewBuffer.length;
+  out.kind = textLike.has(ext) || !text.includes("\u0000") ? "text" : "binary";
+  if (out.kind !== "text") return out;
+
+  const lines = text.split(/\r?\n/);
+  out.previewText = text;
+  out.previewLineCount = lines.length;
+  out.firstLines = lines.slice(0, Math.min(20, lines.length));
+  out.lastLines = lines.slice(Math.max(0, lines.length - 20));
+
+  if (["json", "har", "map"].includes(ext) && buffer.length <= Math.max(maxBytes, 2_000_000)) {
+    try {
+      const parsed = JSON.parse(buffer.toString("utf8"));
+      out.json = {
+        ok: true,
+        topLevelType: Array.isArray(parsed) ? "array" : typeof parsed,
+        keys: parsed && typeof parsed === "object" && !Array.isArray(parsed) ? Object.keys(parsed).slice(0, 80) : [],
+        arrayLength: Array.isArray(parsed) ? parsed.length : null,
+        harEntryCount: Array.isArray(parsed?.log?.entries) ? parsed.log.entries.length : null,
+        traceEventCount: Array.isArray(parsed?.traceEvents) ? parsed.traceEvents.length : null,
+      };
+    } catch (error) {
+      out.json = { ok: false, error: String(error?.message || error) };
+    }
+  } else if (["json", "har", "map"].includes(ext)) {
+    out.json = { ok: false, skipped: true, reason: "artifact exceeds bounded JSON parse limit" };
+  }
+
+  if (query) {
+    const searchText = buffer.length <= 5_000_000 ? buffer.toString("utf8") : text;
+    out.matches = findTextMatches(searchText, query, {
+      caseSensitive: Boolean(params.caseSensitive),
+      maxMatches,
+      contextChars,
+    });
+    out.matchCount = out.matches.length;
+    out.searchTruncated = buffer.length > 5_000_000;
+  }
+  return out;
+}
+
 function urlOrigin(url) {
   try { return new URL(url).origin; }
   catch { return ""; }
@@ -1229,7 +1345,7 @@ function devtoolsToolCategory(name) {
   if (/frame|accessibility|elements|dom|css|event_listeners|worker_frame/.test(name)) return "dom-frame";
   if (/source|debugger|token_flow|global_search/.test(name)) return "sources-debugger";
   if (/performance|trace|cpu|coverage|memory|heap/.test(name)) return "performance";
-  if (/evidence|manifest|correlation|diff|research_pack/.test(name)) return "evidence-workflow";
+  if (/evidence|manifest|artifact|correlation|diff|research_pack/.test(name)) return "evidence-workflow";
   if (/cdp_command|browser_version|browser_targets|system_info/.test(name)) return "raw-cdp";
   return "other";
 }
@@ -1768,6 +1884,9 @@ async function callBridgeTool(toolName, params = {}) {
   }
   if (toolName === "personal_chrome_trace_compare" || toolName === "devtools_trace_compare") {
     return traceCompare(params);
+  }
+  if (toolName === "personal_chrome_artifact_inspect" || toolName === "devtools_artifact_inspect") {
+    return inspectArtifactFile(params);
   }
   if (toolName === "personal_chrome_source_map_source_get" || toolName === "devtools_source_map_source_get") {
     const maxChars = typeof params.maxChars === "number" ? params.maxChars : 120000;
@@ -2341,6 +2460,7 @@ const tools = {
   personal_chrome_global_search: "Search F12 evidence surfaces in the user's real Chrome tab for a literal query.",
   personal_chrome_evidence_bundle: "Export a compact objective F12 evidence bundle from the user's real Chrome tab.",
   personal_chrome_evidence_manifest: "Write a manifest with Personal Chrome evidence paths, hashes, capture metadata, and provenance.",
+  personal_chrome_artifact_inspect: "Inspect a saved local Personal Chrome evidence artifact with bounded preview, JSON/HAR shape, and literal matches.",
   personal_chrome_request_correlation_graph: "Build a frame/script/request/console correlation graph from Personal Chrome F12 evidence.",
   personal_chrome_capture_diff: "Compare before/after Personal Chrome evidence artifacts or current captured traffic.",
   personal_chrome_auth_boundary_report: "Collect objective Personal Chrome auth boundary evidence without deciding vulnerability impact.",
@@ -2434,6 +2554,7 @@ const tools = {
   devtools_global_search: "Unified Agent DevTools API: search F12 evidence surfaces for a literal query.",
   devtools_evidence_bundle: "Unified Agent DevTools API: export a compact objective F12 evidence bundle.",
   devtools_evidence_manifest: "Unified Agent DevTools API: write a manifest with evidence paths, hashes, capture metadata, and provenance.",
+  devtools_artifact_inspect: "Unified Agent DevTools API: inspect a saved evidence artifact with bounded preview, structure, and literal matches.",
   devtools_request_correlation_graph: "Unified Agent DevTools API: build a frame/script/request/console correlation graph from F12 evidence.",
   devtools_capture_diff: "Unified Agent DevTools API: compare before/after evidence artifacts or current captured traffic.",
   devtools_auth_boundary_report: "Unified Agent DevTools API: collect objective auth boundary evidence without deciding vulnerability impact.",

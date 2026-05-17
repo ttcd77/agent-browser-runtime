@@ -438,6 +438,20 @@ const harWithBodies = await callTool("devtools_export_har", {
 });
 assert(harWithBodies.bodyIndexSummary?.entryCount >= 1, `Personal Chrome HAR body index missing entries: ${JSON.stringify(harWithBodies.bodyIndexSummary)}`);
 assert(Array.isArray(harWithBodies.bodyIndex), "Personal Chrome HAR body index missing array");
+const savedHar = await callTool("devtools_save_har", {
+  limit: 20,
+  includeBodies: false,
+});
+assert(savedHar.harPath, "Personal Chrome saved HAR path missing");
+const harArtifact = await callTool("devtools_artifact_inspect", {
+  path: savedHar.harPath,
+  query: "Agent Browser Runtime",
+  maxBytes: 120000,
+});
+assert(harArtifact.backend === "personal-chrome", `Personal Chrome artifact inspect wrong backend: ${JSON.stringify(harArtifact)}`);
+assert(harArtifact.exists && harArtifact.bytes > 0, `Personal Chrome artifact inspect could not read saved HAR: ${JSON.stringify(harArtifact)}`);
+assert(harArtifact.json?.ok === true, `Personal Chrome artifact inspect did not parse HAR JSON: ${JSON.stringify(harArtifact.json)}`);
+assert(harArtifact.json?.harEntryCount >= 1, `Personal Chrome artifact inspect missing HAR entry count: ${JSON.stringify(harArtifact.json)}`);
 
 const toolCatalog = await callTool("devtools_tool_catalog", { query: "auth" });
 assert(toolCatalog.toolCount >= 1, "Personal Chrome tool catalog did not return auth tools");
@@ -461,6 +475,7 @@ console.log(`- layer: ${capabilities.layer}`);
 console.log(`- facade tools: ${facadeInspect.facade}/${facadeCapture.facade}/${facadePack.facade}`);
 console.log(`- capture bisect buckets: ${captureBisect.buckets.network.requestCount}/${captureBisect.buckets.pages.pageCount}`);
 console.log(`- HAR completeness entries/body-included: ${harCompleteness.entryCount}/${harCompleteness.body.includedCount}`);
+console.log(`- HAR artifact inspect: ${harArtifact.json.harEntryCount} entries`);
 console.log(`- capability panels: ${capabilityMap.panelCount}`);
 console.log(`- realtime channels ws/sse: ${realtimeLog.websocketCount}/${realtimeLog.eventSourceMessageCount}`);
 

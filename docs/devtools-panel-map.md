@@ -133,6 +133,7 @@ facts instead of assuming the replay perfectly cloned the original request.
 | Search Network, Sources, and Application evidence | `devtools_global_search` |
 | Export compact F12 evidence bundle | `devtools_evidence_bundle` |
 | Write artifact manifest with hashes and provenance | `devtools_evidence_manifest` |
+| Inspect saved artifact shape, preview, and literal matches | `devtools_artifact_inspect` |
 | Build request/script/frame/console correlation graph | `devtools_request_correlation_graph` |
 | Compare before/after captured evidence | `devtools_capture_diff` |
 | Collect auth boundary evidence | `devtools_auth_boundary_report` |

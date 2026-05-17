@@ -1032,6 +1032,16 @@ try {
   });
   assert(savedHar.harPath, "saved HAR path missing");
   assert(savedHar.harBytes > 0, "saved HAR was empty");
+  const harArtifact = await callTool(baseUrl, "devtools_artifact_inspect", {
+    path: savedHar.harPath,
+    query: "Agent Browser Runtime",
+    maxBytes: 120000,
+  });
+  assert(harArtifact.backend === "managed-cdp", `artifact inspect wrong backend: ${JSON.stringify(harArtifact)}`);
+  assert(harArtifact.exists && harArtifact.bytes > 0, `artifact inspect could not read saved HAR: ${JSON.stringify(harArtifact)}`);
+  assert(harArtifact.json?.ok === true, `artifact inspect did not parse HAR JSON: ${JSON.stringify(harArtifact.json)}`);
+  assert(harArtifact.json?.harEntryCount >= 1, `artifact inspect missing HAR entry count: ${JSON.stringify(harArtifact.json)}`);
+  assert(harArtifact.matchCount >= 1, `artifact inspect did not find query match: ${JSON.stringify(harArtifact.matches)}`);
 
   const harWithBodies = await callTool(baseUrl, "devtools_export_har", {
     profile: "default",
@@ -1066,6 +1076,7 @@ try {
   console.log(`- network requests: ${networkSummary.requestCount}`);
   console.log(`- network timeline rows: ${networkTimeline.timeline.length}`);
   console.log(`- capture bisect: ${captureBisect.buckets.network.requestCount} requests -> ${captureBisect.bisectPath}`);
+  console.log(`- HAR artifact inspect: ${harArtifact.json.harEntryCount} entries / ${harArtifact.matchCount} matches`);
   console.log(`- request detail id: ${requestDetail.detail.requestId}`);
   console.log(`- DevTools issues: ${issuesLog.issueCount}`);
   console.log(`- accessibility nodes: ${accessibility.nodeCount}`);

@@ -160,6 +160,7 @@ Unified Agent DevTools tools:
 - `devtools_global_search`
 - `devtools_evidence_bundle`
 - `devtools_evidence_manifest`
+- `devtools_artifact_inspect`
 - `devtools_request_correlation_graph`
 - `devtools_capture_diff`
 - `devtools_auth_boundary_report`
@@ -252,6 +253,7 @@ Backend-specific aliases:
 - `personal_chrome_global_search`
 - `personal_chrome_evidence_bundle`
 - `personal_chrome_evidence_manifest`
+- `personal_chrome_artifact_inspect`
 - `personal_chrome_request_correlation_graph`
 - `personal_chrome_capture_diff`
 - `personal_chrome_auth_boundary_report`
