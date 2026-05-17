@@ -122,6 +122,8 @@ It starts an isolated temporary managed browser and verifies:
 - HAR completeness reporting for body, timing, redirect, and security evidence,
 - HAR coverage matrix with present/total/ratio fields for body, timing, secure
   transport metadata, and redirects,
+- HAR drilldown samples that list concrete request ids for missing body, timing,
+  and secure transport metadata evidence,
 - panel-level capability map for agent navigation,
 - WebSocket frame and EventSource/SSE evidence through `devtools_realtime_log`,
 - per-request Network detail including headers, cookies, timing, initiator, and

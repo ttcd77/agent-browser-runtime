@@ -324,6 +324,8 @@ assert(harCompleteness.backend === "personal-chrome", `Personal Chrome HAR compl
 assert(typeof harCompleteness.entryCount === "number", "Personal Chrome HAR completeness missing entry count");
 assert(harCompleteness.coverage?.bodiesIncluded && typeof harCompleteness.coverage.bodiesIncluded.present === "number", `Personal Chrome HAR completeness missing body coverage: ${JSON.stringify(harCompleteness.coverage)}`);
 assert(harCompleteness.coverage?.totalTiming && typeof harCompleteness.coverage.totalTiming.present === "number", `Personal Chrome HAR completeness missing timing coverage: ${JSON.stringify(harCompleteness.coverage)}`);
+assert(Array.isArray(harCompleteness.drilldownSamples?.bodyMissing), `Personal Chrome HAR completeness missing body drilldown samples: ${JSON.stringify(harCompleteness.drilldownSamples)}`);
+assert(Array.isArray(harCompleteness.drilldownSamples?.timingMissing), `Personal Chrome HAR completeness missing timing drilldown samples: ${JSON.stringify(harCompleteness.drilldownSamples)}`);
 assert(harCompleteness.body, "Personal Chrome HAR completeness missing body summary");
 assert(harCompleteness.timing, "Personal Chrome HAR completeness missing timing summary");
 

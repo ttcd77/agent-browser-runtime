@@ -955,6 +955,8 @@ try {
   assert(harCompleteness.entryCount >= 1, "HAR completeness missing entries");
   assert(typeof harCompleteness.coverage?.bodiesIncluded?.ratio === "number", `HAR completeness missing body coverage ratio: ${JSON.stringify(harCompleteness.coverage)}`);
   assert(typeof harCompleteness.coverage?.totalTiming?.ratio === "number", `HAR completeness missing timing coverage ratio: ${JSON.stringify(harCompleteness.coverage)}`);
+  assert(Array.isArray(harCompleteness.drilldownSamples?.bodyMissing), `HAR completeness missing body drilldown samples: ${JSON.stringify(harCompleteness.drilldownSamples)}`);
+  assert(Array.isArray(harCompleteness.drilldownSamples?.timingMissing), `HAR completeness missing timing drilldown samples: ${JSON.stringify(harCompleteness.drilldownSamples)}`);
   assert(harCompleteness.body?.includedCount >= 1, `HAR completeness missing included bodies: ${JSON.stringify(harCompleteness.body)}`);
   assert(harCompleteness.timing?.entriesWithTotalTime >= 1, `HAR completeness missing timing evidence: ${JSON.stringify(harCompleteness.timing)}`);
   assert(harCompleteness.reportPath, "HAR completeness did not save a report");

@@ -709,6 +709,38 @@ function analyzeHarCompleteness(har = {}, options = {}) {
     try { return new URL(entry.request?.url || "").protocol === "https:" && entry._securityDetails; }
     catch { return false; }
   }).length;
+  const sampleEntry = (entry, extra = {}) => ({
+    requestId: entry._requestId || null,
+    url: entry.request?.url || "",
+    method: entry.request?.method || "",
+    status: entry.response?.status ?? null,
+    ...extra,
+  });
+  const bodyMissingSamples = entries
+    .filter((entry) => entry.response?.content?._bodyIncluded !== true)
+    .map((entry) => sampleEntry(entry, {
+      bodyReadable: Boolean(entry._bodyReadable),
+      bodyUnavailable: Boolean(entry.response?.content?._bodyUnavailable),
+      bodyError: entry.response?.content?._bodyError || null,
+    }))
+    .slice(0, maxRows);
+  const timingMissingSamples = timingRows
+    .filter((row) => row.missingPhases.length > 0)
+    .map((row) => ({
+      requestId: row.requestId,
+      url: row.url,
+      time: row.time,
+      timingSource: row.timingSource,
+      missingPhases: row.missingPhases,
+    }))
+    .slice(0, maxRows);
+  const securityMissingSamples = entries
+    .filter((entry) => {
+      try { return new URL(entry.request?.url || "").protocol === "https:" && !entry._securityDetails; }
+      catch { return false; }
+    })
+    .map((entry) => sampleEntry(entry, { evidence: "https-without-security-details" }))
+    .slice(0, maxRows);
   return {
     generatedAt: new Date().toISOString(),
     entryCount: total,
@@ -722,6 +754,12 @@ function analyzeHarCompleteness(har = {}, options = {}) {
       securityDetails: { present: entriesWithSecurityDetails, total, ratio: ratio(entriesWithSecurityDetails, total) },
       httpsSecurityDetails: { present: httpsEntriesWithSecurityDetails, total: httpsEntries.length, ratio: ratio(httpsEntriesWithSecurityDetails, httpsEntries.length) },
       redirects: { present: redirectRows.length, total, ratio: ratio(redirectRows.length, total) },
+    },
+    drilldownSamples: {
+      bodyMissing: bodyMissingSamples,
+      timingMissing: timingMissingSamples,
+      securityMissing: securityMissingSamples,
+      redirects: redirectRows.slice(0, maxRows),
     },
     body: {
       readableCount: bodyRows.filter((row) => row.bodyReadable).length,
