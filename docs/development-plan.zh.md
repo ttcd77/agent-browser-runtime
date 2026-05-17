@@ -93,7 +93,7 @@
 - Application: storage boundary 已补 quota usage breakdown、Storage Buckets support/bucket summary、cookie partition metadata；Cache/IndexedDB drill-down 已加入 Managed/Personal smoke；本地分区 cookie 写入 fixture 已覆盖 Managed/Personal，并记录 document-visible cookie names 与后端 cookie metadata 的可见性差异。
 - Elements/Frames: `devtools_frame_tree` 已补 iframe access + open shadow root boundary summary，并在 Managed/Personal smoke 中验证。closed shadow root 和跨源/沙箱 frame 内部不可见时作为浏览器边界返回。
 - Network Redirect: redirect chain 已在 Managed/Personal fixture 中真实 302 验证；`devtools_network_summary` 暴露 redirect row，`devtools_request_detail` 暴露链条细节。
-- Replay: 更明确 forbidden header、browser fetch replay 与 raw socket-level replay 边界。
+- Replay: `devtools_request_replay` / `devtools_request_replay_batch` 已返回 `replayBoundary`，明确 forbidden header、browser fetch replay 与 raw socket-level replay 边界。
 
 验收:
 

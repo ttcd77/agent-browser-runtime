@@ -3846,6 +3846,50 @@ function buildReplayBody(params = {}, request = {}, headers = {}) {
   };
 }
 
+function buildReplayBoundaryEvidence({ originalRequest = {}, replayRequest = {}, headerPrep = {}, bodyPrep = {}, includeBody = false } = {}) {
+  const skippedHeaders = Array.isArray(headerPrep.skipped) ? headerPrep.skipped : [];
+  const removedHeaders = Array.isArray(headerPrep.removed) ? headerPrep.removed : [];
+  return {
+    replayLayer: "browser-fetch",
+    originalTransport: {
+      url: originalRequest.url || null,
+      method: originalRequest.method || null,
+      protocol: originalRequest.protocol || null,
+      fromDiskCache: Boolean(originalRequest.fromDiskCache),
+      fromServiceWorker: Boolean(originalRequest.fromServiceWorker),
+      redirected: Array.isArray(originalRequest.redirectChain) && originalRequest.redirectChain.length > 0,
+    },
+    replayTransport: {
+      url: replayRequest.url || null,
+      method: replayRequest.method || null,
+      credentials: replayRequest.credentials || "include",
+      redirect: "follow",
+      cache: "no-store",
+      includeBody: Boolean(includeBody),
+      bodyKind: bodyPrep.bodyKind || "none",
+    },
+    headerHandling: {
+      sentHeaderNames: Object.keys(replayRequest.headers || {}),
+      skippedHeaders,
+      skippedHeaderNames: skippedHeaders.map((entry) => entry.name),
+      removedHeaders,
+      forbiddenHeaderCount: skippedHeaders.length,
+    },
+    bodyHandling: {
+      originalHasPostData: Boolean(originalRequest.hasPostData || originalRequest.postData || originalRequest.postDataLength),
+      replayIncludesBody: Boolean(includeBody),
+      replayBodyKind: bodyPrep.bodyKind || "none",
+      replayBodyLength: includeBody ? bodyPrep.bodyLength : 0,
+      contentTypeNote: bodyPrep.contentTypeNote || null,
+    },
+    captureBoundaries: [
+      "Replay is executed with fetch inside the current browser page context, so browser-managed cookies, credentials, CORS, CSP, redirects, and forbidden-header rules still apply.",
+      "This is not raw socket-level replay: TLS handshake, HTTP/2 framing, connection coalescing, proxy behavior, and browser-forbidden headers are not manually reproduced.",
+      "Skipped headers are browser/API boundaries, not tool failures. Use responseDiff and captured request detail as evidence, then let the agent or human interpret impact.",
+    ],
+  };
+}
+
 function headerMapLower(headers = {}) {
   const out = {};
   for (const [name, value] of Object.entries(headers || {})) {
@@ -5023,22 +5067,24 @@ function registerStandaloneBrowserTools(tools, cdpPort, profileRegistry, default
           awaitPromise: true,
         });
         await profileRegistry.touchProfile(profile.name, { tabId: target.id });
+        const replayRequest = {
+          url,
+          method,
+          headers: headerPrep.headers,
+          bodyKind: bodyPrep.bodyKind,
+          skippedHeaders: headerPrep.skipped,
+          removedHeaders: headerPrep.removed,
+          skippedHeaderNames: headerPrep.skipped.map((entry) => entry.name),
+          bodyLength: includeBody ? bodyPrep.bodyLength : 0,
+          contentTypeNote: bodyPrep.contentTypeNote || null,
+          credentials: params?.credentials || "include",
+        };
         return {
           profile: profile.name,
           tabId: target.id,
           originalRequest: request,
-          replayRequest: {
-            url,
-            method,
-            headers: headerPrep.headers,
-            bodyKind: bodyPrep.bodyKind,
-            skippedHeaders: headerPrep.skipped,
-            removedHeaders: headerPrep.removed,
-            skippedHeaderNames: headerPrep.skipped.map((entry) => entry.name),
-            bodyLength: includeBody ? bodyPrep.bodyLength : 0,
-            contentTypeNote: bodyPrep.contentTypeNote || null,
-            credentials: params?.credentials || "include",
-          },
+          replayRequest,
+          replayBoundary: buildReplayBoundaryEvidence({ originalRequest: request, replayRequest, headerPrep, bodyPrep, includeBody }),
           response: result.result?.value,
           responseDiff: result.result?.value ? diffReplayResponse(request, result.result.value, params?.maxBodyPreview) : null,
           exception: result.exceptionDetails,
@@ -5134,21 +5180,23 @@ function registerStandaloneBrowserTools(tools, cdpPort, profileRegistry, default
             awaitPromise: true,
           });
           const response = result.result?.value || null;
+          const replayRequest = {
+            url,
+            method,
+            headers: headerPrep.headers,
+            bodyKind: bodyPrep.bodyKind,
+            skippedHeaders: headerPrep.skipped,
+            removedHeaders: headerPrep.removed,
+            skippedHeaderNames: headerPrep.skipped.map((entry) => entry.name),
+            bodyLength: includeBody ? bodyPrep.bodyLength : 0,
+            contentTypeNote: bodyPrep.contentTypeNote || null,
+            credentials: variant.credentials || params?.credentials || "include",
+          };
           results.push({
             index,
             label: variant.label || `variant-${index + 1}`,
-            replayRequest: {
-              url,
-              method,
-              headers: headerPrep.headers,
-              bodyKind: bodyPrep.bodyKind,
-              skippedHeaders: headerPrep.skipped,
-              removedHeaders: headerPrep.removed,
-              skippedHeaderNames: headerPrep.skipped.map((entry) => entry.name),
-              bodyLength: includeBody ? bodyPrep.bodyLength : 0,
-              contentTypeNote: bodyPrep.contentTypeNote || null,
-              credentials: variant.credentials || params?.credentials || "include",
-            },
+            replayRequest,
+            replayBoundary: buildReplayBoundaryEvidence({ originalRequest: request, replayRequest, headerPrep, bodyPrep, includeBody }),
             response,
             responseDiff: response ? diffReplayResponse(request, response, params?.maxBodyPreview) : null,
             exception: result.exceptionDetails,

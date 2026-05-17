@@ -88,6 +88,23 @@ Read `redirectChain`, `status`, response headers, `initiator`, and
 during capture; it does not infer missing historical redirects from cache or
 server logs.
 
+## Request Replay Boundary
+
+`devtools_request_replay` and `devtools_request_replay_batch` replay captured
+requests with browser `fetch` from the current page context. Always read
+`replayBoundary`:
+
+- `headerHandling.skippedHeaders` explains headers the browser refused to send.
+- `bodyHandling` explains whether the replay included a body and how it was
+  encoded.
+- `replayTransport` records credential mode, redirect mode, cache mode, method,
+  and URL.
+- `captureBoundaries` states what this replay cannot prove: it is not a raw
+  socket/TLS/HTTP2-level reproduction.
+
+Use replay output as evidence for follow-up reasoning, not as a standalone
+finding.
+
 ## Trace Drilldown
 
 Capture a short trace around the smallest reproducible action:

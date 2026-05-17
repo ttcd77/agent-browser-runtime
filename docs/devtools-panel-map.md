@@ -80,6 +80,21 @@ Network-table filters shared by Personal and Managed backends:
 These filters are table-drilldown helpers only. They do not classify requests as
 vulnerable or safe.
 
+Request replay returns `replayBoundary` in both backends. Read it before
+interpreting a replay result:
+
+- `replayLayer: "browser-fetch"` means the request was replayed by `fetch`
+  inside the current page context.
+- Browser-managed cookies, credentials, CORS, CSP, redirects, and forbidden
+  header rules still apply.
+- `headerHandling.skippedHeaders` lists headers the browser API did not allow
+  the tool to send, such as `Host`, `Cookie`, `Content-Length`, or `Sec-*`.
+- This is not raw socket-level replay; TLS, HTTP/2 framing, proxy behavior, and
+  connection-level details are outside browser fetch replay.
+
+This boundary evidence is part of the tool output so an agent can reason from
+facts instead of assuming the replay perfectly cloned the original request.
+
 ## Elements And Accessibility Panels
 
 | Human F12 action | Agent tool |

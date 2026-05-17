@@ -830,6 +830,9 @@ try {
   assert(formReplay.replayRequest?.bodyKind === "form", `form replay bodyKind mismatch: ${JSON.stringify(formReplay.replayRequest)}`);
   assert(formReplay.replayRequest?.skippedHeaderNames?.includes("Host"), "form replay did not report skipped forbidden Host header");
   assert(formReplay.replayRequest?.removedHeaders?.includes("Content-Type"), "form replay did not report removed Content-Type header");
+  assert(formReplay.replayBoundary?.replayLayer === "browser-fetch", `form replay missing browser-fetch boundary: ${JSON.stringify(formReplay.replayBoundary)}`);
+  assert(formReplay.replayBoundary?.headerHandling?.skippedHeaderNames?.includes("Host"), `form replay boundary missing skipped Host header: ${JSON.stringify(formReplay.replayBoundary)}`);
+  assert(formReplay.replayBoundary?.captureBoundaries?.some((line) => line.includes("not raw socket-level replay")), `form replay boundary missing raw-socket note: ${JSON.stringify(formReplay.replayBoundary)}`);
   assert(formReplay.response?.status === 200, `form replay failed: ${JSON.stringify(formReplay.response)}`);
   assert(String(formReplay.response?.bodyText || "").includes("answer=42"), "form replay response did not include encoded form body");
   const multipartReplay = await callTool(baseUrl, "devtools_request_replay", {
@@ -858,6 +861,7 @@ try {
   assert(batchReplay.variantCount === 2, `batch replay variant count mismatch: ${JSON.stringify(batchReplay)}`);
   assert(batchReplay.results?.[0]?.response?.status === 200, `batch replay first variant failed: ${JSON.stringify(batchReplay.results?.[0])}`);
   assert(batchReplay.results?.[0]?.responseDiff?.replayStatus === 200, `batch replay missing response diff: ${JSON.stringify(batchReplay.results?.[0])}`);
+  assert(batchReplay.results?.[0]?.replayBoundary?.replayLayer === "browser-fetch", `batch replay missing boundary: ${JSON.stringify(batchReplay.results?.[0])}`);
   assert(batchReplay.results?.[1]?.responseDiff?.bodyComparable === true, `batch replay second variant missing body comparison: ${JSON.stringify(batchReplay.results?.[1])}`);
 
   const applicationExport = await callTool(baseUrl, "devtools_application_export", {

@@ -226,6 +226,17 @@ const filteredTimeline = await callTool("devtools_network_timeline", {
   limit: 10,
 });
 assert(filteredTimeline.timeline?.some((entry) => entry.requestId === redirectRow.requestId), `Personal network timeline filters missed redirect row: ${JSON.stringify(filteredTimeline)}`);
+const replay = await callTool("devtools_request_replay", {
+  requestId: redirectRow.requestId,
+  headers: {
+    Host: "example.invalid",
+    "X-Agent-Replay": "personal-smoke",
+  },
+});
+assert(replay.replayBoundary?.replayLayer === "browser-fetch", `Personal replay missing browser-fetch boundary: ${JSON.stringify(replay.replayBoundary)}`);
+assert(replay.replayBoundary?.headerHandling?.skippedHeaderNames?.includes("Host"), `Personal replay boundary missing skipped Host header: ${JSON.stringify(replay.replayBoundary)}`);
+assert(replay.replayBoundary?.captureBoundaries?.some((line) => line.includes("not raw socket-level replay")), `Personal replay boundary missing raw-socket note: ${JSON.stringify(replay.replayBoundary)}`);
+assert(replay.response?.status === 200, `Personal replay failed: ${JSON.stringify(replay)}`);
 
 const frameTree = await callTool("devtools_frame_tree");
 assert(frameTree.frameCount >= 1 || frameTree.frames?.length >= 1 || frameTree.frameTree?.frame?.id, `frame tree missing frames: ${JSON.stringify(frameTree)}`);
