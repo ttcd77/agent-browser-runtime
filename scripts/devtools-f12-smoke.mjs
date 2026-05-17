@@ -4,6 +4,7 @@ import http from "node:http";
 import { mkdtempSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
+import { WebSocketServer } from "ws";
 
 function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -55,6 +56,18 @@ const browserPort = await freePort();
 const appPort = await freePort();
 const tempDir = mkdtempSync(join(tmpdir(), "agent-devtools-f12-smoke-"));
 const appServer = http.createServer(async (req, res) => {
+  if (req.url === "/events") {
+    res.writeHead(200, {
+      "content-type": "text/event-stream; charset=utf-8",
+      "cache-control": "no-cache",
+      "connection": "keep-alive",
+    });
+    res.write("event: smoke\n");
+    res.write("id: sse-1\n");
+    res.write("data: AGENT_SSE_MARKER\n\n");
+    setTimeout(() => res.end(), 250);
+    return;
+  }
   if (req.url === "/sw.js") {
     res.writeHead(200, {
       "content-type": "application/javascript",
@@ -108,6 +121,11 @@ const appServer = http.createServer(async (req, res) => {
       Promise.all([window.__idbReady, window.__swReady]).then(value => window.__appReady = value);
     </script>
     <h1>Application Smoke</h1>`);
+});
+const wsServer = new WebSocketServer({ server: appServer, path: "/ws" });
+wsServer.on("connection", (socket) => {
+  socket.send("AGENT_WS_SERVER_HELLO");
+  socket.on("message", (message) => socket.send(`AGENT_WS_ECHO:${message.toString()}`));
 });
 await new Promise((resolve) => appServer.listen(appPort, "127.0.0.1", resolve));
 const child = spawn(process.execPath, ["scripts/agent-cdp-server.mjs"], {
@@ -604,6 +622,48 @@ try {
   });
   await callTool(baseUrl, "devtools_eval", {
     profile: "default",
+    expression: `
+      window.__agentRealtimeDone = new Promise((resolve) => {
+        const seen = { wsOpen: false, wsEcho: false, sse: false };
+        const finish = () => {
+          if (seen.wsEcho && seen.sse) resolve(seen);
+        };
+        const ws = new WebSocket('ws://127.0.0.1:${appPort}/ws');
+        ws.addEventListener('open', () => { seen.wsOpen = true; ws.send('AGENT_WS_MARKER'); });
+        ws.addEventListener('message', (event) => {
+          if (String(event.data).includes('AGENT_WS_ECHO')) {
+            seen.wsEcho = true;
+            try { ws.close(); } catch {}
+            finish();
+          }
+        });
+        const sse = new EventSource('/events');
+        sse.addEventListener('smoke', (event) => {
+          if (String(event.data).includes('AGENT_SSE_MARKER')) {
+            seen.sse = true;
+            try { sse.close(); } catch {}
+            finish();
+          }
+        });
+        setTimeout(() => resolve(seen), 1500);
+      })`,
+  });
+  await callTool(baseUrl, "devtools_eval", {
+    profile: "default",
+    expression: "window.__agentRealtimeDone",
+    awaitPromise: true,
+  });
+  const realtimeLog = await callTool(baseUrl, "devtools_realtime_log", {
+    profile: "default",
+    limit: 20,
+  });
+  assert(realtimeLog.websocketCount >= 1, `realtime log missing WebSocket evidence: ${JSON.stringify(realtimeLog)}`);
+  assert(JSON.stringify(realtimeLog.websockets || []).includes("AGENT_WS_MARKER"), "realtime log missing WebSocket frame payload");
+  assert(realtimeLog.eventSourceMessageCount >= 1, `realtime log missing EventSource evidence: ${JSON.stringify(realtimeLog)}`);
+  assert(JSON.stringify(realtimeLog.eventSources || []).includes("AGENT_SSE_MARKER"), "realtime log missing EventSource payload");
+
+  await callTool(baseUrl, "devtools_eval", {
+    profile: "default",
     expression: `fetch('/echo', {
       method: 'POST',
       headers: { 'content-type': 'application/json', 'x-smoke-original': 'yes' },
@@ -711,6 +771,42 @@ try {
   });
   assert(agentSearch.evidence?.search?.matchCount > 0, `agent_inspect search did not find marker: ${JSON.stringify(agentSearch)}`);
 
+  const facadeOpen = await callTool(baseUrl, "browser_open", {
+    profile: "default",
+    url: `http://127.0.0.1:${appPort}/`,
+    waitMs: 500,
+  });
+  assert(facadeOpen.facade === "browser_open", `browser_open facade marker missing: ${JSON.stringify(facadeOpen)}`);
+  assert(facadeOpen.diagnostics?.page?.url?.startsWith(`http://127.0.0.1:${appPort}/`), "browser_open did not return diagnostics for the opened page");
+  const facadeInspect = await callTool(baseUrl, "browser_inspect", {
+    profile: "default",
+    mode: "overview",
+    limit: 5,
+  });
+  assert(facadeInspect.facade === "browser_inspect", `browser_inspect facade marker missing: ${JSON.stringify(facadeInspect)}`);
+  assert(facadeInspect.result?.focus === "overview", "browser_inspect did not route to agent_inspect overview");
+  const facadeCapture = await callTool(baseUrl, "browser_capture", {
+    profile: "default",
+    action: "status",
+  });
+  assert(facadeCapture.facade === "browser_capture", `browser_capture facade marker missing: ${JSON.stringify(facadeCapture)}`);
+  const facadeRaw = await callTool(baseUrl, "browser_raw", {
+    tool: "devtools_page_diagnostics",
+    input: { profile: "default", limit: 5 },
+  });
+  assert(facadeRaw.facade === "browser_raw", `browser_raw facade marker missing: ${JSON.stringify(facadeRaw)}`);
+  assert(facadeRaw.result?.page?.url, "browser_raw did not return wrapped devtools_page_diagnostics evidence");
+  const facadePack = await callTool(baseUrl, "browser_security_pack", {
+    profile: "default",
+    limit: 5,
+    waitMs: 500,
+    includeTrace: false,
+    includeHar: true,
+    includeApplicationExport: true,
+  });
+  assert(facadePack.facade === "browser_security_pack", `browser_security_pack facade marker missing: ${JSON.stringify(facadePack)}`);
+  assert(facadePack.summary?.evidenceBundlePath, "browser_security_pack missing evidence bundle path");
+
   const savedHar = await callTool(baseUrl, "devtools_save_har", {
     profile: "default",
     limit: 20,
@@ -754,16 +850,19 @@ try {
   console.log(`- evidence bundle: ${evidenceBundle.bundlePath}`);
   console.log(`- service worker registrations/caches: ${serviceWorker.registrationCount}/${serviceWorker.cacheCount}`);
   console.log(`- service worker detail scripts/caches: ${serviceWorkerDetail.scriptCount}/${serviceWorkerDetail.cacheCount}`);
+  console.log(`- realtime channels ws/sse: ${realtimeLog.websocketCount}/${realtimeLog.eventSourceMessageCount}`);
   console.log(`- request replay form/multipart status: ${formReplay.response.status}/${multipartReplay.response.status}`);
   console.log(`- application export dbs/caches/bytes: ${applicationExport.indexedDbDatabaseCount}/${applicationExport.cacheCount}/${applicationExport.exportBytes}`);
   console.log(`- cookie summary count/script-readable: ${cookieSummary.summary.cookieCount}/${cookieSummary.summary.scriptReadableCount}`);
   console.log(`- storage origin frames/cookies: ${storageOrigin.frames.length}/${storageOrigin.cookieCount}`);
   console.log(`- signal summary signals/high-priority/medium: ${signalSummary.signalCount}/${signalSummary.highCount}/${signalSummary.mediumCount}`);
   console.log(`- agent router focus/search matches: ${agentOverview.focus}/${agentSearch.evidence.search.matchCount}`);
+  console.log(`- facade tools: ${facadeOpen.facade}/${facadeInspect.facade}/${facadeCapture.facade}/${facadePack.facade}`);
   console.log(`- saved HAR entries/bytes: ${savedHar.entryCount}/${savedHar.harBytes}`);
   console.log(`- HAR entries with bodies: ${bodyEntries.length}`);
 } finally {
   await fetch(`http://127.0.0.1:${serverPort}/shutdown`, { method: "POST" }).catch(() => {});
+  await new Promise((resolve) => wsServer.close(resolve));
   await new Promise((resolve) => appServer.close(resolve));
   setTimeout(() => child.kill(), 500);
   setTimeout(() => rmSync(tempDir, { recursive: true, force: true }), 1000);

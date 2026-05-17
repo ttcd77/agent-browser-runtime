@@ -7,8 +7,10 @@ The user should not need to know whether the browser is:
 - their real Chrome, connected through the extension bridge, or
 - a managed CDP browser started by the runtime.
 
-The agent should call the same `devtools_*` tools in both modes. Backend-specific
-tools may exist for debugging, but they are not the product contract.
+The agent should call the same `browser_*` facade tools in both modes for normal
+work. The detailed `devtools_*` tools are the F12 evidence layer underneath the
+facade. Backend-specific tools may exist for debugging, but they are not the
+product contract.
 
 Use `devtools_backend_capabilities` when an agent needs to know whether it is
 running against Personal Chrome (`chrome.debugger`) or Managed Browser (direct
@@ -37,10 +39,10 @@ The tools do not change between these modes. A profile, port, or browser process
 is runtime routing. The agent still asks for the same operation:
 
 ```text
-devtools_capture_start
-devtools_click
-devtools_network_log
-devtools_storage_snapshot
+browser_capture
+browser_act
+browser_inspect
+browser_security_pack
 ```
 
 For Agent Browser mode, profiles are product-level operating spaces. They can
@@ -56,9 +58,27 @@ The goal is F12 parity for agents:
 - reload with cache disabled when necessary,
 - preserve evidence in a structured form.
 
+## Facade Tools
+
+Expose these to agents first:
+
+- `browser_open`: open/switch a page and return diagnostics.
+- `browser_act`: click, type, scroll, eval, screenshot, or snapshot.
+- `browser_inspect`: route to overview/network/storage/console/dom/sources/performance/search/evidence/debug.
+- `browser_capture`: start, stop, clear, status, or hard-reload F12 recording.
+- `browser_security_pack`: generate an objective evidence pack with local file paths.
+- `browser_auth_boundary`: collect auth/cookie/token/storage/request boundary evidence.
+- `browser_diff`: compare before/after evidence artifacts or captured traffic.
+- `browser_replay`: replay one captured request or a batch of variants.
+- `browser_raw`: call one exact `devtools_*` tool when the facade is not enough.
+
+This keeps the normal agent surface small. The lower-level `devtools_*` layer is
+still public because a security agent sometimes needs exact F12 evidence, not a
+summary.
+
 ## Agent Router
 
-For most agents, start with one tool:
+`browser_inspect` uses the existing router underneath:
 
 ```text
 agent_inspect
@@ -206,7 +226,7 @@ Implemented:
 - Elements/Page snapshot: visible text, controls, screenshots, click/type/scroll including same-origin iframe targeting, DOM tree, selected element inspection, layout boxes, key computed styles, forced pseudo-state style inspection (`:hover`, `:focus`, etc.), raw Chrome DOMSnapshot data, live DOM search with same-origin iframe fallback context, Elements-panel Event Listeners, Styles/Computed/Box Model evidence, and selected-node DOM mutation watch for breakpoint-style evidence.
 - Sources/Debugger/Search: parsed script metadata, source map URL metadata, module flag, script source by script id, heuristic pretty-printing, inline/external source map metadata, Debugger pause/resume/step/breakpoint controls with paused frame/scope previews, temporary token-flow instrumentation across fetch/XHR/storage/cookie APIs, literal source search, global literal search across Network/Sources/Application evidence, and compact F12 evidence bundle export with optional HAR, token scan, and token-flow sections.
 - Performance/Memory: navigation timing, resource timing, paint timing, marks/measures, long-task entries, PerformanceObserver entries including LCP/layout-shift/event-timing/long-animation-frame where Chrome exposes them, objective performance-insight summaries for agents, Chrome Tracing capture with full trace file output, trace querying and trace-to-trace comparison by event/category/duration/thread/time range, trace screenshot frame extraction where Chrome emits frames, trace event summaries, phase duration buckets, busiest thread/process summaries, top duration events, short JS/CSS coverage snapshots, Coverage-panel range drilldown with bounded source snippets, JS heap usage, DOM counters, and Performance Monitor metrics.
-- Network: request URL, method, headers, status, response headers, request-detail evidence including cookies and ExtraInfo events, initiator stack summaries, lifecycle flags, Timing/Initiator-style rows, frame id, redirect chain, cache/service-worker flags, TLS details where exposed, WebSocket lifecycle and frames, request replay/edit-and-resend with explicit forbidden-header reporting plus raw/form/json/multipart body helpers, batch replay variants with response diffs, HAR-like object export with timing phase extensions, HAR file save, and low-token summary for dashboards/triage.
+- Network: request URL, method, headers, status, response headers, request-detail evidence including cookies and ExtraInfo events, initiator stack summaries, lifecycle flags, Timing/Initiator-style rows, frame id, redirect chain, cache/service-worker flags, TLS details where exposed, WebSocket lifecycle and frames, EventSource/SSE messages, request replay/edit-and-resend with explicit forbidden-header reporting plus raw/form/json/multipart body helpers, batch replay variants with response diffs, HAR-like object export with timing phase extensions, HAR file save, and low-token summary for dashboards/triage.
 - Payload/Body: response body by request id; request postData/payload by request id when Chrome exposes it.
 - Console/Issues: console API, log entries, exceptions, stack traces, source
   context around stack frames, and Chrome DevTools Issues-panel events where

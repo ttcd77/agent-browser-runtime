@@ -208,6 +208,8 @@ async function executeCommand(command, params) {
       return await chromeNetworkSummary(params);
     case "chrome_network_timeline":
       return await chromeNetworkTimeline(params);
+    case "chrome_realtime_log":
+      return await chromeRealtimeLog(params);
     case "chrome_export_har":
       return await chromeExportHar(params);
     case "chrome_request_body":
@@ -635,6 +637,7 @@ function sessionFor(tabId) {
       requests: new Map(),
       redirects: new Map(),
       websockets: new Map(),
+      eventSources: [],
       scripts: new Map(),
       paused: null,
       debuggerEvents: [],
@@ -1744,6 +1747,19 @@ chrome.debugger.onEvent.addListener((source, method, params) => {
     return;
   }
 
+  if (method === "Network.eventSourceMessageReceived") {
+    pushLimited(session.eventSources, {
+      timestamp,
+      requestId: params.requestId,
+      eventName: params.eventName,
+      eventId: params.eventId,
+      data: params.data,
+      dataLength: params.data ? String(params.data).length : 0,
+    });
+    pushLimited(session.network, { timestamp, method, ...params });
+    return;
+  }
+
   if (method === "Runtime.consoleAPICalled") {
     pushLimited(session.console, {
       timestamp,
@@ -1963,6 +1979,62 @@ async function chromeNetworkTimeline(params) {
     capture: session.capture,
     count: requests.length,
     timeline: buildNetworkTimeline(requests, limit),
+  };
+}
+
+async function chromeRealtimeLog(params) {
+  const { tab, session } = await ensureDevtoolsAttached(params);
+  const limit = Number(params.limit || 100);
+  const maxPayloadChars = Number(params.maxPayloadChars || 2000);
+  const requestedId = params.requestId ? String(params.requestId) : null;
+  const needle = params.url_contains ? String(params.url_contains).toLowerCase() : null;
+  const direction = params.direction ? String(params.direction).toLowerCase() : null;
+  const truncatePayload = (value) => {
+    if (typeof value !== "string") return value ?? null;
+    return value.length > maxPayloadChars ? `${value.slice(0, maxPayloadChars)}...[truncated ${value.length - maxPayloadChars} chars]` : value;
+  };
+  let websockets = [...session.websockets.values()];
+  if (requestedId) websockets = websockets.filter((socket) => String(socket.requestId) === requestedId);
+  if (needle) websockets = websockets.filter((socket) => String(socket.url || "").toLowerCase().includes(needle));
+  websockets = websockets.slice(-limit).map((socket) => {
+    const frames = (socket.frames || [])
+      .filter((frame) => !direction || String(frame.direction || "").toLowerCase() === direction)
+      .slice(-limit)
+      .map((frame) => ({
+        ...frame,
+        payloadData: truncatePayload(frame.payloadData),
+        truncated: typeof frame.payloadData === "string" && frame.payloadData.length > maxPayloadChars,
+      }));
+    return {
+      requestId: socket.requestId,
+      url: socket.url,
+      status: socket.status,
+      statusText: socket.statusText,
+      requestHeaders: socket.requestHeaders,
+      responseHeaders: socket.responseHeaders,
+      createdAt: socket.createdAt,
+      updatedAt: socket.updatedAt,
+      closedAt: socket.closedAt,
+      errorMessage: socket.errorMessage,
+      frameCount: socket.frames?.length || 0,
+      returnedFrameCount: frames.length,
+      frames,
+    };
+  });
+  let eventSources = [...(session.eventSources || [])];
+  if (requestedId) eventSources = eventSources.filter((entry) => String(entry.requestId) === requestedId);
+  eventSources = eventSources.slice(-limit).map((entry) => ({
+    ...entry,
+    data: truncatePayload(entry.data),
+    truncated: typeof entry.data === "string" && entry.data.length > maxPayloadChars,
+  }));
+  return {
+    tab: pickTab(tab),
+    capture: session.capture,
+    websocketCount: websockets.length,
+    eventSourceMessageCount: eventSources.length,
+    websockets,
+    eventSources,
   };
 }
 

@@ -21,7 +21,7 @@ export async function callAgentBrowserTool(name, input = {}) {
 
 export const tools = [
   {
-    name: "browser_security_research_pack",
+    name: "browser_security_pack",
     description: "Run an objective F12 security research evidence workflow.",
     inputSchema: {
       type: "object",
@@ -36,7 +36,7 @@ export const tools = [
       if (input.profile) {
         await callAgentBrowserTool("profile_create", { profile: input.profile });
       }
-      return await callAgentBrowserTool("devtools_security_research_pack", {
+      return await callAgentBrowserTool("browser_security_pack", {
         profile: input.profile || "researcher",
         url: input.url,
         includeTokenScan: Boolean(input.includeTokenScan),
@@ -44,7 +44,7 @@ export const tools = [
     },
   },
   {
-    name: "browser_agent_inspect",
+    name: "browser_inspect",
     description: "Route to the first useful F12 evidence area for an agent.",
     inputSchema: {
       type: "object",
@@ -56,7 +56,7 @@ export const tools = [
       },
     },
     async execute(input) {
-      return await callAgentBrowserTool("agent_inspect", input);
+      return await callAgentBrowserTool("browser_inspect", input);
     },
   },
 ];

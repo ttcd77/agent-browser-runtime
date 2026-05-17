@@ -1482,7 +1482,7 @@ function buildAgentInspectToolPlan(focus, options = {}) {
   if (focus === "network") {
     return {
       ...base,
-      firstPass: ["devtools_network_summary", "devtools_network_timeline", "devtools_network_log"],
+      firstPass: ["devtools_network_summary", "devtools_network_timeline", "devtools_network_log", "devtools_realtime_log"],
       drillDown: options.requestId
         ? ["devtools_request_detail", "devtools_request_body", "devtools_request_payload", "devtools_request_replay", "devtools_request_replay_batch"]
         : ["pick a requestId, then rerun agent_inspect focus=network requestId=<id>"],
@@ -1556,7 +1556,7 @@ function buildAgentInspectToolPlan(focus, options = {}) {
 function devtoolsToolCategory(name) {
   if (name === "agent_inspect" || /backend_capabilities|tool_catalog|tool_help|workflow_guide|protocol_schema/.test(name)) return "orientation";
   if (/tabs|snapshot|screenshot|click|type|scroll|eval|hard_reload/.test(name)) return "page-control";
-  if (/network|request|har|capture_/.test(name)) return "network";
+  if (/network|request|har|capture_|realtime/.test(name)) return "network";
   if (/console|issues|security_summary|signal_summary|page_diagnostics/.test(name)) return "diagnostics";
   if (/storage|cookie|service_worker|application|indexeddb|cache|auth_boundary/.test(name)) return "application";
   if (/frame|accessibility|elements|dom|css|event_listeners|worker_frame/.test(name)) return "dom-frame";
@@ -2840,6 +2840,10 @@ function createProfileRegistry({ cdpPort, dataDir, onProfileReady }) {
     return join(profileDir(name), "traffic", "websockets.jsonl");
   }
 
+  function eventSourceFile(name) {
+    return join(profileDir(name), "traffic", "eventsource.jsonl");
+  }
+
   function eventsFile(name) {
     return join(profileDir(name), "events", "events.jsonl");
   }
@@ -2961,6 +2965,16 @@ function createProfileRegistry({ cdpPort, dataDir, onProfileReady }) {
     return file;
   }
 
+  function appendEventSources(raw, entries) {
+    const name = normalizeProfileName(raw);
+    const file = eventSourceFile(name);
+    mkdirSync(dirname(file), { recursive: true });
+    for (const entry of entries) {
+      appendFileSync(file, `${JSON.stringify({ ...entry, profile: name })}\n`, "utf8");
+    }
+    return file;
+  }
+
   function appendEvent(raw, event) {
     const name = normalizeProfileName(raw);
     const file = eventsFile(name);
@@ -2998,6 +3012,19 @@ function createProfileRegistry({ cdpPort, dataDir, onProfileReady }) {
   function readWebSockets(raw) {
     const name = normalizeProfileName(raw);
     const file = websocketFile(name);
+    try {
+      return readFileSync(file, "utf8")
+        .split(/\r?\n/)
+        .filter(Boolean)
+        .map((line) => JSON.parse(line));
+    } catch {
+      return [];
+    }
+  }
+
+  function readEventSources(raw) {
+    const name = normalizeProfileName(raw);
+    const file = eventSourceFile(name);
     try {
       return readFileSync(file, "utf8")
         .split(/\r?\n/)
@@ -3074,11 +3101,13 @@ function createProfileRegistry({ cdpPort, dataDir, onProfileReady }) {
     touchProfile,
     appendTraffic,
     appendWebSockets,
+    appendEventSources,
     appendEvent,
     writeBody,
     queryTraffic,
     getTraffic,
     readWebSockets,
+    readEventSources,
     getCapture,
     setCapture,
     clearTraffic,
@@ -3094,6 +3123,7 @@ function registerStandaloneBrowserTools(tools, cdpPort, profileRegistry, default
     const entries = new Map();
     const redirects = new Map();
     const websockets = new Map();
+    const eventSources = [];
     const record = (requestId, patch) => {
       const existing = entries.get(requestId) || { requestId, timestamp: new Date().toISOString() };
       entries.set(requestId, { ...existing, ...patch });
@@ -3249,22 +3279,36 @@ function registerStandaloneBrowserTools(tools, cdpPort, profileRegistry, default
     client.Network.webSocketFrameReceived((event) => recordWebSocket(event.requestId, "Network.webSocketFrameReceived", event));
     client.Network.webSocketFrameError((event) => recordWebSocket(event.requestId, "Network.webSocketFrameError", event));
     client.Network.webSocketClosed((event) => recordWebSocket(event.requestId, "Network.webSocketClosed", event));
+    client.Network.eventSourceMessageReceived((event) => {
+      eventSources.push({
+        timestamp: new Date().toISOString(),
+        requestId: event.requestId,
+        eventName: event.eventName,
+        eventId: event.eventId,
+        data: event.data,
+        dataLength: event.data ? String(event.data).length : 0,
+      });
+    });
     const result = await action();
     await sleep(waitMs);
     const rows = [...entries.values()].filter((entry) => entry.url);
     const websocketRows = [...websockets.values()];
+    const eventSourceRows = [...eventSources];
     const capture = profileRegistry.getCapture(profileName);
     const trafficFile = capture.enabled ? profileRegistry.appendTraffic(profileName, rows) : null;
     const websocketFile = capture.enabled && websocketRows.length ? profileRegistry.appendWebSockets(profileName, websocketRows) : null;
+    const eventSourceFile = capture.enabled && eventSourceRows.length ? profileRegistry.appendEventSources(profileName, eventSourceRows) : null;
     return {
       result,
       observedTraffic: rows.length,
       observedWebSockets: websocketRows.length,
+      observedEventSourceMessages: eventSourceRows.length,
       recordedTraffic: capture.enabled ? rows.length : 0,
       capturedTraffic: capture.enabled ? rows.length : 0,
       captureEnabled: capture.enabled,
       trafficFile,
       websocketFile,
+      eventSourceFile,
     };
   }
 
@@ -3998,6 +4042,79 @@ function registerStandaloneBrowserTools(tools, cdpPort, profileRegistry, default
           results,
         };
       }));
+    },
+  });
+
+  tools.set("profile_realtime_log", {
+    name: "profile_realtime_log",
+    description: "Return F12 Network real-time channel evidence: WebSocket lifecycle/frames and EventSource/SSE messages.",
+    parameters: {
+      type: "object",
+      properties: {
+        profile: { type: "string" },
+        requestId: { type: "string" },
+        url_contains: { type: "string" },
+        direction: { type: "string" },
+        limit: { type: "number" },
+        maxPayloadChars: { type: "number" },
+      },
+    },
+    async execute(_id, params) {
+      const profile = await resolveProfile(params?.profile);
+      const limit = typeof params?.limit === "number" ? params.limit : 100;
+      const maxPayloadChars = typeof params?.maxPayloadChars === "number" ? params.maxPayloadChars : 2000;
+      const needle = params?.url_contains ? String(params.url_contains).toLowerCase() : null;
+      const requestedId = params?.requestId ? String(params.requestId) : null;
+      const direction = params?.direction ? String(params.direction).toLowerCase() : null;
+      const truncatePayload = (value) => {
+        if (typeof value !== "string") return value ?? null;
+        return value.length > maxPayloadChars ? `${value.slice(0, maxPayloadChars)}...[truncated ${value.length - maxPayloadChars} chars]` : value;
+      };
+      let websockets = profileRegistry.readWebSockets(profile.name);
+      if (requestedId) websockets = websockets.filter((socket) => String(socket.requestId) === requestedId);
+      if (needle) websockets = websockets.filter((socket) => String(socket.url || "").toLowerCase().includes(needle));
+      websockets = websockets.slice(-limit).map((socket) => {
+        const frames = (socket.frames || [])
+          .filter((frame) => !direction || String(frame.direction || "").toLowerCase() === direction)
+          .slice(-limit)
+          .map((frame) => ({
+            ...frame,
+            payloadData: truncatePayload(frame.payloadData),
+            truncated: typeof frame.payloadData === "string" && frame.payloadData.length > maxPayloadChars,
+          }));
+        return {
+          requestId: socket.requestId,
+          url: socket.url,
+          status: socket.status,
+          statusText: socket.statusText,
+          requestHeaders: socket.requestHeaders,
+          responseHeaders: socket.responseHeaders,
+          createdAt: socket.createdAt,
+          updatedAt: socket.updatedAt,
+          closedAt: socket.closedAt,
+          errorMessage: socket.errorMessage,
+          frameCount: socket.frames?.length || 0,
+          returnedFrameCount: frames.length,
+          frames,
+        };
+      });
+      let eventSources = profileRegistry.readEventSources(profile.name);
+      if (requestedId) eventSources = eventSources.filter((entry) => String(entry.requestId) === requestedId);
+      eventSources = eventSources.slice(-limit).map((entry) => ({
+        ...entry,
+        data: truncatePayload(entry.data),
+        truncated: typeof entry.data === "string" && entry.data.length > maxPayloadChars,
+      }));
+      return toolResult({
+        backend: "managed-cdp",
+        profile: profile.name,
+        evidenceDir: profile.evidenceDir,
+        capture: profileRegistry.getCapture(profile.name),
+        websocketCount: websockets.length,
+        eventSourceMessageCount: eventSources.length,
+        websockets,
+        eventSources,
+      });
     },
   });
 
@@ -6893,12 +7010,13 @@ function registerStandaloneBrowserTools(tools, cdpPort, profileRegistry, default
         out.evidence.summary = await safeProfileCall("profile_traffic_summary", { limit: 1000000 });
         out.evidence.timeline = await safeProfileCall("profile_network_timeline", { limit });
         out.evidence.requests = await safeProfileCall("profile_traffic_query", { limit });
+        out.evidence.realtime = await safeProfileCall("profile_realtime_log", { limit });
         if (params?.requestId) {
           out.evidence.requestDetail = await safeProfileCall("profile_request_detail", { requestId: params.requestId });
           out.evidence.requestBody = await safeProfileCall("profile_traffic_get", { requestId: params.requestId });
         }
-        out.summary = "Network panel route: summary, timing/initiator rows, captured requests, and optional request drill-down.";
-        out.nextTools = ["Use requestId with focus=network", "devtools_request_replay", "devtools_request_replay_batch", "devtools_save_har", "agent_inspect focus=search query=<token/url/header>"];
+        out.summary = "Network panel route: summary, timing/initiator rows, captured requests, real-time channels, and optional request drill-down.";
+        out.nextTools = ["Use requestId with focus=network", "devtools_realtime_log", "devtools_request_replay", "devtools_request_replay_batch", "devtools_save_har", "agent_inspect focus=search query=<token/url/header>"];
       } else if (focus === "storage") {
         out.evidence.origin = await safeCall("browser_storage_origin_summary");
         out.evidence.cookies = await safeCall("browser_cookie_summary");
@@ -8654,6 +8772,7 @@ function registerStandaloneBrowserTools(tools, cdpPort, profileRegistry, default
   aliasTool("devtools_network_log", "profile_traffic_query", "Unified Agent DevTools API: read Network panel-style request log.");
   aliasTool("devtools_network_summary", "profile_traffic_summary", "Unified Agent DevTools API: summarize captured Network traffic for dashboards and triage.");
   aliasTool("devtools_network_timeline", "profile_network_timeline", "Unified Agent DevTools API: read Network Timing/Initiator-style rows.");
+  aliasTool("devtools_realtime_log", "profile_realtime_log", "Unified Agent DevTools API: read WebSocket frames and EventSource/SSE messages.");
   aliasTool("devtools_export_har", "profile_export_har", "Unified Agent DevTools API: export captured Network events as HAR.");
   aliasTool("devtools_save_har", "profile_save_har", "Unified Agent DevTools API: save captured Network events as a HAR file.");
   aliasTool("devtools_request_body", "profile_traffic_get", "Unified Agent DevTools API: read captured request/response detail by requestId.");
@@ -8773,6 +8892,219 @@ function registerStandaloneBrowserTools(tools, cdpPort, profileRegistry, default
         backend: "managed-cdp",
         ...devtoolsWorkflowGuide(params?.task),
       });
+    },
+  });
+
+  tools.set("browser_open", {
+    name: "browser_open",
+    description: "Facade: open or switch a profile to a URL, then return page diagnostics. Use this instead of low-level navigation for ordinary agent work.",
+    parameters: {
+      type: "object",
+      properties: {
+        profile: { type: "string" },
+        url: { type: "string" },
+        waitMs: { type: "number" },
+      },
+    },
+    async execute(id, params) {
+      const profileName = params?.profile || defaultProfileName;
+      if (params?.url) {
+        await tools.get("browser_navigate").execute(id, { profile: profileName, url: params.url, waitMs: params?.waitMs });
+      } else {
+        await profileRegistry.getProfile(profileName);
+      }
+      const diagnostics = JSON.parse((await tools.get("devtools_page_diagnostics").execute(id, { profile: profileName })).content?.[0]?.text || "{}");
+      return toolResult({
+        backend: "managed-cdp",
+        facade: "browser_open",
+        profile: profileName,
+        diagnostics,
+        next: ["browser_inspect", "browser_capture", "browser_security_pack"],
+      });
+    },
+  });
+
+  tools.set("browser_act", {
+    name: "browser_act",
+    description: "Facade: perform a common browser action: click, type, scroll, eval, screenshot, or snapshot.",
+    parameters: {
+      type: "object",
+      properties: {
+        profile: { type: "string" },
+        action: { type: "string" },
+        selector: { type: "string" },
+        text: { type: "string" },
+        x: { type: "number" },
+        y: { type: "number" },
+        expression: { type: "string" },
+        waitMs: { type: "number" },
+      },
+      required: ["action"],
+    },
+    async execute(id, params) {
+      const action = String(params?.action || "").toLowerCase();
+      const profileName = params?.profile || defaultProfileName;
+      const actionTools = {
+        click: "devtools_click",
+        type: "devtools_type",
+        scroll: "devtools_scroll",
+        eval: "devtools_eval",
+        screenshot: "devtools_screenshot",
+        snapshot: "devtools_snapshot",
+      };
+      const toolName = actionTools[action];
+      if (!toolName) throw new Error(`unsupported browser_act action: ${action}`);
+      const result = JSON.parse((await tools.get(toolName).execute(id, { ...params, profile: profileName })).content?.[0]?.text || "{}");
+      return toolResult({
+        backend: "managed-cdp",
+        facade: "browser_act",
+        action,
+        tool: toolName,
+        profile: profileName,
+        result,
+        next: ["browser_inspect", "browser_capture"],
+      });
+    },
+  });
+
+  tools.set("browser_inspect", {
+    name: "browser_inspect",
+    description: "Facade: inspect the current page through agent_inspect. Modes: overview, network, storage, console, dom, sources, performance, search, evidence, debug.",
+    parameters: {
+      type: "object",
+      properties: {
+        profile: { type: "string" },
+        mode: { type: "string" },
+        query: { type: "string" },
+        selector: { type: "string" },
+        requestId: { type: "string" },
+        limit: { type: "number" },
+        includeHeavy: { type: "boolean" },
+      },
+    },
+    async execute(id, params) {
+      const profileName = params?.profile || defaultProfileName;
+      const focus = params?.mode || params?.focus || "overview";
+      const result = JSON.parse((await tools.get("agent_inspect").execute(id, { ...params, profile: profileName, focus })).content?.[0]?.text || "{}");
+      return toolResult({
+        backend: "managed-cdp",
+        facade: "browser_inspect",
+        profile: profileName,
+        mode: focus,
+        result,
+        next: result.nextTools || ["browser_capture", "browser_security_pack"],
+      });
+    },
+  });
+
+  tools.set("browser_capture", {
+    name: "browser_capture",
+    description: "Facade: manage F12 recording with start, stop, clear, status, or reload.",
+    parameters: {
+      type: "object",
+      properties: {
+        profile: { type: "string" },
+        action: { type: "string" },
+        label: { type: "string" },
+        clear: { type: "boolean" },
+        waitMs: { type: "number" },
+      },
+    },
+    async execute(id, params) {
+      const action = String(params?.action || "status").toLowerCase();
+      const profileName = params?.profile || defaultProfileName;
+      const actionTools = {
+        start: "devtools_capture_start",
+        stop: "devtools_capture_stop",
+        clear: "devtools_capture_clear",
+        status: "devtools_capture_status",
+        reload: "devtools_hard_reload",
+        hard_reload: "devtools_hard_reload",
+      };
+      const toolName = actionTools[action];
+      if (!toolName) throw new Error(`unsupported browser_capture action: ${action}`);
+      const result = JSON.parse((await tools.get(toolName).execute(id, { ...params, profile: profileName })).content?.[0]?.text || "{}");
+      return toolResult({
+        backend: "managed-cdp",
+        facade: "browser_capture",
+        action,
+        tool: toolName,
+        profile: profileName,
+        result,
+        next: ["browser_inspect", "browser_security_pack"],
+      });
+    },
+  });
+
+  tools.set("browser_security_pack", {
+    name: "browser_security_pack",
+    description: "Facade: run the one-call objective security research evidence workflow and return saved artifact paths.",
+    parameters: tools.get("devtools_security_research_pack").parameters,
+    async execute(id, params) {
+      const result = JSON.parse((await tools.get("devtools_security_research_pack").execute(id, { ...params, profile: params?.profile || defaultProfileName })).content?.[0]?.text || "{}");
+      return toolResult({ facade: "browser_security_pack", ...result });
+    },
+  });
+
+  tools.set("browser_auth_boundary", {
+    name: "browser_auth_boundary",
+    description: "Facade: collect objective authentication-boundary evidence: cookies, auth headers, tokens, storage, and credentialed requests.",
+    parameters: tools.get("devtools_auth_boundary_report").parameters,
+    async execute(id, params) {
+      const result = JSON.parse((await tools.get("devtools_auth_boundary_report").execute(id, { ...params, profile: params?.profile || defaultProfileName })).content?.[0]?.text || "{}");
+      return toolResult({ facade: "browser_auth_boundary", ...result });
+    },
+  });
+
+  tools.set("browser_diff", {
+    name: "browser_diff",
+    description: "Facade: compare before/after evidence artifacts or current captured traffic.",
+    parameters: tools.get("devtools_capture_diff").parameters,
+    async execute(id, params) {
+      const result = JSON.parse((await tools.get("devtools_capture_diff").execute(id, { ...params, profile: params?.profile || defaultProfileName })).content?.[0]?.text || "{}");
+      return toolResult({ facade: "browser_diff", ...result });
+    },
+  });
+
+  tools.set("browser_replay", {
+    name: "browser_replay",
+    description: "Facade: replay one captured request or run batch variants and compare responses.",
+    parameters: {
+      type: "object",
+      properties: {
+        profile: { type: "string" },
+        requestId: { type: "string" },
+        variants: { type: "array", items: { type: "object" } },
+      },
+      required: ["requestId"],
+    },
+    async execute(id, params) {
+      const profileName = params?.profile || defaultProfileName;
+      const toolName = Array.isArray(params?.variants) && params.variants.length ? "devtools_request_replay_batch" : "devtools_request_replay";
+      const result = JSON.parse((await tools.get(toolName).execute(id, { ...params, profile: profileName })).content?.[0]?.text || "{}");
+      return toolResult({ backend: "managed-cdp", facade: "browser_replay", tool: toolName, profile: profileName, result });
+    },
+  });
+
+  tools.set("browser_raw", {
+    name: "browser_raw",
+    description: "Facade: advanced escape hatch. Call one exact devtools_* tool when the big tools are not enough.",
+    parameters: {
+      type: "object",
+      properties: {
+        tool: { type: "string" },
+        input: { type: "object" },
+      },
+      required: ["tool"],
+    },
+    async execute(id, params) {
+      const toolName = String(params?.tool || "").trim();
+      if (!toolName.startsWith("devtools_")) throw new Error("browser_raw only allows devtools_* tools");
+      if (["devtools_tool_catalog", "devtools_tool_help", "devtools_workflow_guide"].includes(toolName)) throw new Error("use tool usability helpers directly");
+      const target = tools.get(toolName);
+      if (!target) throw new Error(`unknown devtools tool: ${toolName}`);
+      const result = JSON.parse((await target.execute(id, params?.input || {})).content?.[0]?.text || "{}");
+      return toolResult({ backend: "managed-cdp", facade: "browser_raw", tool: toolName, result });
     },
   });
 }

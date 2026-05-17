@@ -85,6 +85,13 @@ assert(Array.isArray(performanceObserver.snapshot?.supportedEntryTypes), "perfor
 assert(typeof performanceObserver.summary?.entryCount === "number", "performance observer missing entry count");
 assert(Array.isArray(performanceObserver.summary?.captureBoundaries), "performance observer missing capture boundaries");
 
+const realtimeLog = await callTool("devtools_realtime_log", {
+  limit: 5,
+});
+assert(realtimeLog.tab?.url, `Personal Chrome realtime log missing tab context: ${JSON.stringify(realtimeLog)}`);
+assert(Array.isArray(realtimeLog.websockets), "Personal Chrome realtime log missing websockets array");
+assert(Array.isArray(realtimeLog.eventSources), "Personal Chrome realtime log missing eventSources array");
+
 const chromeTrace = await callTool("devtools_chrome_trace", {
   durationMs: 250,
   maxEvents: 5,
@@ -126,6 +133,33 @@ assert(researchPack.summary?.correlationGraphPath, "Personal Chrome security res
 assert(researchPack.summary?.authBoundaryReportPath, "Personal Chrome security research pack missing auth boundary report path");
 assert(researchPack.summary?.workerFrameReportPath, "Personal Chrome security research pack missing worker/frame report path");
 assert(typeof researchPack.summary?.requestCount === "number", "Personal Chrome security research pack missing request count");
+
+const facadeInspect = await callTool("browser_inspect", {
+  mode: "overview",
+  limit: 5,
+});
+assert(facadeInspect.facade === "browser_inspect", `Personal Chrome browser_inspect facade marker missing: ${JSON.stringify(facadeInspect)}`);
+assert(facadeInspect.result?.focus === "overview", "Personal Chrome browser_inspect did not route to agent_inspect overview");
+const facadeCapture = await callTool("browser_capture", {
+  action: "status",
+});
+assert(facadeCapture.facade === "browser_capture", `Personal Chrome browser_capture facade marker missing: ${JSON.stringify(facadeCapture)}`);
+const facadeRaw = await callTool("browser_raw", {
+  tool: "devtools_page_diagnostics",
+  input: { limit: 5 },
+});
+assert(facadeRaw.facade === "browser_raw", `Personal Chrome browser_raw facade marker missing: ${JSON.stringify(facadeRaw)}`);
+assert(facadeRaw.result?.page?.url, "Personal Chrome browser_raw did not return wrapped diagnostics");
+const facadePack = await callTool("browser_security_pack", {
+  limit: 5,
+  waitMs: 500,
+  includeTrace: false,
+  includeHar: true,
+  includeApplicationExport: true,
+});
+assert(facadePack.facade === "browser_security_pack", `Personal Chrome browser_security_pack facade marker missing: ${JSON.stringify(facadePack)}`);
+assert(facadePack.summary?.evidenceBundlePath, "Personal Chrome browser_security_pack missing bundle path");
+
 const toolCatalog = await callTool("devtools_tool_catalog", { query: "auth" });
 assert(toolCatalog.toolCount >= 1, "Personal Chrome tool catalog did not return auth tools");
 assert(toolCatalog.tools.some((tool) => tool.name === "devtools_auth_boundary_report"), "Personal Chrome tool catalog missing auth boundary report");
@@ -139,3 +173,5 @@ console.log(`- bridge: ${baseUrl}`);
 console.log(`- active tab: ${status.tab.title || "(untitled)"} ${status.tab.url}`);
 console.log(`- allowed domains: ${capabilities.domainAccess.allowedDomains.length}`);
 console.log(`- layer: ${capabilities.layer}`);
+console.log(`- facade tools: ${facadeInspect.facade}/${facadeCapture.facade}/${facadePack.facade}`);
+console.log(`- realtime channels ws/sse: ${realtimeLog.websocketCount}/${realtimeLog.eventSourceMessageCount}`);

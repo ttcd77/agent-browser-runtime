@@ -8,6 +8,22 @@ F12 evidence surface available through a stable, low-token tool contract.
 
 Use this for an agent dashboard or a quick diagnosis before drilling down:
 
+| Question | Default agent tool |
+|---|---|
+| Open or switch to a page | `browser_open` |
+| Click, type, scroll, eval, screenshot, or snapshot | `browser_act` |
+| Inspect the current page without choosing a low-level panel tool | `browser_inspect` |
+| Start/stop/clear/status/reload F12 recording | `browser_capture` |
+| Generate a local evidence pack | `browser_security_pack` |
+| Collect auth boundary evidence | `browser_auth_boundary` |
+| Compare before/after evidence | `browser_diff` |
+| Replay a captured request | `browser_replay` |
+| Use an exact low-level F12 tool | `browser_raw` |
+
+The lower-level panel map below is still the parity layer. A normal agent should
+start with the facade table above and drill down only when it needs exact F12
+evidence.
+
 | Question | Tool |
 |---|---|
 | What page am I on and is the browser healthy? | `devtools_page_diagnostics` |
@@ -34,6 +50,7 @@ Use this for an agent dashboard or a quick diagnosis before drilling down:
 | Inspect request table | `devtools_network_log` |
 | Summarize request table | `devtools_network_summary` |
 | Inspect Timing/Initiator rows | `devtools_network_timeline` |
+| Inspect WebSocket frames and EventSource/SSE messages | `devtools_realtime_log` |
 | Read response body | `devtools_request_body` |
 | Inspect one request's headers/cookies/timing/initiator | `devtools_request_detail` |
 | Read request payload | `devtools_request_payload` |

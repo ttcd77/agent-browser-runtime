@@ -76,9 +76,10 @@ not running, it still validates that Managed Browser exposes the contract.
 
 Current verified contract:
 
-- Managed Browser: 84 `devtools_*` tools.
-- Personal Chrome: 84 `devtools_*` tools.
+- Managed Browser: 85 `devtools_*` tools.
+- Personal Chrome: 85 `devtools_*` tools.
 - Drift: none.
+- Agent facade: 9 `browser_*` default tools over the detailed DevTools layer.
 
 The contract smoke uses an isolated temporary browser profile so it does not
 collide with a long-running browser on port 9222.
@@ -94,7 +95,8 @@ npm run smoke:personal
 This smoke does not navigate the user's browser. It checks the connected
 extension, `devtools_backend_capabilities`, `chrome.debugger` attachment,
 `Runtime.evaluate`, frame tree access, and Application storage-boundary summary
-for the currently active tab.
+for the currently active tab. It also verifies non-navigating facade calls:
+`browser_inspect`, `browser_capture`, `browser_raw`, and `browser_security_pack`.
 
 ## Managed F12 Smoke
 
@@ -111,6 +113,7 @@ It starts an isolated temporary managed browser and verifies:
 - dashboard-friendly page diagnostics,
 - Network summary from an explicit F12 capture,
 - Network Timing/Initiator-style timeline rows,
+- WebSocket frame and EventSource/SSE evidence through `devtools_realtime_log`,
 - per-request Network detail including headers, cookies, timing, initiator, and
   ExtraInfo fields where Chrome exposes them,
 - Accessibility tree extraction,
@@ -135,6 +138,7 @@ It starts an isolated temporary managed browser and verifies:
 - global literal search across Network, Sources, and Application evidence,
 - compact F12 evidence bundle export,
 - one-call security research pack workflow with artifact paths,
+- default `browser_*` facade tools over the detailed F12 layer,
 - Console exceptions and source context around stack frames,
 - HAR file save.
 - Service Worker registration and CacheStorage summary on a local page.

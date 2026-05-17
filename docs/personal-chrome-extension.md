@@ -51,23 +51,35 @@ npm run smoke:personal
 ## Tool Examples
 
 ```powershell
-Invoke-RestMethod http://127.0.0.1:17337/tool/personal_chrome_tabs `
+Invoke-RestMethod http://127.0.0.1:17337/tool/browser_inspect `
   -Method Post `
   -ContentType "application/json" `
-  -Body "{}"
+  -Body '{"mode":"overview","limit":5}'
 
-Invoke-RestMethod http://127.0.0.1:17337/tool/personal_chrome_active_tab_snapshot `
+Invoke-RestMethod http://127.0.0.1:17337/tool/browser_capture `
   -Method Post `
   -ContentType "application/json" `
-  -Body '{"maxTextLength":4000}'
+  -Body '{"action":"start","label":"personal-check"}'
 
-Invoke-RestMethod http://127.0.0.1:17337/tool/personal_chrome_screenshot `
+Invoke-RestMethod http://127.0.0.1:17337/tool/browser_act `
   -Method Post `
   -ContentType "application/json" `
-  -Body "{}"
+  -Body '{"action":"screenshot"}'
 ```
 
 ## Current Tools
+
+Agent-facing facade tools:
+
+- `browser_open`
+- `browser_act`
+- `browser_inspect`
+- `browser_capture`
+- `browser_security_pack`
+- `browser_auth_boundary`
+- `browser_diff`
+- `browser_replay`
+- `browser_raw`
 
 Unified Agent DevTools tools:
 
@@ -98,6 +110,7 @@ Unified Agent DevTools tools:
 - `devtools_network_log`
 - `devtools_network_summary`
 - `devtools_network_timeline`
+- `devtools_realtime_log`
 - `devtools_export_har`
 - `devtools_save_har`
 - `devtools_request_body`

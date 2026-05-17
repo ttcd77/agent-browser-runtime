@@ -82,6 +82,7 @@ function normalizeCommand(toolName) {
     devtools_network_log: "chrome_network_log",
     devtools_network_summary: "chrome_network_summary",
     devtools_network_timeline: "chrome_network_timeline",
+    devtools_realtime_log: "chrome_realtime_log",
     devtools_export_har: "chrome_export_har",
     devtools_save_har: "chrome_export_har",
     devtools_request_body: "chrome_request_body",
@@ -767,7 +768,7 @@ async function workerFrameDeepDive(params = {}) {
 function devtoolsToolCategory(name) {
   if (name === "agent_inspect" || /backend_capabilities|tool_catalog|tool_help|workflow_guide|protocol_schema/.test(name)) return "orientation";
   if (/tabs|snapshot|screenshot|click|type|scroll|eval|hard_reload/.test(name)) return "page-control";
-  if (/network|request|har|capture_/.test(name)) return "network";
+  if (/network|request|har|capture_|realtime/.test(name)) return "network";
   if (/console|issues|security_summary|signal_summary|page_diagnostics/.test(name)) return "diagnostics";
   if (/storage|cookie|service_worker|application|indexeddb|cache|auth_boundary/.test(name)) return "application";
   if (/frame|accessibility|elements|dom|css|event_listeners|worker_frame/.test(name)) return "dom-frame";
@@ -897,6 +898,96 @@ function workflowGuide(task = "first-pass") {
   };
 }
 
+async function browserOpenFacade(params = {}) {
+  if (params.url) {
+    const url = new URL(String(params.url));
+    if (!/^https?:$/.test(url.protocol)) throw new Error("url must use http or https");
+    await safeBridgeTool("devtools_eval", {
+      expression: `(() => { location.assign(${JSON.stringify(url.toString())}); return true; })()`,
+    });
+    await new Promise((resolve) => setTimeout(resolve, typeof params.waitMs === "number" ? params.waitMs : 1000));
+  }
+  const diagnostics = await safeBridgeTool("devtools_page_diagnostics", {});
+  return {
+    backend: "personal-chrome",
+    facade: "browser_open",
+    diagnostics,
+    next: ["browser_inspect", "browser_capture", "browser_security_pack"],
+  };
+}
+
+async function browserActFacade(params = {}) {
+  const action = String(params.action || "").toLowerCase();
+  const actionTools = {
+    click: "devtools_click",
+    type: "devtools_type",
+    scroll: "devtools_scroll",
+    eval: "devtools_eval",
+    screenshot: "devtools_screenshot",
+    snapshot: "devtools_snapshot",
+  };
+  const toolName = actionTools[action];
+  if (!toolName) throw new Error(`unsupported browser_act action: ${action}`);
+  const result = await safeBridgeTool(toolName, params);
+  return {
+    backend: "personal-chrome",
+    facade: "browser_act",
+    action,
+    tool: toolName,
+    result,
+    next: ["browser_inspect", "browser_capture"],
+  };
+}
+
+async function browserInspectFacade(params = {}) {
+  const mode = params.mode || params.focus || "overview";
+  const result = await runAgentInspect({ ...params, focus: mode });
+  return {
+    backend: "personal-chrome",
+    facade: "browser_inspect",
+    mode,
+    result,
+    next: result.nextTools || ["browser_capture", "browser_security_pack"],
+  };
+}
+
+async function browserCaptureFacade(params = {}) {
+  const action = String(params.action || "status").toLowerCase();
+  const actionTools = {
+    start: "devtools_capture_start",
+    stop: "devtools_capture_stop",
+    clear: "devtools_capture_clear",
+    status: "devtools_capture_status",
+    reload: "devtools_hard_reload",
+    hard_reload: "devtools_hard_reload",
+  };
+  const toolName = actionTools[action];
+  if (!toolName) throw new Error(`unsupported browser_capture action: ${action}`);
+  const result = await safeBridgeTool(toolName, params);
+  return {
+    backend: "personal-chrome",
+    facade: "browser_capture",
+    action,
+    tool: toolName,
+    result,
+    next: ["browser_inspect", "browser_security_pack"],
+  };
+}
+
+async function browserReplayFacade(params = {}) {
+  const toolName = Array.isArray(params.variants) && params.variants.length ? "devtools_request_replay_batch" : "devtools_request_replay";
+  const result = await safeBridgeTool(toolName, params);
+  return { backend: "personal-chrome", facade: "browser_replay", tool: toolName, result };
+}
+
+async function browserRawFacade(params = {}) {
+  const toolName = String(params.tool || "").trim();
+  if (!toolName.startsWith("devtools_")) throw new Error("browser_raw only allows devtools_* tools");
+  if (["devtools_tool_catalog", "devtools_tool_help", "devtools_workflow_guide"].includes(toolName)) throw new Error("use tool usability helpers directly");
+  const result = await callBridgeTool(toolName, params.input || {});
+  return { backend: "personal-chrome", facade: "browser_raw", tool: toolName, result };
+}
+
 function persistCpuProfile(result, params = {}) {
   if (!result?.profile) return result;
   const path = params.path || join(cpuProfileDir, `${Date.now()}-cpu-profile.json`);
@@ -983,6 +1074,33 @@ function postProcessToolResult(toolName, result, params = {}) {
 }
 
 async function callBridgeTool(toolName, params = {}) {
+  if (toolName === "browser_open") {
+    return await browserOpenFacade(params);
+  }
+  if (toolName === "browser_act") {
+    return await browserActFacade(params);
+  }
+  if (toolName === "browser_inspect") {
+    return await browserInspectFacade(params);
+  }
+  if (toolName === "browser_capture") {
+    return await browserCaptureFacade(params);
+  }
+  if (toolName === "browser_security_pack") {
+    return { facade: "browser_security_pack", ...(await securityResearchPack(params)) };
+  }
+  if (toolName === "browser_auth_boundary") {
+    return { facade: "browser_auth_boundary", ...(await authBoundaryReport(params)) };
+  }
+  if (toolName === "browser_diff") {
+    return { facade: "browser_diff", ...(await captureDiff(params)) };
+  }
+  if (toolName === "browser_replay") {
+    return await browserReplayFacade(params);
+  }
+  if (toolName === "browser_raw") {
+    return await browserRawFacade(params);
+  }
   if (toolName === "personal_chrome_trace_query" || toolName === "devtools_trace_query") {
     return traceQuery(params);
   }
@@ -1154,7 +1272,7 @@ function buildAgentInspectToolPlan(focus, options = {}) {
   if (focus === "network") {
     return {
       ...base,
-      firstPass: ["devtools_network_summary", "devtools_network_timeline", "devtools_network_log"],
+      firstPass: ["devtools_network_summary", "devtools_network_timeline", "devtools_network_log", "devtools_realtime_log"],
       drillDown: options.requestId
         ? ["devtools_request_detail", "devtools_request_body", "devtools_request_payload", "devtools_request_replay", "devtools_request_replay_batch"]
         : ["pick a requestId, then rerun agent_inspect focus=network requestId=<id>"],
@@ -1261,12 +1379,13 @@ async function runAgentInspect(params = {}) {
     out.evidence.summary = await safeBridgeTool("devtools_network_summary", withBase({ limit: 1000000 }));
     out.evidence.timeline = await safeBridgeTool("devtools_network_timeline", withBase({ limit }));
     out.evidence.requests = await safeBridgeTool("devtools_network_log", withBase({ limit }));
+    out.evidence.realtime = await safeBridgeTool("devtools_realtime_log", withBase({ limit }));
     if (params.requestId) {
       out.evidence.requestDetail = await safeBridgeTool("devtools_request_detail", withBase({ requestId: params.requestId }));
       out.evidence.requestBody = await safeBridgeTool("devtools_request_body", withBase({ requestId: params.requestId }));
     }
-    out.summary = "Network panel route: summary, timing/initiator rows, captured requests, and optional request drill-down.";
-    out.nextTools = ["Use requestId with focus=network", "devtools_request_replay", "devtools_request_replay_batch", "devtools_save_har", "agent_inspect focus=search query=<token/url/header>"];
+    out.summary = "Network panel route: summary, timing/initiator rows, captured requests, real-time channels, and optional request drill-down.";
+    out.nextTools = ["Use requestId with focus=network", "devtools_realtime_log", "devtools_request_replay", "devtools_request_replay_batch", "devtools_save_har", "agent_inspect focus=search query=<token/url/header>"];
   } else if (focus === "storage") {
     out.evidence.origin = await safeBridgeTool("devtools_storage_origin_summary", base);
     out.evidence.cookies = await safeBridgeTool("devtools_cookie_summary", base);
@@ -1369,6 +1488,15 @@ wss.on("connection", (ws) => {
 });
 
 const tools = {
+  browser_open: "Facade: open or switch a page, then return page diagnostics. Use this first for ordinary agent browser work.",
+  browser_act: "Facade: perform a common browser action: click, type, scroll, eval, screenshot, or snapshot.",
+  browser_inspect: "Facade: inspect the page through agent_inspect modes instead of choosing from dozens of low-level tools.",
+  browser_capture: "Facade: manage F12 recording with start, stop, clear, status, or reload.",
+  browser_security_pack: "Facade: run the one-call objective security research evidence workflow.",
+  browser_auth_boundary: "Facade: collect objective authentication-boundary evidence.",
+  browser_diff: "Facade: compare before/after evidence artifacts or current captured traffic.",
+  browser_replay: "Facade: replay one captured request or batch variants.",
+  browser_raw: "Facade: advanced escape hatch for one exact devtools_* tool.",
   agent_inspect: "Agent-facing F12 router. Pick a focus and get the right DevTools evidence without choosing from dozens of low-level tools.",
   personal_chrome_status: "Check whether the real Chrome extension is connected.",
   personal_chrome_extension_reload: "Reload the unpacked extension service worker after local development changes.",
@@ -1395,6 +1523,7 @@ const tools = {
   personal_chrome_network_log: "Return structured Network events captured through chrome.debugger.",
   personal_chrome_network_summary: "Summarize captured Network events for agent dashboards and triage.",
   personal_chrome_network_timeline: "Return F12 Network Timing/Initiator-style rows from the user's real Chrome tab.",
+  personal_chrome_realtime_log: "Return F12 Network real-time channel evidence: WebSocket lifecycle/frames and EventSource/SSE messages.",
   personal_chrome_export_har: "Export captured Network events as a HAR-like object.",
   personal_chrome_save_har: "Export captured Network events as a HAR-like file and return the saved path.",
   personal_chrome_request_body: "Return a response body for a captured Network requestId.",
@@ -1479,6 +1608,7 @@ const tools = {
   devtools_network_log: "Unified Agent DevTools API: read Network panel-style request log.",
   devtools_network_summary: "Unified Agent DevTools API: summarize captured Network traffic for dashboards and triage.",
   devtools_network_timeline: "Unified Agent DevTools API: read Network Timing/Initiator-style rows.",
+  devtools_realtime_log: "Unified Agent DevTools API: read WebSocket frames and EventSource/SSE messages.",
   devtools_export_har: "Unified Agent DevTools API: export captured Network events as HAR.",
   devtools_save_har: "Unified Agent DevTools API: save captured Network events as a HAR file.",
   devtools_request_body: "Unified Agent DevTools API: read response body for a requestId.",

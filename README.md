@@ -10,7 +10,7 @@ It gives Codex, Claude, OpenClaw, or a custom agent SDK a browser it can operate
 - keep evidence under that profile's directory,
 - reuse an existing CDP browser when one is already open.
 
-The OpenClaw plugin adapter is included, but the main product is now framework-neutral: agents call the unified `devtools_*` API. Backend-specific names are kept for debugging and compatibility.
+The OpenClaw plugin adapter is included, but the main product is now framework-neutral: agents call a small `browser_*` facade first, then drill into the unified `devtools_*` API only when they need exact F12 evidence. Backend-specific names are kept for debugging and compatibility.
 
 ## Why
 
@@ -22,8 +22,7 @@ The user-facing model is deliberately small:
 - Agent Browser: start a browser for agents; use `default` for simple work, or
   create extra profiles for separate roles, targets, and identities.
 
-Both modes expose the same `devtools_*` tool names. Profiles, ports, browser
-processes, and extension details are routing choices underneath that tool layer.
+Both modes expose the same `browser_*` facade and the same `devtools_*` tool names. Profiles, ports, browser processes, and extension details are routing choices underneath that tool layer.
 
 In product terms, a `profile` is an agent-facing operating space. It can mean a role, a target, or an identity:
 
@@ -105,6 +104,24 @@ The panel is intentionally simple: it shows human-readable profile names and a
 page diagnostics summary. It hides CDP target ids and tab ids from the first
 screen. Agents and SDKs should still use the `devtools_*` tools for automation.
 
+## Agent-Facing Tools
+
+Expose these facade tools to agents by default:
+
+| Tool | Use it for |
+|---|---|
+| `browser_open` | Open/switch a page and get diagnostics. |
+| `browser_act` | Click, type, scroll, eval, screenshot, or snapshot. |
+| `browser_inspect` | Ask for `overview`, `network`, `storage`, `console`, `dom`, `sources`, `performance`, `search`, `evidence`, or `debug` without choosing low-level tools. |
+| `browser_capture` | Start, stop, clear, inspect, or reload F12-style recording. |
+| `browser_security_pack` | Generate an objective local evidence pack with artifact paths. |
+| `browser_auth_boundary` | Collect auth/cookie/storage/request boundary evidence without judging impact. |
+| `browser_diff` | Compare before/after evidence or captured traffic. |
+| `browser_replay` | Replay one captured request or a batch of variants. |
+| `browser_raw` | Advanced escape hatch for one exact `devtools_*` tool. |
+
+The detailed `devtools_*` tools are still available for drill-down and parity with DevTools panels. The intended agent path is: `browser_open` -> `browser_capture start` -> interact through `browser_act` -> inspect with `browser_inspect` -> use `browser_raw` only when the facade cannot express the required F12 operation.
+
 Example tool calls:
 
 ```bash
@@ -112,17 +129,17 @@ curl -X POST http://127.0.0.1:17335/tool/profile_create \
   -H "content-type: application/json" \
   -d "{\"profile\":\"researcher\"}"
 
-curl -X POST http://127.0.0.1:17335/tool/devtools_capture_start \
+curl -X POST http://127.0.0.1:17335/tool/browser_capture \
   -H "content-type: application/json" \
-  -d "{\"profile\":\"researcher\",\"label\":\"first-capture\"}"
+  -d "{\"profile\":\"researcher\",\"action\":\"start\",\"label\":\"first-capture\"}"
 
-curl -X POST http://127.0.0.1:17335/tool/browser_navigate \
+curl -X POST http://127.0.0.1:17335/tool/browser_open \
   -H "content-type: application/json" \
   -d "{\"profile\":\"researcher\",\"url\":\"https://example.com\"}"
 
-curl -X POST http://127.0.0.1:17335/tool/browser_snapshot \
+curl -X POST http://127.0.0.1:17335/tool/browser_act \
   -H "content-type: application/json" \
-  -d "{\"profile\":\"researcher\"}"
+  -d "{\"profile\":\"researcher\",\"action\":\"snapshot\"}"
 
 curl -X POST http://127.0.0.1:17335/tool/profile_traffic_query \
   -H "content-type: application/json" \
@@ -144,7 +161,7 @@ Use `devtools_capture_start` before the activity you want to record, or use
 `devtools_hard_reload` when you want a clean F12-style reload capture. If capture
 is off, browser action tools still work, but they do not write a traffic journal.
 
-Agent shortcut:
+Agent router:
 
 ```bash
 curl -X POST http://127.0.0.1:17335/tool/agent_inspect \
