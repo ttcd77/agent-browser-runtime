@@ -1267,6 +1267,51 @@ function addTraceBucket(map, key, durationMs, count = 1) {
   map[key] = bucket;
 }
 
+function summarizeRenderingTimeline(events = [], limit = 50) {
+  const rows = [];
+  let minTs = Infinity;
+  for (const event of events) {
+    if (typeof event.ts === "number") minTs = Math.min(minTs, event.ts);
+  }
+  for (const event of events) {
+    if (typeof event.ts !== "number") continue;
+    const name = String(event.name || "(unknown)");
+    const phase = classifyTraceEvent(name, event.cat);
+    const isScreenshot = name.toLowerCase().includes("screenshot");
+    if (!isScreenshot && !["loading", "scripting", "rendering", "painting"].includes(phase)) continue;
+    rows.push({
+      name,
+      phase: isScreenshot ? "screenshot" : phase,
+      category: event.cat || "",
+      ts: event.ts,
+      startOffsetMs: Number.isFinite(minTs) ? Math.round(((event.ts - minTs) / 1000) * 100) / 100 : null,
+      durationMs: typeof event.dur === "number" ? Math.round((event.dur / 1000) * 100) / 100 : 0,
+      thread: event.tid,
+      process: event.pid,
+      frame: event.args?.frame || event.args?.frameId || event.args?.data?.frame || null,
+      data: event.args?.data ? {
+        url: event.args.data.url,
+        requestId: event.args.data.requestId,
+        nodeId: event.args.data.nodeId,
+        layerId: event.args.data.layerId,
+        clip: event.args.data.clip,
+      } : null,
+    });
+  }
+  rows.sort((a, b) => a.ts - b.ts || b.durationMs - a.durationMs);
+  return {
+    eventCount: rows.length,
+    returnedCount: Math.min(rows.length, limit),
+    rows: rows.slice(0, limit),
+    truncated: rows.length > limit,
+    captureBoundaries: [
+      "Rendering timeline is derived from Chrome trace events exposed by DevTools Tracing.",
+      "It groups observed loading, scripting, rendering, painting, and screenshot events by timestamp.",
+      "This is an objective event timeline, not a root-cause or vulnerability judgment.",
+    ],
+  };
+}
+
 function summarizeTraceEvents(events = [], limit = 10) {
   const byCategory = {};
   const byName = {};
@@ -1345,6 +1390,7 @@ function summarizeTraceEvents(events = [], limit = 10) {
     busiestThreads: topDurationBuckets(byThread),
     busiestProcesses: topDurationBuckets(byProcess),
     topDurations: topDurations.slice(0, limit),
+    renderingTimeline: summarizeRenderingTimeline(events, limit),
     longEventCount: longEvents.length,
     longEvents: longEvents.slice(0, limit),
     screenshotEventCount: screenshots.length,

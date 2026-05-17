@@ -186,6 +186,10 @@ Verified manually during development:
   - Personal Chrome: captured Chrome Tracing stream through `chrome.debugger`
     and wrote a full trace JSON file under `tmp/personal-chrome-traces`, with
     the same trace summary shape.
+- `devtools_chrome_trace traceSummary.renderingTimeline`
+  - Managed Browser and Personal Chrome group observed loading, scripting,
+    rendering, painting, and screenshot trace events into an objective timeline
+    with relative offsets and durations.
 - `devtools_sources_search`
   - Managed Browser: searched parsed script sources and found a known smoke-test
     marker in a data URL page.

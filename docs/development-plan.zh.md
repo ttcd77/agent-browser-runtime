@@ -87,8 +87,8 @@
 开发项:
 
 - HAR 导出继续接近 DevTools: 更完整 timing、body handle、redirect/body 证据。第一步先落地 `devtools_har_completeness`，让 Agent 知道当前 HAR 证据完整到什么程度。
-- Sources/Debugger: source map 原始文件导航已补 `devtools_source_map_source_get`；breakpoint probe 已并入 `devtools_debugger_control action=probeBreakpointByUrl`；paused scope 表达式求值已补 `evaluateExpressions`；下一步继续 Performance trace 分组或 Application CHIPS/storage bucket。
-- Performance: trace event 到 frame/layout/paint 的更好分组，不做性能风险判断，只做证据整理。
+- Sources/Debugger: source map 原始文件导航已补 `devtools_source_map_source_get`；breakpoint probe 已并入 `devtools_debugger_control action=probeBreakpointByUrl`；paused scope 表达式求值已补 `evaluateExpressions`。
+- Performance: trace event 已补 `renderingTimeline`，按 loading/scripting/rendering/painting/screenshot 做时间线分组，不做性能风险判断，只做证据整理；下一步可继续 Application CHIPS/storage bucket。
 - Application: CHIPS / partitioned cookie、quota/storage bucket、Cache/IndexedDB drill-down。
 - Replay: 更明确 forbidden header、browser fetch replay 与 raw socket-level replay 边界。
 
@@ -253,3 +253,22 @@
 
 - `npm run smoke:f12`: 通过，fixture 暂停时读取 `agentDebuggerSmoke=42` 和表达式 `agentDebuggerSmoke + 1=43`。
 - Personal Chrome 直接调用验证通过，真实 Chrome 暂停时读取 `agentPersonalDebuggerSmoke=77` 和表达式 `agentPersonalDebuggerSmoke + 1=78`。
+
+### 2026-05-17: Phase 2 Performance trace 时间线分组完成
+
+已经完成:
+
+- `devtools_chrome_trace` 的 `traceSummary` 新增 `renderingTimeline`。
+- 时间线按 Chrome trace 事件客观分组:
+  - loading
+  - scripting
+  - rendering
+  - painting
+  - screenshot
+- 每行返回事件名、phase、category、相对开始时间、持续时间、process/thread、frame/data 摘要。
+- Managed Browser 和 Personal Chrome 共用同一 summary 形状。
+- 该功能只整理 trace 证据，不判断性能根因或漏洞。
+
+验证结果:
+
+- `npm run smoke:f12`: 通过，确认 `renderingTimeline.rows` 和 `captureBoundaries` 存在。

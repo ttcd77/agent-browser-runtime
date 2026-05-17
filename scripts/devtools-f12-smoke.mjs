@@ -244,6 +244,8 @@ try {
   assert(trace.traceSummary?.eventCount > 0, "Chrome trace summary missing events");
   assert(Array.isArray(trace.traceSummary?.durationByPhase), "Chrome trace summary missing durationByPhase");
   assert(Array.isArray(trace.traceSummary?.topDurations), "Chrome trace summary missing topDurations");
+  assert(Array.isArray(trace.traceSummary?.renderingTimeline?.rows), "Chrome trace summary missing rendering timeline rows");
+  assert(Array.isArray(trace.traceSummary?.renderingTimeline?.captureBoundaries), "Chrome trace rendering timeline missing capture boundaries");
   assert(Array.isArray(trace.traceScreenshots), "Chrome trace did not return screenshot frame evidence array");
 
   const traceQuery = await callTool(baseUrl, "devtools_trace_query", {
