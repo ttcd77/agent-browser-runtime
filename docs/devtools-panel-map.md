@@ -53,6 +53,9 @@ Use this for an agent dashboard or a quick diagnosis before drilling down:
 | Watch selected-node DOM mutations | `devtools_dom_mutation_watch` |
 | Unwrapped CDP/F12 feature | `devtools_cdp_command` |
 | Browser-process CDP feature in Managed Browser | `devtools_browser_cdp_command` |
+| Browser version metadata | `devtools_browser_version` |
+| Browser targets/tabs | `devtools_browser_targets` |
+| Browser/system information | `devtools_system_info` |
 | Click/type/scroll | `devtools_click`, `devtools_type`, `devtools_scroll` |
 | Screenshot | `devtools_screenshot` |
 

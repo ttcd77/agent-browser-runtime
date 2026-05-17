@@ -32,6 +32,12 @@ assert(capabilities.domainAccess?.allowedDomains?.includes("Network"), "capabili
 assert(capabilities.domainAccess?.allowedDomains?.includes("Runtime"), "capabilities missing Runtime domain");
 const browserCdp = await callTool("devtools_browser_cdp_command", { method: "Browser.getVersion" });
 assert(browserCdp.notApplicable === true, `Personal Chrome browser-process CDP should be structured notApplicable: ${JSON.stringify(browserCdp)}`);
+const browserVersion = await callTool("devtools_browser_version");
+assert(browserVersion.backend === "personal-chrome" && browserVersion.userAgent, `Personal Chrome browser version missing userAgent: ${JSON.stringify(browserVersion)}`);
+const browserTargets = await callTool("devtools_browser_targets");
+assert(browserTargets.targetCount >= 1, `Personal Chrome browser targets missing tabs: ${JSON.stringify(browserTargets)}`);
+const systemInfo = await callTool("devtools_system_info");
+assert(systemInfo.notApplicable === true, `Personal Chrome system info should be structured notApplicable: ${JSON.stringify(systemInfo)}`);
 
 const attached = await callTool("devtools_attach");
 assert(attached.ok === true || attached.attached === true, `debugger did not attach: ${JSON.stringify(attached)}`);

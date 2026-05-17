@@ -32,6 +32,9 @@ This layer is for agent-owned browser profiles and repeatable target work.
 - Extra CDP layer: use `devtools_browser_cdp_command` for browser-process
   commands such as `Browser.getVersion`, `Target.getTargets`, or `SystemInfo.*`
   where Chrome exposes them.
+- Friendly wrappers: agents should prefer `devtools_browser_version`,
+  `devtools_browser_targets`, and `devtools_system_info` before falling back to
+  raw `devtools_browser_cdp_command`.
 
 ## Shared Rule
 

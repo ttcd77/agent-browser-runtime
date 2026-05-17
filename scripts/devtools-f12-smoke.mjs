@@ -149,6 +149,12 @@ try {
   assert(backendCapabilities.domainAccess?.expectedBroaderThanChromeDebugger === true, "backend capabilities missing managed CDP domain access marker");
   const browserCdp = await callTool(baseUrl, "devtools_browser_cdp_command", { method: "Browser.getVersion" });
   assert(browserCdp.result?.product, `browser-process CDP command missing Browser.getVersion product: ${JSON.stringify(browserCdp)}`);
+  const browserVersion = await callTool(baseUrl, "devtools_browser_version");
+  assert(browserVersion.result?.product, `browser version missing product: ${JSON.stringify(browserVersion)}`);
+  const browserTargets = await callTool(baseUrl, "devtools_browser_targets");
+  assert(browserTargets.targetCount >= 1, `browser targets missing targets: ${JSON.stringify(browserTargets)}`);
+  const systemInfo = await callTool(baseUrl, "devtools_system_info");
+  assert(systemInfo.result?.gpu || systemInfo.result?.modelName || systemInfo.result, `system info missing result: ${JSON.stringify(systemInfo)}`);
 
   const diagnostics = await callTool(baseUrl, "devtools_page_diagnostics", {
     profile: "default",

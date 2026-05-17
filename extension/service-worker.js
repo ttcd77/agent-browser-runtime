@@ -186,6 +186,12 @@ async function executeCommand(command, params) {
       return await chromeBackendCapabilities(params);
     case "chrome_browser_cdp_command":
       return await chromeBrowserCdpCommand(params);
+    case "chrome_browser_version":
+      return await chromeBrowserVersion(params);
+    case "chrome_browser_targets":
+      return await chromeBrowserTargets(params);
+    case "chrome_system_info":
+      return await chromeSystemInfo(params);
     case "chrome_capture_start":
       return await chromeCaptureStart(params);
     case "chrome_capture_stop":
@@ -361,6 +367,44 @@ async function chromeBrowserCdpCommand(params = {}) {
     notApplicable: true,
     reason: "Personal Chrome uses chrome.debugger against tab targets. Browser-process CDP commands require the Managed Browser direct-CDP layer.",
     fallbackTool: "Use Managed Browser devtools_browser_cdp_command for Browser/SystemInfo/Target-level commands.",
+  };
+}
+
+async function chromeBrowserVersion() {
+  const status = await chromeStatus().catch((error) => ({ ok: false, error: String(error?.message || error) }));
+  return {
+    backend: "personal-chrome",
+    layer: "chrome.debugger",
+    source: "extension-navigator",
+    browserProcessCdp: false,
+    userAgent: navigator.userAgent,
+    extensionVersion: chrome.runtime.getManifest().version,
+    activeTab: status.activeTab || null,
+    note: "Personal Chrome cannot call Browser.getVersion through browser-process CDP. Use Managed Browser devtools_browser_version for exact Browser.getVersion metadata.",
+  };
+}
+
+async function chromeBrowserTargets() {
+  const tabs = await tabsQuery({});
+  return {
+    backend: "personal-chrome",
+    layer: "chrome.debugger",
+    source: "chrome.tabs",
+    browserProcessCdp: false,
+    targetCount: tabs.length,
+    tabs: tabs.map(pickTab),
+    note: "Personal Chrome exposes user tabs through chrome.tabs. Use Managed Browser devtools_browser_targets for Target.getTargets browser-process metadata.",
+  };
+}
+
+async function chromeSystemInfo(params = {}) {
+  return {
+    backend: "personal-chrome",
+    layer: "chrome.debugger",
+    method: "SystemInfo.getInfo",
+    notApplicable: true,
+    reason: "SystemInfo.getInfo is a browser-process CDP command. Personal Chrome uses chrome.debugger against tab targets.",
+    fallbackTool: "Use Managed Browser devtools_system_info.",
   };
 }
 

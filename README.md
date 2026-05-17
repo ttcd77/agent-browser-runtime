@@ -183,6 +183,9 @@ Chrome Extension Mode and Managed Browser Mode:
 - `devtools_status`
 - `devtools_backend_capabilities`
 - `devtools_browser_cdp_command`
+- `devtools_browser_version`
+- `devtools_browser_targets`
+- `devtools_system_info`
 - `devtools_capture_start`
 - `devtools_capture_stop`
 - `devtools_capture_clear`

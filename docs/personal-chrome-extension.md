@@ -84,6 +84,9 @@ Unified Agent DevTools tools:
 - `devtools_status`
 - `devtools_backend_capabilities`
 - `devtools_browser_cdp_command`
+- `devtools_browser_version`
+- `devtools_browser_targets`
+- `devtools_system_info`
 - `devtools_capture_start`
 - `devtools_capture_stop`
 - `devtools_capture_clear`
@@ -155,6 +158,9 @@ Backend-specific aliases:
 - `personal_chrome_devtools_status`
 - `personal_chrome_backend_capabilities`
 - `personal_chrome_browser_cdp_command`
+- `personal_chrome_browser_version`
+- `personal_chrome_browser_targets`
+- `personal_chrome_system_info`
 - `personal_chrome_capture_start`
 - `personal_chrome_capture_stop`
 - `personal_chrome_capture_clear`

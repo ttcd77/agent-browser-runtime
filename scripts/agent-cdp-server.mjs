@@ -972,7 +972,7 @@ function buildAgentInspectToolPlan(focus, options = {}) {
   return {
     ...base,
     firstPass: ["devtools_backend_capabilities", "agent_inspect focus=overview"],
-    drillDown: ["agent_inspect focus=network", "agent_inspect focus=storage", "agent_inspect focus=console", "agent_inspect focus=dom", "agent_inspect focus=evidence"],
+    drillDown: ["agent_inspect focus=network", "agent_inspect focus=storage", "agent_inspect focus=console", "agent_inspect focus=dom", "agent_inspect focus=evidence", "devtools_browser_version", "devtools_browser_targets"],
     captureHint: "Start capture before reproducing behavior you want Network/Console evidence for.",
     objectiveBoundary: "Overview organizes signals; it does not decide whether a finding is a vulnerability.",
   };
@@ -6988,6 +6988,23 @@ function registerStandaloneBrowserTools(tools, cdpPort, profileRegistry, default
     },
   });
 
+  async function runBrowserCdpCommand(method, commandParams = {}) {
+    const versionResponse = await fetch(`http://127.0.0.1:${cdpPort}/json/version`);
+    if (!versionResponse.ok) {
+      throw new Error(`CDP version endpoint failed: ${versionResponse.status} ${await versionResponse.text()}`);
+    }
+    const version = await versionResponse.json();
+    if (!version.webSocketDebuggerUrl) {
+      throw new Error("CDP version endpoint did not expose webSocketDebuggerUrl");
+    }
+    const browserClient = await CDP({ target: version.webSocketDebuggerUrl });
+    try {
+      return await browserClient.send(method, commandParams && typeof commandParams === "object" ? commandParams : {});
+    } finally {
+      await browserClient.close().catch(() => {});
+    }
+  }
+
   tools.set("devtools_browser_cdp_command", {
     name: "devtools_browser_cdp_command",
     description: "Managed CDP only: run a raw Chrome DevTools Protocol command against the browser-process endpoint for Browser/SystemInfo/Target-level features.",
@@ -7004,27 +7021,56 @@ function registerStandaloneBrowserTools(tools, cdpPort, profileRegistry, default
       if (!/^[A-Za-z0-9_.]+$/.test(method) || !method.includes(".")) {
         throw new Error("method must be a Chrome DevTools Protocol method like Browser.getVersion");
       }
-      const versionResponse = await fetch(`http://127.0.0.1:${cdpPort}/json/version`);
-      if (!versionResponse.ok) {
-        throw new Error(`CDP version endpoint failed: ${versionResponse.status} ${await versionResponse.text()}`);
-      }
-      const version = await versionResponse.json();
-      if (!version.webSocketDebuggerUrl) {
-        throw new Error("CDP version endpoint did not expose webSocketDebuggerUrl");
-      }
-      const browserClient = await CDP({ target: version.webSocketDebuggerUrl });
-      try {
-        const result = await browserClient.send(method, params?.params && typeof params.params === "object" ? params.params : {});
-        return toolResult({
-          backend: "managed-cdp",
-          layer: "direct-cdp-browser-process",
-          cdpEndpoint: `http://127.0.0.1:${cdpPort}`,
-          method,
-          result,
-        });
-      } finally {
-        await browserClient.close().catch(() => {});
-      }
+      const result = await runBrowserCdpCommand(method, params?.params);
+      return toolResult({
+        backend: "managed-cdp",
+        layer: "direct-cdp-browser-process",
+        cdpEndpoint: `http://127.0.0.1:${cdpPort}`,
+        method,
+        result,
+      });
+    },
+  });
+
+  tools.set("devtools_browser_version", {
+    name: "devtools_browser_version",
+    description: "Managed CDP: return browser-process version metadata from Browser.getVersion.",
+    parameters: { type: "object", properties: {} },
+    async execute() {
+      return toolResult({
+        backend: "managed-cdp",
+        layer: "direct-cdp-browser-process",
+        result: await runBrowserCdpCommand("Browser.getVersion"),
+      });
+    },
+  });
+
+  tools.set("devtools_browser_targets", {
+    name: "devtools_browser_targets",
+    description: "Managed CDP: list browser targets from Target.getTargets for agent target/session discovery.",
+    parameters: { type: "object", properties: {} },
+    async execute() {
+      const result = await runBrowserCdpCommand("Target.getTargets");
+      const targets = Array.isArray(result.targetInfos) ? result.targetInfos : [];
+      return toolResult({
+        backend: "managed-cdp",
+        layer: "direct-cdp-browser-process",
+        targetCount: targets.length,
+        targets,
+      });
+    },
+  });
+
+  tools.set("devtools_system_info", {
+    name: "devtools_system_info",
+    description: "Managed CDP: return browser/system information from SystemInfo.getInfo where Chrome exposes it.",
+    parameters: { type: "object", properties: {} },
+    async execute() {
+      return toolResult({
+        backend: "managed-cdp",
+        layer: "direct-cdp-browser-process",
+        result: await runBrowserCdpCommand("SystemInfo.getInfo"),
+      });
     },
   });
 

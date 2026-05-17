@@ -76,8 +76,8 @@ not running, it still validates that Managed Browser exposes the contract.
 
 Current verified contract:
 
-- Managed Browser: 68 `devtools_*` tools.
-- Personal Chrome: 68 `devtools_*` tools.
+- Managed Browser: 71 `devtools_*` tools.
+- Personal Chrome: 71 `devtools_*` tools.
 - Drift: none.
 
 The contract smoke uses an isolated temporary browser profile so it does not
