@@ -145,6 +145,15 @@
 
 ## 执行记录
 
+### 2026-05-17: HAR response body index
+
+已经完成:
+
+- `devtools_export_har` / `devtools_save_har` 返回 `bodyIndex` 和 `bodyIndexSummary`。
+- 每条 body index 记录 requestId、URL、status、mime、bodyIncluded、bodySource、bodyBytes、bodyPath/truncation/unavailable/error 等客观字段。
+- Managed Browser 记录 inline-captured/file-backed body 来源；Personal Chrome 记录 `chrome-debugger-getResponseBody` 来源。
+- 这让 Agent 不必把大 body 全塞进上下文，也能知道哪些 body 有证据、证据来自哪里、是否截断。
+
 ### 2026-05-17: Global Search 深搜 Application 证据
 
 已经完成:

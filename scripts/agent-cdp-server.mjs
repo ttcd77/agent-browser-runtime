@@ -5364,11 +5364,14 @@ function registerStandaloneBrowserTools(tools, cdpPort, profileRegistry, default
         if (!includeBodies) return content;
         if (typeof request.bodyText === "string") {
           const text = request.bodyText.slice(0, maxBodyBytes);
+          const fullBytes = Buffer.byteLength(request.bodyText, "utf8");
           return {
             ...content,
             text,
             _bodyIncluded: true,
-            _bodyTruncated: Buffer.byteLength(request.bodyText, "utf8") > maxBodyBytes,
+            _bodySource: "captured-inline-text",
+            _bodyBytes: fullBytes,
+            _bodyTruncated: fullBytes > maxBodyBytes,
           };
         }
         if (request.bodyPath) {
@@ -5380,7 +5383,9 @@ function registerStandaloneBrowserTools(tools, cdpPort, profileRegistry, default
               text: limited.toString("base64"),
               encoding: "base64",
               _bodyIncluded: true,
+              _bodySource: "captured-body-file",
               _bodyPath: request.bodyPath,
+              _bodyBytes: body.length,
               _bodyTruncated: body.length > maxBodyBytes,
             };
           } catch (error) {
@@ -5452,10 +5457,36 @@ function registerStandaloneBrowserTools(tools, cdpPort, profileRegistry, default
         _bodyReadable: Boolean(request.bodyReadable || request.bodyText || request.bodyPath),
       };
       });
+      const bodyIndex = entries.map((entry) => ({
+        requestId: entry._requestId || null,
+        url: entry.request?.url || "",
+        method: entry.request?.method || "",
+        status: entry.response?.status ?? null,
+        mimeType: entry.response?.content?.mimeType || "",
+        bodyReadable: Boolean(entry._bodyReadable),
+        bodyIncluded: entry.response?.content?._bodyIncluded === true,
+        bodySource: entry.response?.content?._bodySource || null,
+        bodyBytes: entry.response?.content?._bodyBytes ?? null,
+        contentSize: entry.response?.content?.size ?? -1,
+        bodySize: entry.response?.bodySize ?? -1,
+        bodyTruncated: entry.response?.content?._bodyTruncated === true,
+        bodyUnavailable: entry.response?.content?._bodyUnavailable === true,
+        bodyError: entry.response?.content?._bodyError || null,
+        bodyPath: entry.response?.content?._bodyPath || null,
+      }));
       return toolResult({
         profile: profile.name,
         includeBodies,
         maxBodyBytes,
+        bodyIndex,
+        bodyIndexSummary: {
+          entryCount: bodyIndex.length,
+          readableCount: bodyIndex.filter((row) => row.bodyReadable).length,
+          includedCount: bodyIndex.filter((row) => row.bodyIncluded).length,
+          fileBackedCount: bodyIndex.filter((row) => row.bodyPath).length,
+          truncatedCount: bodyIndex.filter((row) => row.bodyTruncated).length,
+          unavailableCount: bodyIndex.filter((row) => row.bodyUnavailable).length,
+        },
         har: {
           log: {
             version: "1.2",
@@ -5494,6 +5525,8 @@ function registerStandaloneBrowserTools(tools, cdpPort, profileRegistry, default
         harPath,
         harBytes: Buffer.byteLength(harText, "utf8"),
         entryCount: payload.har?.log?.entries?.length || 0,
+        bodyIndex: payload.bodyIndex || [],
+        bodyIndexSummary: payload.bodyIndexSummary || null,
       });
     },
   });

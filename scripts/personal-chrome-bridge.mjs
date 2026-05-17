@@ -775,6 +775,8 @@ function analyzeHarCompleteness(har = {}, options = {}) {
     bodySize: entry.response?.bodySize ?? -1,
     bodyReadable: Boolean(entry._bodyReadable),
     bodyIncluded: entry.response?.content?._bodyIncluded === true,
+    bodySource: entry.response?.content?._bodySource || null,
+    bodyBytes: entry.response?.content?._bodyBytes ?? null,
     bodyTruncated: entry.response?.content?._bodyTruncated === true,
     bodyUnavailable: entry.response?.content?._bodyUnavailable === true,
     bodyError: entry.response?.content?._bodyError || null,
@@ -1582,6 +1584,8 @@ function persistHar(result, params = {}) {
     harPath: path,
     harBytes: Buffer.byteLength(harText, "utf8"),
     entryCount: result.har?.log?.entries?.length || 0,
+    bodyIndex: result.bodyIndex || [],
+    bodyIndexSummary: result.bodyIndexSummary || null,
   };
 }
 

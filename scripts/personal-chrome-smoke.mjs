@@ -431,6 +431,13 @@ assert(Array.isArray(harCompleteness.drilldownSamples?.bodyMissing), `Personal C
 assert(Array.isArray(harCompleteness.drilldownSamples?.timingMissing), `Personal Chrome HAR completeness missing timing drilldown samples: ${JSON.stringify(harCompleteness.drilldownSamples)}`);
 assert(harCompleteness.body, "Personal Chrome HAR completeness missing body summary");
 assert(harCompleteness.timing, "Personal Chrome HAR completeness missing timing summary");
+const harWithBodies = await callTool("devtools_export_har", {
+  limit: 20,
+  includeBodies: true,
+  maxBodyBytes: 2000,
+});
+assert(harWithBodies.bodyIndexSummary?.entryCount >= 1, `Personal Chrome HAR body index missing entries: ${JSON.stringify(harWithBodies.bodyIndexSummary)}`);
+assert(Array.isArray(harWithBodies.bodyIndex), "Personal Chrome HAR body index missing array");
 
 const toolCatalog = await callTool("devtools_tool_catalog", { query: "auth" });
 assert(toolCatalog.toolCount >= 1, "Personal Chrome tool catalog did not return auth tools");

@@ -1041,6 +1041,8 @@ try {
   });
   const bodyEntries = harWithBodies.har?.log?.entries?.filter((entry) => entry.response?.content?._bodyIncluded) || [];
   assert(bodyEntries.length >= 1, `HAR body export did not include any response bodies: ${JSON.stringify(harWithBodies.har?.log?.entries || [])}`);
+  assert(harWithBodies.bodyIndexSummary?.includedCount >= 1, `HAR body index missing included bodies: ${JSON.stringify(harWithBodies.bodyIndexSummary)}`);
+  assert(harWithBodies.bodyIndex?.some((entry) => entry.bodyIncluded && entry.bodySource), `HAR body index missing body source handles: ${JSON.stringify(harWithBodies.bodyIndex)}`);
   assert((harWithBodies.har?.log?.entries || []).some((entry) => "_timingPhases" in entry && "_durationMs" in entry), "HAR export missing timing phase extensions");
   const harCompleteness = await callTool(baseUrl, "devtools_har_completeness", {
     profile: "default",

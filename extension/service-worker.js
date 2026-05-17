@@ -2406,15 +2406,20 @@ async function chromeExportHar(params) {
           text: btoa(raw),
           encoding: "base64",
           _bodyIncluded: true,
+          _bodySource: "chrome-debugger-getResponseBody",
+          _bodyBytes: bytes.length,
           _bodyTruncated: bytes.length > maxBodyBytes,
         };
       }
       const text = String(body.body || "");
+      const fullBytes = new TextEncoder().encode(text).length;
       return {
         ...content,
         text: text.slice(0, maxBodyBytes),
         _bodyIncluded: true,
-        _bodyTruncated: text.length > maxBodyBytes,
+        _bodySource: "chrome-debugger-getResponseBody",
+        _bodyBytes: fullBytes,
+        _bodyTruncated: fullBytes > maxBodyBytes,
       };
     } catch (error) {
       return {
@@ -2480,10 +2485,34 @@ async function chromeExportHar(params) {
     _bodyReadable: Boolean(request.bodyReadable),
   };
   }));
+  const bodyIndex = entries.map((entry) => ({
+    requestId: entry._requestId || null,
+    url: entry.request?.url || "",
+    method: entry.request?.method || "",
+    status: entry.response?.status ?? null,
+    mimeType: entry.response?.content?.mimeType || "",
+    bodyReadable: Boolean(entry._bodyReadable),
+    bodyIncluded: entry.response?.content?._bodyIncluded === true,
+    bodySource: entry.response?.content?._bodySource || null,
+    bodyBytes: entry.response?.content?._bodyBytes ?? null,
+    contentSize: entry.response?.content?.size ?? -1,
+    bodySize: entry.response?.bodySize ?? -1,
+    bodyTruncated: entry.response?.content?._bodyTruncated === true,
+    bodyUnavailable: entry.response?.content?._bodyUnavailable === true,
+    bodyError: entry.response?.content?._bodyError || null,
+  }));
   return {
     tab: pickTab(tab),
     includeBodies,
     maxBodyBytes,
+    bodyIndex,
+    bodyIndexSummary: {
+      entryCount: bodyIndex.length,
+      readableCount: bodyIndex.filter((row) => row.bodyReadable).length,
+      includedCount: bodyIndex.filter((row) => row.bodyIncluded).length,
+      truncatedCount: bodyIndex.filter((row) => row.bodyTruncated).length,
+      unavailableCount: bodyIndex.filter((row) => row.bodyUnavailable).length,
+    },
     har: {
       log: {
         version: "1.2",
