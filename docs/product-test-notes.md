@@ -213,6 +213,11 @@ Verified manually during development:
     captures paused frames/scopes, auto-resumes, and removes the breakpoint.
   - Personal Chrome: same action was verified through the bridge against the
     connected real Chrome session without navigating away from the active page.
+- `devtools_debugger_control evaluateExpressions`
+  - Managed Browser: evaluates expressions in the paused call frame and returns
+    objective values/exception details alongside scope previews.
+  - Personal Chrome: exposes the same parameter through `chrome.debugger` and
+    CDP `Debugger.evaluateOnCallFrame`.
 - `devtools_save_har`
   - Managed Browser: saved captured traffic as a HAR file under profile
     evidence.

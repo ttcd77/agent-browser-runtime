@@ -4701,13 +4701,59 @@ async function debuggerScopePreview(target, scopeChain = [], maxScopes = 5, maxP
   return scopes;
 }
 
+function debuggerRemoteObjectSummary(object = {}, maxValueChars = 4000) {
+  const value = object?.value;
+  return {
+    type: object?.type,
+    subtype: object?.subtype,
+    className: object?.className,
+    description: object?.description,
+    value: typeof value === "string" && value.length > maxValueChars ? value.slice(0, maxValueChars) : value,
+    valueTruncated: typeof value === "string" && value.length > maxValueChars,
+    unserializableValue: object?.unserializableValue,
+  };
+}
+
+async function debuggerFrameEvaluations(target, callFrameId, options = {}) {
+  const expressions = Array.isArray(options.evaluateExpressions)
+    ? options.evaluateExpressions.map((entry) => String(entry || "").trim()).filter(Boolean).slice(0, Math.max(0, Number(options.maxEvaluateExpressions || 10)))
+    : [];
+  if (!expressions.length) return [];
+  const maxValueChars = Number(options.maxEvaluationValueChars || 4000);
+  const rows = [];
+  for (const expression of expressions) {
+    try {
+      const result = await chromeDebuggerSendCommand(target, "Debugger.evaluateOnCallFrame", {
+        callFrameId,
+        expression,
+        objectGroup: "agent-browser-runtime-debugger-eval",
+        includeCommandLineAPI: Boolean(options.includeCommandLineAPI),
+        silent: true,
+        returnByValue: options.evaluateReturnByValue !== false,
+        throwOnSideEffect: Boolean(options.throwOnSideEffect),
+        generatePreview: true,
+      });
+      rows.push({
+        expression,
+        result: debuggerRemoteObjectSummary(result.result || {}, maxValueChars),
+        exceptionDetails: result.exceptionDetails || null,
+      });
+    } catch (error) {
+      rows.push({ expression, error: String(error?.message || error) });
+    }
+  }
+  await chromeDebuggerSendCommand(target, "Runtime.releaseObjectGroup", { objectGroup: "agent-browser-runtime-debugger-eval" }).catch(() => {});
+  return rows;
+}
+
 async function debuggerPausedSummary(target, event, options = {}) {
   if (!event) return null;
   const maxFrames = Number(options.maxFrames || 10);
   const maxScopes = Number(options.maxScopes || 5);
   const maxProperties = Number(options.maxProperties || 20);
+  const maxEvaluateFrames = Number(options.maxEvaluateFrames || 1);
   const frames = [];
-  for (const frame of (event.callFrames || []).slice(0, maxFrames)) {
+  for (const [index, frame] of (event.callFrames || []).slice(0, maxFrames).entries()) {
     frames.push({
       callFrameId: frame.callFrameId,
       functionName: frame.functionName,
@@ -4722,6 +4768,7 @@ async function debuggerPausedSummary(target, event, options = {}) {
         value: frame.this.value,
       } : null,
       scopeChain: await debuggerScopePreview(target, frame.scopeChain || [], maxScopes, maxProperties),
+      evaluations: index < maxEvaluateFrames ? await debuggerFrameEvaluations(target, frame.callFrameId, options) : [],
     });
   }
   return {

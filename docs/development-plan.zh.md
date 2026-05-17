@@ -87,7 +87,7 @@
 开发项:
 
 - HAR 导出继续接近 DevTools: 更完整 timing、body handle、redirect/body 证据。第一步先落地 `devtools_har_completeness`，让 Agent 知道当前 HAR 证据完整到什么程度。
-- Sources/Debugger: source map 原始文件导航已补 `devtools_source_map_source_get`；breakpoint probe 已并入 `devtools_debugger_control action=probeBreakpointByUrl`；下一步继续 paused scope 深挖。
+- Sources/Debugger: source map 原始文件导航已补 `devtools_source_map_source_get`；breakpoint probe 已并入 `devtools_debugger_control action=probeBreakpointByUrl`；paused scope 表达式求值已补 `evaluateExpressions`；下一步继续 Performance trace 分组或 Application CHIPS/storage bucket。
 - Performance: trace event 到 frame/layout/paint 的更好分组，不做性能风险判断，只做证据整理。
 - Application: CHIPS / partitioned cookie、quota/storage bucket、Cache/IndexedDB drill-down。
 - Replay: 更明确 forbidden header、browser fetch replay 与 raw socket-level replay 边界。
@@ -237,3 +237,19 @@
 验证结果:
 
 - `npm run smoke:personal`: 通过。
+
+### 2026-05-17: Phase 2 paused scope 深挖完成
+
+已经完成:
+
+- `devtools_debugger_control` 新增 `evaluateExpressions` 参数。
+- 暂停时可在 call frame 上执行表达式，并返回每个表达式的值、异常或错误。
+- Managed Browser 使用 CDP `Debugger.evaluateOnCallFrame`。
+- Personal Chrome 使用 `chrome.debugger` 调用同一 CDP 方法。
+- 默认只在第一个 call frame 求值，可通过 `maxEvaluateFrames` / `maxEvaluateExpressions` 控制范围。
+- 返回的是暂停作用域里的客观求值结果，不判断漏洞。
+
+验证结果:
+
+- `npm run smoke:f12`: 通过，fixture 暂停时读取 `agentDebuggerSmoke=42` 和表达式 `agentDebuggerSmoke + 1=43`。
+- Personal Chrome 直接调用验证通过，真实 Chrome 暂停时读取 `agentPersonalDebuggerSmoke=77` 和表达式 `agentPersonalDebuggerSmoke + 1=78`。

@@ -513,8 +513,13 @@ try {
     maxFrames: 5,
     maxScopes: 3,
     maxProperties: 10,
+    evaluateExpressions: ["agentDebuggerSmoke", "agentDebuggerSmoke + 1"],
+    maxEvaluateExpressions: 5,
   });
   assert(debuggerPause.paused?.callFrameCount >= 1, `debugger control did not capture paused frames: ${JSON.stringify(debuggerPause)}`);
+  const debuggerEvaluations = debuggerPause.paused.callFrames?.[0]?.evaluations || [];
+  assert(debuggerEvaluations.some((entry) => entry.expression === "agentDebuggerSmoke" && entry.result?.value === 42), `debugger control did not evaluate local variable: ${JSON.stringify(debuggerPause)}`);
+  assert(debuggerEvaluations.some((entry) => entry.expression === "agentDebuggerSmoke + 1" && entry.result?.value === 43), `debugger control did not evaluate expression in paused frame: ${JSON.stringify(debuggerPause)}`);
   assert(debuggerPause.autoResumed === true, "debugger control did not auto-resume after pauseOnExpression");
   await callTool(baseUrl, "devtools_cdp_command", {
     profile: "default",
