@@ -144,6 +144,9 @@ try {
 
   const security = await callTool(baseUrl, "devtools_security_summary", { profile: "default" });
   assert(security.page?.url?.startsWith("https://example.com"), "security summary did not inspect example.com");
+  const backendCapabilities = await callTool(baseUrl, "devtools_backend_capabilities", { profile: "default" });
+  assert(backendCapabilities.backend === "managed-cdp", `backend capabilities reported wrong backend: ${JSON.stringify(backendCapabilities)}`);
+  assert(backendCapabilities.domainAccess?.expectedBroaderThanChromeDebugger === true, "backend capabilities missing managed CDP domain access marker");
 
   const diagnostics = await callTool(baseUrl, "devtools_page_diagnostics", {
     profile: "default",
@@ -592,6 +595,7 @@ try {
     limit: 5,
   });
   assert(agentOverview.backend === "managed-cdp", `agent_inspect reported wrong backend: ${JSON.stringify(agentOverview)}`);
+  assert(agentOverview.evidence?.backendCapabilities?.backend === "managed-cdp", "agent_inspect overview missing backend capabilities");
   assert(agentOverview.evidence?.diagnostics, "agent_inspect overview missing diagnostics evidence");
   assert(Array.isArray(agentOverview.nextTools) && agentOverview.nextTools.length >= 1, "agent_inspect overview missing nextTools");
   assert(agentOverview.toolPlan?.firstPass?.length >= 1, "agent_inspect overview missing toolPlan");

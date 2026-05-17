@@ -7,6 +7,39 @@ import http from "node:http";
 import CDP from "chrome-remote-interface";
 
 const root = process.cwd();
+const DIRECT_CDP_CORE_DOMAINS = [
+  "Accessibility",
+  "Audits",
+  "Browser",
+  "CacheStorage",
+  "Console",
+  "CSS",
+  "Database",
+  "Debugger",
+  "DOM",
+  "DOMDebugger",
+  "DOMSnapshot",
+  "Emulation",
+  "Fetch",
+  "HeapProfiler",
+  "IO",
+  "Input",
+  "Inspector",
+  "Log",
+  "Memory",
+  "Network",
+  "Overlay",
+  "Page",
+  "Performance",
+  "Profiler",
+  "Runtime",
+  "Security",
+  "ServiceWorker",
+  "Storage",
+  "SystemInfo",
+  "Target",
+  "Tracing",
+];
 
 function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -938,7 +971,7 @@ function buildAgentInspectToolPlan(focus, options = {}) {
   }
   return {
     ...base,
-    firstPass: ["agent_inspect focus=overview"],
+    firstPass: ["devtools_backend_capabilities", "agent_inspect focus=overview"],
     drillDown: ["agent_inspect focus=network", "agent_inspect focus=storage", "agent_inspect focus=console", "agent_inspect focus=dom", "agent_inspect focus=evidence"],
     captureHint: "Start capture before reproducing behavior you want Network/Console evidence for.",
     objectiveBoundary: "Overview organizes signals; it does not decide whether a finding is a vulnerability.",
@@ -6140,6 +6173,7 @@ function registerStandaloneBrowserTools(tools, cdpPort, profileRegistry, default
       };
 
       if (focus === "overview") {
+        out.evidence.backendCapabilities = await safeCall("devtools_backend_capabilities");
         out.evidence.diagnostics = await safeCall("browser_page_diagnostics", { limit });
         out.evidence.signals = objectiveSignals(await safeCall("browser_risk_summary", { limit, includeTokenScan: false }));
         out.evidence.network = await safeProfileCall("profile_traffic_summary", { limit });
@@ -6907,6 +6941,49 @@ function registerStandaloneBrowserTools(tools, cdpPort, profileRegistry, default
         evidenceDir: profile.evidenceDir,
         cdpEndpoint: `http://127.0.0.1:${cdpPort}`,
         capture: profileRegistry.getCapture(profile.name),
+      });
+    },
+  });
+
+  tools.set("devtools_backend_capabilities", {
+    name: "devtools_backend_capabilities",
+    description: "Unified Agent DevTools API: explain current backend layer, CDP transport, supported domains, and evidence boundaries.",
+    parameters: { type: "object", properties: { profile: { type: "string" } } },
+    async execute(_id, params) {
+      const profile = await resolveProfile(params?.profile);
+      return toolResult({
+        backend: "managed-cdp",
+        layer: "direct-cdp",
+        transport: "Chrome DevTools Protocol over remote debugging endpoint",
+        cdpEndpoint: `http://127.0.0.1:${cdpPort}`,
+        profile: profile.name,
+        tabId: profile.tabId,
+        evidenceDir: profile.evidenceDir,
+        capture: profileRegistry.getCapture(profile.name),
+        rawCommandTool: "devtools_cdp_command",
+        rawCommandTransport: "chrome-remote-interface client.send against the selected page target",
+        domainAccess: {
+          mode: "direct-remote-debugging-cdp",
+          expectedBroaderThanChromeDebugger: true,
+          coreDomains: DIRECT_CDP_CORE_DOMAINS,
+          note: "Direct CDP generally exposes the most complete browser automation/debugging surface available to this runtime. The friendly devtools_* wrappers target ordinary web-page F12 workflows; devtools_cdp_command is the escape hatch for unwrapped page-target methods.",
+        },
+        bestUseCases: [
+          "Agent-owned browser profiles for repeatable target testing.",
+          "Fuller CDP coverage than the Personal Chrome extension layer.",
+          "Clean evidence capture with explicit profile-scoped traffic and artifact directories.",
+        ],
+        recordingSemantics: [
+          "Network/Console/Security events are complete only for activity after capture starts.",
+          "For repeatable evidence, run devtools_capture_start, then devtools_hard_reload or reproduce the action.",
+          "If Chrome did not retain a response body or a value only lived briefly in JavaScript memory, the tool reports missing evidence instead of inventing it.",
+        ],
+        knownBoundaries: [
+          "Chrome internal pages, browser UI, and system dialogs are outside the ordinary-web-page F12 target.",
+          "Cross-origin iframe internals follow the browser security model.",
+          "Some browser-process domains may need future browser-level session wrappers instead of the current page-target devtools_cdp_command.",
+        ],
+        companionLayer: "personal-chrome chrome.debugger",
       });
     },
   });

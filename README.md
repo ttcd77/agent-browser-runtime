@@ -181,6 +181,7 @@ Chrome Extension Mode and Managed Browser Mode:
 - `devtools_attach`
 - `devtools_detach`
 - `devtools_status`
+- `devtools_backend_capabilities`
 - `devtools_capture_start`
 - `devtools_capture_stop`
 - `devtools_capture_clear`

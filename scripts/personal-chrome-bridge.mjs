@@ -64,6 +64,7 @@ function normalizeCommand(toolName) {
     devtools_attach: "chrome_devtools_attach",
     devtools_detach: "chrome_devtools_detach",
     devtools_status: "chrome_devtools_status",
+    devtools_backend_capabilities: "chrome_backend_capabilities",
     devtools_capture_start: "chrome_capture_start",
     devtools_capture_stop: "chrome_capture_stop",
     devtools_capture_clear: "chrome_capture_clear",
@@ -401,7 +402,7 @@ function buildAgentInspectToolPlan(focus, options = {}) {
   }
   return {
     ...base,
-    firstPass: ["agent_inspect focus=overview"],
+    firstPass: ["devtools_backend_capabilities", "agent_inspect focus=overview"],
     drillDown: ["agent_inspect focus=network", "agent_inspect focus=storage", "agent_inspect focus=console", "agent_inspect focus=dom", "agent_inspect focus=evidence"],
     captureHint: "Start capture before reproducing behavior you want Network/Console evidence for.",
     objectiveBoundary: "Overview organizes signals; it does not decide whether a finding is a vulnerability.",
@@ -434,6 +435,7 @@ async function runAgentInspect(params = {}) {
   };
 
   if (focus === "overview") {
+    out.evidence.backendCapabilities = await safeBridgeTool("devtools_backend_capabilities", base);
     out.evidence.diagnostics = await safeBridgeTool("devtools_page_diagnostics", withBase({ limit }));
     out.evidence.signals = objectiveSignals(await safeBridgeTool("devtools_signal_summary", withBase({ limit, includeTokenScan: false })));
     out.evidence.network = await safeBridgeTool("devtools_network_summary", withBase({ limit }));
@@ -563,6 +565,7 @@ const tools = {
   personal_chrome_devtools_attach: "Attach Chrome debugger to a real Chrome tab and enable Network/Page/Runtime events.",
   personal_chrome_devtools_detach: "Detach Chrome debugger from a real Chrome tab.",
   personal_chrome_devtools_status: "Show debugger attachment and captured event counts for a real Chrome tab.",
+  personal_chrome_backend_capabilities: "Explain the Personal Chrome chrome.debugger layer, allowed CDP domains, recording semantics, and boundaries.",
   personal_chrome_capture_start: "Start explicit F12 capture for a real Chrome tab. Clears previous capture by default.",
   personal_chrome_capture_stop: "Stop explicit F12 capture for a real Chrome tab.",
   personal_chrome_capture_clear: "Clear captured F12 events for a real Chrome tab.",
@@ -629,6 +632,7 @@ const tools = {
   devtools_attach: "Unified Agent DevTools API: attach to DevTools/F12 data layer.",
   devtools_detach: "Unified Agent DevTools API: detach from DevTools/F12 data layer.",
   devtools_status: "Unified Agent DevTools API: inspect attachment and capture status.",
+  devtools_backend_capabilities: "Unified Agent DevTools API: explain current backend layer, CDP transport, supported domains, and evidence boundaries.",
   devtools_capture_start: "Unified Agent DevTools API: start explicit F12 capture.",
   devtools_capture_stop: "Unified Agent DevTools API: stop explicit F12 capture.",
   devtools_capture_clear: "Unified Agent DevTools API: clear captured F12 events.",

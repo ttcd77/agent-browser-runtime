@@ -11,6 +11,7 @@ Use this for an agent dashboard or a quick diagnosis before drilling down:
 | Question | Tool |
 |---|---|
 | What page am I on and is the browser healthy? | `devtools_page_diagnostics` |
+| Which backend layer am I using and what can it see? | `devtools_backend_capabilities` |
 | What F12 signals should I inspect first? | `devtools_signal_summary` |
 | Is capture running? | `devtools_capture_status` |
 | What failed or slow requests happened? | `devtools_network_summary` |

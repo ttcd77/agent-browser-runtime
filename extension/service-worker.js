@@ -1,6 +1,36 @@
 const DEFAULT_BRIDGE_URL = "ws://127.0.0.1:17336/extension";
 const DEBUGGER_PROTOCOL_VERSION = "1.3";
 const MAX_DEVTOOLS_EVENTS = 1000;
+const CHROME_DEBUGGER_ALLOWED_DOMAINS = [
+  "Accessibility",
+  "Audits",
+  "CacheStorage",
+  "Console",
+  "CSS",
+  "Database",
+  "Debugger",
+  "DOM",
+  "DOMDebugger",
+  "DOMSnapshot",
+  "Emulation",
+  "Fetch",
+  "IO",
+  "Input",
+  "Inspector",
+  "Log",
+  "Network",
+  "Overlay",
+  "Page",
+  "Performance",
+  "Profiler",
+  "Runtime",
+  "Security",
+  "ServiceWorker",
+  "Storage",
+  "Target",
+  "Tracing",
+  "WebAudio",
+];
 let socket = null;
 let reconnectTimer = null;
 let heartbeatTimer = null;
@@ -152,6 +182,8 @@ async function executeCommand(command, params) {
       return await chromeDevtoolsDetach(params);
     case "chrome_devtools_status":
       return await chromeDevtoolsStatus(params);
+    case "chrome_backend_capabilities":
+      return await chromeBackendCapabilities(params);
     case "chrome_capture_start":
       return await chromeCaptureStart(params);
     case "chrome_capture_stop":
@@ -274,6 +306,48 @@ async function chromeStatus() {
     tabs: tabs.length,
     activeTab: pickTab(active),
     extensionVersion: chrome.runtime.getManifest().version,
+  };
+}
+
+async function chromeBackendCapabilities(params = {}) {
+  const status = await chromeStatus().catch((error) => ({ ok: false, error: String(error?.message || error) }));
+  let targetStatus = null;
+  try {
+    targetStatus = await chromeDevtoolsStatus(params);
+  } catch (error) {
+    targetStatus = { attached: false, error: String(error?.message || error) };
+  }
+  return {
+    backend: "personal-chrome",
+    layer: "chrome.debugger",
+    transport: "Chrome extension bridge over chrome.debugger",
+    protocolVersion: DEBUGGER_PROTOCOL_VERSION,
+    activeTab: status.activeTab || null,
+    extensionVersion: chrome.runtime.getManifest().version,
+    targetStatus,
+    rawCommandTool: "devtools_cdp_command",
+    rawCommandTransport: "chrome.debugger.sendCommand",
+    domainAccess: {
+      mode: "allowlisted-extension-cdp-transport",
+      allowedDomains: CHROME_DEBUGGER_ALLOWED_DOMAINS,
+      note: "chrome.debugger intentionally exposes an allowlisted subset of Chrome DevTools Protocol domains for extensions.",
+    },
+    bestUseCases: [
+      "Inspect a page the user is already viewing in their real Chrome profile.",
+      "Use real login state, cookies, extensions, and browser profile context with explicit local authorization.",
+      "Debug a visible phenomenon without relaunching a managed browser.",
+    ],
+    recordingSemantics: [
+      "Network/Console/Security events are complete only for activity after attach/capture starts.",
+      "For repeatable evidence, run devtools_attach, devtools_capture_start, then devtools_hard_reload or reproduce the action.",
+      "If Chrome did not retain a response body or a value only lived briefly in JavaScript memory, the tool reports missing evidence instead of inventing it.",
+    ],
+    knownBoundaries: [
+      "Chrome internal pages, browser UI, system dialogs, and extension internals are not the ordinary-web-page target.",
+      "Cross-origin iframe internals follow the browser security model.",
+      "Some CDP domains available through direct remote debugging are not exposed through chrome.debugger.",
+    ],
+    fallbackLayer: "managed-cdp",
   };
 }
 

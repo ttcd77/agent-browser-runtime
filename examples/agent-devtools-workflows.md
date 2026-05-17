@@ -5,6 +5,14 @@ Browser mode and Personal Chrome mode as long as the selected backend is running
 
 ## First Pass
 
+Know which browser layer you are using:
+
+```bash
+curl -X POST http://127.0.0.1:17335/tool/devtools_backend_capabilities \
+  -H "content-type: application/json" \
+  -d "{\"profile\":\"default\"}"
+```
+
 ```bash
 curl -X POST http://127.0.0.1:17335/tool/agent_inspect \
   -H "content-type: application/json" \

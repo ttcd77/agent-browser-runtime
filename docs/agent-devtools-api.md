@@ -10,6 +10,10 @@ The user should not need to know whether the browser is:
 The agent should call the same `devtools_*` tools in both modes. Backend-specific
 tools may exist for debugging, but they are not the product contract.
 
+Use `devtools_backend_capabilities` when an agent needs to know whether it is
+running against Personal Chrome (`chrome.debugger`) or Managed Browser (direct
+CDP), and what evidence boundaries apply.
+
 ## Product Shape
 
 ```text
@@ -101,6 +105,7 @@ DevTools/F12 data layer:
 - `devtools_attach`
 - `devtools_detach`
 - `devtools_status`
+- `devtools_backend_capabilities`
 - `devtools_capture_start`
 - `devtools_capture_stop`
 - `devtools_capture_clear`
