@@ -135,7 +135,7 @@ DevTools UI source tree.
 | Agent-readable timing/resource/long-task summary | `devtools_performance_insights` |
 | LCP/layout shift/long task/event timing/long animation frame observer entries | `devtools_performance_observer` |
 | Chrome trace capture | `devtools_chrome_trace` |
-| Query saved trace events by name/category/duration/thread/time range | `devtools_trace_query` |
+| Query saved trace events by name/category/duration/thread/time range, with same-thread context windows | `devtools_trace_query` |
 | Compare two saved trace captures | `devtools_trace_compare` |
 | JavaScript CPU profile and hotspot summary | `devtools_cpu_profile` |
 | JS/CSS coverage summary | `devtools_coverage_snapshot` |

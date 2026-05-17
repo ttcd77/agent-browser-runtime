@@ -276,10 +276,14 @@ try {
     tracePath: trace.tracePath,
     category: "devtools.timeline",
     limit: 5,
+    contextEvents: 2,
+    contextWindows: 2,
   });
   assert(traceQuery.backend === "managed-cdp", `trace query wrong backend: ${JSON.stringify(traceQuery)}`);
   assert(traceQuery.totalEvents > 0, "trace query missing total event count");
   assert(Array.isArray(traceQuery.events), "trace query missing events array");
+  assert(Array.isArray(traceQuery.contextWindows), "trace query missing context windows");
+  assert(traceQuery.drilldown?.contextWindowBasis?.includes("same-thread"), `trace query missing drilldown context basis: ${JSON.stringify(traceQuery.drilldown)}`);
   assert(Array.isArray(traceQuery.captureBoundaries), "trace query missing capture boundaries");
 
   const secondTrace = await callTool(baseUrl, "devtools_chrome_trace", {

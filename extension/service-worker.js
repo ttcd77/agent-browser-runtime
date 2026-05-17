@@ -478,6 +478,17 @@ async function chromeTabs() {
   return { tabs: tabs.map(pickTab) };
 }
 
+async function waitForTabReady(tabId, waitMs = 1000) {
+  const deadline = Date.now() + waitMs;
+  let current = await chrome.tabs.get(tabId).catch(() => null);
+  while (Date.now() < deadline) {
+    current = await chrome.tabs.get(tabId).catch(() => current);
+    if (current?.status === "complete" && current.url && !String(current.url).startsWith("chrome-error://")) return current;
+    await delay(100);
+  }
+  return current;
+}
+
 async function chromeOpen(params = {}) {
   const url = new URL(String(params.url || "about:blank"));
   if (!/^https?:$/.test(url.protocol)) throw new Error("url must use http or https");
@@ -489,8 +500,7 @@ async function chromeOpen(params = {}) {
     const target = await getTargetTab(params);
     tab = await chrome.tabs.update(target.id, { url: url.toString(), active: params.active !== false });
   }
-  if (waitMs) await delay(waitMs);
-  const current = tab?.id ? await chrome.tabs.get(tab.id).catch(() => tab) : tab;
+  const current = tab?.id ? await waitForTabReady(tab.id, waitMs) : tab;
   return {
     tab: pickTab(current || tab),
     requestedUrl: url.toString(),

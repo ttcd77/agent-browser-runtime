@@ -291,10 +291,14 @@ assert(chromeTrace.tracePath, `Personal Chrome trace missing path: ${JSON.string
 const traceQuery = await callTool("devtools_trace_query", {
   tracePath: chromeTrace.tracePath,
   limit: 5,
+  contextEvents: 2,
+  contextWindows: 2,
 });
 assert(traceQuery.backend === "personal-chrome", `Personal Chrome trace query wrong backend: ${JSON.stringify(traceQuery)}`);
 assert(traceQuery.totalEvents > 0, "Personal Chrome trace query missing total event count");
 assert(Array.isArray(traceQuery.events), "Personal Chrome trace query missing events array");
+assert(Array.isArray(traceQuery.contextWindows), "Personal Chrome trace query missing context windows");
+assert(traceQuery.drilldown?.contextWindowBasis?.includes("same-thread"), `Personal Chrome trace query missing drilldown context basis: ${JSON.stringify(traceQuery.drilldown)}`);
 
 const secondChromeTrace = await callTool("devtools_chrome_trace", {
   durationMs: 250,

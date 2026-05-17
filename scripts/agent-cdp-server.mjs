@@ -1809,7 +1809,7 @@ function summarizeTraceQuery(events = [], params = {}) {
       .slice(0, 25)
       .map(([key, count]) => ({ key, count }));
   };
-  const returnedEvents = sorted.slice(0, limit).map((event) => ({
+  const traceRow = (event) => ({
     name: event.name || "",
     category: event.cat || "",
     phase: event.ph || "",
@@ -1819,7 +1819,32 @@ function summarizeTraceQuery(events = [], params = {}) {
     relativeStartMs: Number.isFinite(minTs) && Number.isFinite(Number(event.ts)) ? Math.round(((Number(event.ts) - minTs) / 1000) * 100) / 100 : null,
     durationMs: Math.round((Number(event.dur || 0) / 1000) * 100) / 100,
     args: event.args || {},
-  }));
+  });
+  const returnedEvents = sorted.slice(0, limit).map(traceRow);
+  const contextEventCount = Math.max(0, Math.min(typeof params.contextEvents === "number" ? params.contextEvents : 2, 10));
+  const contextWindowCount = Math.max(0, Math.min(typeof params.contextWindows === "number" ? params.contextWindows : 3, 10));
+  const chronological = [...events].sort((a, b) => Number(a.ts || 0) - Number(b.ts || 0));
+  const threadKey = (event) => `${event.pid ?? "?"}:${event.tid ?? "?"}`;
+  const sameThreadWindow = (target) => {
+    const targetTs = Number(target.ts);
+    const threadEvents = chronological.filter((event) => threadKey(event) === threadKey(target));
+    const index = threadEvents.findIndex((event) => event === target || (event.ts === target.ts && event.name === target.name && event.dur === target.dur));
+    const safeIndex = index < 0 ? 0 : index;
+    const start = Math.max(0, safeIndex - contextEventCount);
+    const end = Math.min(threadEvents.length, safeIndex + contextEventCount + 1);
+    return {
+      target: traceRow(target),
+      thread: threadKey(target),
+      sameThreadEventCount: threadEvents.length,
+      before: threadEvents.slice(start, safeIndex).map(traceRow),
+      after: threadEvents.slice(safeIndex + 1, end).map(traceRow),
+      windowStartRelativeMs: Number.isFinite(minTs) && Number.isFinite(targetTs) ? Math.round(((threadEvents[start]?.ts - minTs) / 1000) * 100) / 100 : null,
+      windowEndRelativeMs: Number.isFinite(minTs) && Number.isFinite(targetTs) ? Math.round(((threadEvents[end - 1]?.ts - minTs) / 1000) * 100) / 100 : null,
+    };
+  };
+  const contextWindows = contextEventCount > 0
+    ? sorted.slice(0, contextWindowCount).map(sameThreadWindow)
+    : [];
   const timestamps = events.map((event) => Number(event.ts)).filter(Number.isFinite);
   const maxTs = Math.max(...timestamps);
   return {
@@ -1846,9 +1871,21 @@ function summarizeTraceQuery(events = [], params = {}) {
     topNames: countMap(matches, (event) => event.name),
     threads: countMap(matches, (event) => `${event.pid}:${event.tid}`),
     events: returnedEvents,
+    contextWindows,
+    drilldown: {
+      contextEventsPerSide: contextEventCount,
+      contextWindowCount: contextWindows.length,
+      contextWindowBasis: "same-thread chronological trace events around the first returned matches",
+      nextQueries: [
+        "Narrow by threadId/processId from a context window.",
+        "Use minDurationMs to focus on long events.",
+        "Use name/category filters from topNames/categoryCounts for a smaller window.",
+      ],
+    },
     captureBoundaries: [
       "This reads a saved Chrome trace JSON file; it cannot recover trace events that were not captured.",
       "Durations are reported from Chrome trace event dur fields when present.",
+      "Context windows are same-thread neighboring events, not causal proof.",
       "Use devtools_chrome_trace around the smallest reproducible action before querying.",
     ],
   };

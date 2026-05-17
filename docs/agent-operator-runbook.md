@@ -69,6 +69,28 @@ Read `redirectChain`, `status`, response headers, `initiator`, and
 during capture; it does not infer missing historical redirects from cache or
 server logs.
 
+## Trace Drilldown
+
+Capture a short trace around the smallest reproducible action:
+
+```bash
+curl -X POST http://127.0.0.1:17335/tool/devtools_chrome_trace \
+  -H "content-type: application/json" \
+  -d "{\"profile\":\"default\",\"durationMs\":1000,\"maxEvents\":20}"
+```
+
+Then query by category, event name, duration, thread, or time range:
+
+```bash
+curl -X POST http://127.0.0.1:17335/tool/devtools_trace_query \
+  -H "content-type: application/json" \
+  -d "{\"profile\":\"default\",\"tracePath\":\"<trace-path>\",\"minDurationMs\":5,\"contextEvents\":2}"
+```
+
+`contextWindows` returns neighboring events on the same trace thread around the
+first matched events. Use it like the Performance panel's local context: helpful
+for orientation, but not causal proof by itself.
+
 ## One-Call Evidence Pack
 
 For a repeatable first-pass evidence package:
