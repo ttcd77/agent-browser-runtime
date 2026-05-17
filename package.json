@@ -16,10 +16,13 @@
     "personal:chrome": "node scripts/personal-chrome-bridge.mjs",
     "smoke:personal": "node scripts/personal-chrome-smoke.mjs",
     "contract:devtools": "node scripts/devtools-contract-check.mjs",
+    "dev:loop-check": "node scripts/continuous-dev-check.mjs",
     "smoke:server": "npm run build && node scripts/agent-server-smoke.mjs",
     "smoke:f12": "npm run build && node scripts/devtools-f12-smoke.mjs",
     "research:pack": "node scripts/security-research-pack-cli.mjs",
-    "check": "npm run build && npm run test"
+    "check": "npm run build && npm run test",
+    "check:devtools": "npm run contract:devtools && npm run smoke:f12 && npm run smoke:personal",
+    "check:full": "npm run check && npm run check:devtools"
   },
   "dependencies": {
     "chrome-remote-interface": "^0.34.0",
