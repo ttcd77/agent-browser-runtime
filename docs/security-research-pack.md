@@ -32,8 +32,9 @@ The runtime then performs a bounded workflow:
    `overview`, `network`, `storage`, `console`, `sources`, and `performance`.
 5. Save the evidence artifacts the agent would normally need to ask for
    separately:
-   HAR, Application export, Chrome trace, trace summary, and compact evidence
-   bundle.
+   HAR, Application export, Chrome trace, trace summary, compact evidence
+   bundle, evidence manifest, request correlation graph, auth boundary report,
+   and worker/frame boundary report.
 6. Return one structured response with summaries, completeness notes, artifact
    paths, and suggested next tools for drill-down.
 
@@ -53,6 +54,10 @@ Typical output includes:
 - saved HAR path,
 - saved Application export path,
 - saved evidence bundle path,
+- saved evidence manifest path with file hashes,
+- saved request correlation graph path,
+- saved auth boundary report path,
+- saved worker/frame boundary report path,
 - capture boundaries so the agent knows what time window was recorded.
 
 The saved paths are local files under the selected profile evidence directory.
@@ -86,9 +91,10 @@ step result instead of silently dropping it.
 1. Call `devtools_backend_capabilities`.
 2. Call `devtools_security_research_pack`.
 3. Read `summary` and `steps`.
-4. Open the saved evidence bundle.
-5. Drill down with `devtools_request_detail`, `devtools_request_payload`,
-   `devtools_token_scan`, `devtools_storage_snapshot`, `devtools_source_get`,
-   or `devtools_trace_query` only when needed.
+4. Open the saved evidence bundle and manifest.
+5. Use the correlation graph and auth boundary report to choose drill-down.
+6. Drill down with `devtools_request_detail`, `devtools_request_payload`,
+   `devtools_capture_diff`, `devtools_token_scan`, `devtools_storage_snapshot`,
+   `devtools_source_get`, or `devtools_trace_query` only when needed.
 
 This keeps the default flow simple while preserving the lower-level F12 tools.

@@ -121,6 +121,10 @@ const researchPack = await callTool("devtools_security_research_pack", {
 });
 assert(researchPack.backend === "personal-chrome", `Personal Chrome security research pack wrong backend: ${JSON.stringify(researchPack)}`);
 assert(researchPack.summary?.evidenceBundlePath, "Personal Chrome security research pack missing bundle path");
+assert(researchPack.summary?.evidenceManifestPath, "Personal Chrome security research pack missing evidence manifest path");
+assert(researchPack.summary?.correlationGraphPath, "Personal Chrome security research pack missing correlation graph path");
+assert(researchPack.summary?.authBoundaryReportPath, "Personal Chrome security research pack missing auth boundary report path");
+assert(researchPack.summary?.workerFrameReportPath, "Personal Chrome security research pack missing worker/frame report path");
 assert(typeof researchPack.summary?.requestCount === "number", "Personal Chrome security research pack missing request count");
 
 console.log("Personal Chrome smoke passed:");

@@ -229,9 +229,7 @@ async function executeCommand(command, params) {
     case "chrome_page_diagnostics":
       return await chromePageDiagnostics(params);
     case "chrome_signal_summary":
-      return await chromeRiskSummary(params);
-    case "chrome_risk_summary":
-      return await chromeRiskSummary(params);
+      return await chromeSignalSummary(params);
     case "chrome_issues_log":
       return await chromeIssuesLog(params);
     case "chrome_frame_tree":
@@ -724,11 +722,11 @@ function summarizeCookies(cookies = []) {
     if (!isSession && Number(expires) < nowSeconds) expiredCount += 1;
     const lowerName = String(cookie.name || "").toLowerCase();
     const likelySensitive = looksSensitiveKey(lowerName) || looksSensitiveValue(cookie.value);
-    const risks = [];
-    if (!cookie.secure) risks.push("missing-secure");
-    if (likelySensitive && !cookie.httpOnly) risks.push("sensitive-not-httponly");
-    if (!cookie.sameSite || /no_restriction|none/i.test(String(cookie.sameSite))) risks.push("samesite-none-or-unspecified");
-    if (risks.length) {
+    const attributeSignals = [];
+    if (!cookie.secure) attributeSignals.push("missing-secure");
+    if (likelySensitive && !cookie.httpOnly) attributeSignals.push("sensitive-not-httponly");
+    if (!cookie.sameSite || /no_restriction|none/i.test(String(cookie.sameSite))) attributeSignals.push("samesite-none-or-unspecified");
+    if (attributeSignals.length) {
       findings.push({
         name: cookie.name,
         domain: cookie.domain,
@@ -739,7 +737,7 @@ function summarizeCookies(cookies = []) {
         session: isSession,
         expiresAt: cookieExpiry(cookie),
         likelySensitive,
-        risks,
+        attributeSignals,
       });
     }
   }
@@ -854,14 +852,14 @@ function severityRank(severity) {
   return { high: 3, medium: 2, low: 1, info: 0 }[severity] ?? 0;
 }
 
-function buildRiskSummary({ diagnostics = {}, cookieSummary = {}, serviceWorkerSummary = {}, tokenScan = null } = {}) {
-  const findings = [];
+function buildSignalSummary({ diagnostics = {}, cookieSummary = {}, serviceWorkerSummary = {}, tokenScan = null } = {}) {
+  const signals = [];
   const network = diagnostics.network || {};
   const storage = diagnostics.storage || {};
   const page = diagnostics.page || {};
   const security = diagnostics.security || {};
   if (network.failedCount > 0) {
-    findings.push({
+    signals.push({
       id: "network.failed-requests",
       severity: "medium",
       panel: "Network",
@@ -872,7 +870,7 @@ function buildRiskSummary({ diagnostics = {}, cookieSummary = {}, serviceWorkerS
     });
   }
   if (network.serviceWorkerCount > 0) {
-    findings.push({
+    signals.push({
       id: "network.service-worker-responses",
       severity: "info",
       panel: "Network",
@@ -883,19 +881,20 @@ function buildRiskSummary({ diagnostics = {}, cookieSummary = {}, serviceWorkerS
   }
   const cookieFindings = cookieSummary.findings || storage.cookieSummary?.findings || [];
   for (const finding of cookieFindings.slice(0, 20)) {
-    const hasSensitiveRisk = finding.risks?.includes("sensitive-not-httponly");
-    findings.push({
+    const attributeSignals = finding.attributeSignals || [];
+    const hasSensitiveSignal = attributeSignals.includes("sensitive-not-httponly");
+    signals.push({
       id: `cookie.${finding.domain || "domain"}.${finding.name || "cookie"}`,
-      severity: hasSensitiveRisk ? "high" : "medium",
+      severity: hasSensitiveSignal ? "high" : "medium",
       panel: "Application",
-      title: `Cookie risk: ${finding.name}`,
-      detail: (finding.risks || []).join(", "),
+      title: `Cookie attribute signal: ${finding.name}`,
+      detail: attributeSignals.join(", "),
       evidence: finding,
       nextTools: ["devtools_cookie_summary", "devtools_storage_snapshot", "devtools_application_export"],
     });
   }
   if (cookieSummary.insecureCount > 0 || storage.cookieSummary?.insecureCount > 0) {
-    findings.push({
+    signals.push({
       id: "cookies.insecure-count",
       severity: "medium",
       panel: "Application",
@@ -905,7 +904,7 @@ function buildRiskSummary({ diagnostics = {}, cookieSummary = {}, serviceWorkerS
     });
   }
   if (page?.isSecureContext === false) {
-    findings.push({
+    signals.push({
       id: "security.insecure-context",
       severity: "high",
       panel: "Security",
@@ -917,7 +916,7 @@ function buildRiskSummary({ diagnostics = {}, cookieSummary = {}, serviceWorkerS
   const swRegistrations = serviceWorkerSummary.registrationCount ?? storage.serviceWorkerRegistrations ?? 0;
   const cacheCount = serviceWorkerSummary.cacheCount ?? storage.cacheStorageCaches ?? 0;
   if (swRegistrations > 0 || cacheCount > 0) {
-    findings.push({
+    signals.push({
       id: "application.service-worker-cache-state",
       severity: "info",
       panel: "Application",
@@ -931,7 +930,7 @@ function buildRiskSummary({ diagnostics = {}, cookieSummary = {}, serviceWorkerS
     });
   }
   if (tokenScan?.findingCount > 0 || tokenScan?.findings?.length > 0) {
-    findings.push({
+    signals.push({
       id: "tokens.detected",
       severity: "high",
       panel: "Application",
@@ -942,7 +941,7 @@ function buildRiskSummary({ diagnostics = {}, cookieSummary = {}, serviceWorkerS
     });
   }
   if (security?.tlsHosts && Object.keys(security.tlsHosts).length === 0 && page?.protocol === "https:") {
-    findings.push({
+    signals.push({
       id: "security.no-tls-metadata",
       severity: "low",
       panel: "Security",
@@ -951,17 +950,15 @@ function buildRiskSummary({ diagnostics = {}, cookieSummary = {}, serviceWorkerS
       nextTools: ["devtools_capture_start", "devtools_hard_reload", "devtools_security_summary"],
     });
   }
-  findings.sort((a, b) => severityRank(b.severity) - severityRank(a.severity));
+  signals.sort((a, b) => severityRank(b.severity) - severityRank(a.severity));
   return {
     summaryKind: "signals",
-    signalCount: findings.length,
-    riskCount: findings.length,
-    signals: findings,
-    highCount: findings.filter((finding) => finding.severity === "high").length,
-    mediumCount: findings.filter((finding) => finding.severity === "medium").length,
-    lowCount: findings.filter((finding) => finding.severity === "low").length,
-    infoCount: findings.filter((finding) => finding.severity === "info").length,
-    findings,
+    signalCount: signals.length,
+    signals,
+    highCount: signals.filter((finding) => finding.severity === "high").length,
+    mediumCount: signals.filter((finding) => finding.severity === "medium").length,
+    lowCount: signals.filter((finding) => finding.severity === "low").length,
+    infoCount: signals.filter((finding) => finding.severity === "info").length,
   };
 }
 
@@ -2558,7 +2555,7 @@ async function chromePageDiagnostics(params) {
   };
 }
 
-async function chromeRiskSummary(params) {
+async function chromeSignalSummary(params) {
   const diagnostics = await chromePageDiagnostics(params);
   const cookieResult = await chromeCookieSummary(params);
   const serviceWorkerSummary = await chromeServiceWorkerSummary(params).catch((error) => ({
@@ -2567,7 +2564,7 @@ async function chromeRiskSummary(params) {
   const tokenScan = params.includeTokenScan
     ? await chromeTokenScan(params).catch((error) => ({ error: String(error?.message || error), findings: [], findingCount: 0 }))
     : null;
-  const summary = buildRiskSummary({
+  const summary = buildSignalSummary({
     diagnostics,
     cookieSummary: cookieResult.summary,
     serviceWorkerSummary,

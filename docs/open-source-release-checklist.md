@@ -25,6 +25,8 @@ The repo should make these engineering signals obvious:
 - F12 parity as an agent-facing tool layer, not a screenshot toy.
 - Unified `devtools_*` contract across Personal Chrome and Managed Browser.
 - Structured evidence capture for security research.
+- Evidence manifest, request correlation graph, auth boundary report, and
+  before/after diff as objective tools rather than model-like judgment.
 - Profile-scoped browser state and evidence directories.
 - Raw CDP escape hatch via `devtools_cdp_command`.
 - Contract tests that prevent backend drift.

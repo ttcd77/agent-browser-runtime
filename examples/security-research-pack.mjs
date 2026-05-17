@@ -46,6 +46,10 @@ console.log(JSON.stringify({
     applicationExportPath: pack.summary?.applicationExportPath,
     chromeTracePath: pack.summary?.chromeTracePath,
     evidenceBundlePath: pack.summary?.evidenceBundlePath,
+    evidenceManifestPath: pack.summary?.evidenceManifestPath,
+    correlationGraphPath: pack.summary?.correlationGraphPath,
+    authBoundaryReportPath: pack.summary?.authBoundaryReportPath,
+    workerFrameReportPath: pack.summary?.workerFrameReportPath,
   },
   nextTools: pack.nextTools,
 }, null, 2));

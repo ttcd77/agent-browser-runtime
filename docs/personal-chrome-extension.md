@@ -107,7 +107,6 @@ Unified Agent DevTools tools:
 - `devtools_security_summary`
 - `devtools_page_diagnostics`
 - `devtools_signal_summary`
-- `devtools_risk_summary`
 - `devtools_issues_log`
 - `devtools_accessibility_snapshot`
 - `devtools_frame_tree`
@@ -136,6 +135,11 @@ Unified Agent DevTools tools:
 - `devtools_source_map_metadata`
 - `devtools_global_search`
 - `devtools_evidence_bundle`
+- `devtools_evidence_manifest`
+- `devtools_request_correlation_graph`
+- `devtools_capture_diff`
+- `devtools_auth_boundary_report`
+- `devtools_worker_frame_deep_dive`
 - `devtools_security_research_pack`
 - `devtools_sources_search`
 - `devtools_performance_trace`
@@ -187,7 +191,6 @@ Backend-specific aliases:
 - `personal_chrome_security_summary`
 - `personal_chrome_page_diagnostics`
 - `personal_chrome_signal_summary`
-- `personal_chrome_risk_summary`
 - `personal_chrome_issues_log`
 - `personal_chrome_accessibility_snapshot`
 - `personal_chrome_frame_tree`
@@ -215,6 +218,11 @@ Backend-specific aliases:
 - `personal_chrome_source_map_metadata`
 - `personal_chrome_global_search`
 - `personal_chrome_evidence_bundle`
+- `personal_chrome_evidence_manifest`
+- `personal_chrome_request_correlation_graph`
+- `personal_chrome_capture_diff`
+- `personal_chrome_auth_boundary_report`
+- `personal_chrome_worker_frame_deep_dive`
 - `personal_chrome_security_research_pack`
 - `personal_chrome_sources_search`
 - `personal_chrome_performance_trace`

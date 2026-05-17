@@ -130,7 +130,6 @@ DevTools/F12 data layer:
 - `devtools_security_summary`
 - `devtools_page_diagnostics`
 - `devtools_signal_summary`
-- `devtools_risk_summary`
 - `devtools_issues_log`
 - `devtools_accessibility_snapshot`
 - `devtools_frame_tree`
@@ -159,6 +158,11 @@ DevTools/F12 data layer:
 - `devtools_source_map_metadata`
 - `devtools_global_search`
 - `devtools_evidence_bundle`
+- `devtools_evidence_manifest`
+- `devtools_request_correlation_graph`
+- `devtools_capture_diff`
+- `devtools_auth_boundary_report`
+- `devtools_worker_frame_deep_dive`
 - `devtools_security_research_pack`
 - `devtools_sources_search`
 - `devtools_performance_trace`
@@ -292,8 +296,7 @@ Raw F12 data can be huge. Agent-facing panels should start with summary tools:
 - `devtools_signal_summary` for the agent's first evidence pass across Network,
   Cookies, Storage, Service Workers, Security, and optional token scan. It does
   not decide whether something is a vulnerability; it lists objective F12
-  signals and `nextTools` for drill-down. `devtools_risk_summary` remains as a
-  compatibility alias.
+  signals and `nextTools` for drill-down.
 - `devtools_coverage_snapshot` for short JS/CSS usage snapshots.
 
 The raw tools remain available for drill-down:

@@ -73,6 +73,11 @@ Use this for an agent dashboard or a quick diagnosis before drilling down:
 | Trace token-like data through fetch/XHR/storage/cookies | `devtools_token_flow_trace` |
 | Search Network, Sources, and Application evidence | `devtools_global_search` |
 | Export compact F12 evidence bundle | `devtools_evidence_bundle` |
+| Write artifact manifest with hashes and provenance | `devtools_evidence_manifest` |
+| Build request/script/frame/console correlation graph | `devtools_request_correlation_graph` |
+| Compare before/after captured evidence | `devtools_capture_diff` |
+| Collect auth boundary evidence | `devtools_auth_boundary_report` |
+| Inspect worker, Service Worker, iframe, and target boundaries | `devtools_worker_frame_deep_dive` |
 | Run one-call security research evidence workflow | `devtools_security_research_pack` |
 | Read source context around a console stack frame | `devtools_console_source_context` |
 

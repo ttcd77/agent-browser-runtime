@@ -547,6 +547,10 @@ try {
   });
   assert(researchPack.backend === "managed-cdp", `security research pack wrong backend: ${JSON.stringify(researchPack)}`);
   assert(researchPack.summary?.evidenceBundlePath, "security research pack missing bundle path");
+  assert(researchPack.summary?.evidenceManifestPath, "security research pack missing evidence manifest path");
+  assert(researchPack.summary?.correlationGraphPath, "security research pack missing correlation graph path");
+  assert(researchPack.summary?.authBoundaryReportPath, "security research pack missing auth boundary report path");
+  assert(researchPack.summary?.workerFrameReportPath, "security research pack missing worker/frame report path");
   assert(typeof researchPack.summary?.requestCount === "number", "security research pack missing request count");
   assert(Array.isArray(researchPack.captureBoundaries), "security research pack missing capture boundaries");
 
@@ -570,6 +574,12 @@ try {
   assert(serviceWorkerDetail.scriptCount >= 1, `service worker detail script missing: ${JSON.stringify(serviceWorkerDetail)}`);
   assert(JSON.stringify(serviceWorkerDetail.page?.scripts || []).includes("install"), "service worker detail script content did not include expected install handler");
   assert(serviceWorkerDetail.page?.cacheStorage?.caches?.some((cache) => cache.entryCount >= 1), "service worker detail cache entries missing");
+  const workerFrameDeepDive = await callTool(baseUrl, "devtools_worker_frame_deep_dive", {
+    profile: "default",
+    save: true,
+  });
+  assert(workerFrameDeepDive.reportPath, "worker/frame deep dive report path missing");
+  assert(workerFrameDeepDive.summary?.frameCount >= 1, "worker/frame deep dive frame count missing");
 
   await callTool(baseUrl, "devtools_capture_start", {
     profile: "default",

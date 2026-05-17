@@ -1,5 +1,5 @@
 import http from "node:http";
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { WebSocketServer } from "ws";
@@ -13,6 +13,11 @@ const traceDir = process.env.PERSONAL_CHROME_TRACE_DIR || join(process.cwd(), "t
 const harDir = process.env.PERSONAL_CHROME_HAR_DIR || join(process.cwd(), "tmp", "personal-chrome-har");
 const applicationExportDir = process.env.PERSONAL_CHROME_APPLICATION_EXPORT_DIR || join(process.cwd(), "tmp", "personal-chrome-application");
 const cpuProfileDir = process.env.PERSONAL_CHROME_CPU_PROFILE_DIR || join(process.cwd(), "tmp", "personal-chrome-cpu-profiles");
+const manifestDir = process.env.PERSONAL_CHROME_MANIFEST_DIR || join(process.cwd(), "tmp", "personal-chrome-manifests");
+const graphDir = process.env.PERSONAL_CHROME_GRAPH_DIR || join(process.cwd(), "tmp", "personal-chrome-graphs");
+const diffDir = process.env.PERSONAL_CHROME_DIFF_DIR || join(process.cwd(), "tmp", "personal-chrome-diffs");
+const authReportDir = process.env.PERSONAL_CHROME_AUTH_REPORT_DIR || join(process.cwd(), "tmp", "personal-chrome-auth");
+const boundaryReportDir = process.env.PERSONAL_CHROME_BOUNDARY_REPORT_DIR || join(process.cwd(), "tmp", "personal-chrome-boundaries");
 
 const clients = new Map();
 const pending = new Map();
@@ -89,7 +94,6 @@ function normalizeCommand(toolName) {
     devtools_security_summary: "chrome_security_summary",
     devtools_page_diagnostics: "chrome_page_diagnostics",
     devtools_signal_summary: "chrome_signal_summary",
-    devtools_risk_summary: "chrome_risk_summary",
     devtools_issues_log: "chrome_issues_log",
     devtools_accessibility_snapshot: "chrome_accessibility_snapshot",
     devtools_frame_tree: "chrome_frame_tree",
@@ -118,6 +122,11 @@ function normalizeCommand(toolName) {
     devtools_source_map_metadata: "chrome_source_map_metadata",
     devtools_global_search: "chrome_global_search",
     devtools_evidence_bundle: "chrome_evidence_bundle",
+    devtools_evidence_manifest: "chrome_evidence_manifest",
+    devtools_request_correlation_graph: "chrome_request_correlation_graph",
+    devtools_capture_diff: "chrome_capture_diff",
+    devtools_auth_boundary_report: "chrome_auth_boundary_report",
+    devtools_worker_frame_deep_dive: "chrome_worker_frame_deep_dive",
     devtools_sources_search: "chrome_sources_search",
     devtools_performance_trace: "chrome_performance_trace",
     devtools_performance_insights: "chrome_performance_insights",
@@ -476,6 +485,285 @@ function traceCompare(params = {}) {
   };
 }
 
+function sha256File(file) {
+  return createHash("sha256").update(readFileSync(file)).digest("hex");
+}
+
+function listFiles(rootDir, maxFiles = 200) {
+  const out = [];
+  const walk = (dir) => {
+    if (out.length >= maxFiles || !existsSync(dir)) return;
+    for (const name of readdirSync(dir)) {
+      if (out.length >= maxFiles) break;
+      const file = join(dir, name);
+      let stat;
+      try { stat = statSync(file); }
+      catch { continue; }
+      if (stat.isDirectory()) {
+        walk(file);
+        continue;
+      }
+      out.push({
+        path: file,
+        relativePath: file.slice(rootDir.length).replace(/^[/\\]/, ""),
+        bytes: stat.size,
+        modifiedAt: stat.mtime.toISOString(),
+        sha256: stat.size <= 25_000_000 ? sha256File(file) : null,
+        hashSkipped: stat.size > 25_000_000,
+      });
+    }
+  };
+  walk(rootDir);
+  return out;
+}
+
+function readJsonFile(file) {
+  return JSON.parse(readFileSync(file, "utf8"));
+}
+
+function urlOrigin(url) {
+  try { return new URL(url).origin; }
+  catch { return ""; }
+}
+
+function urlPath(url) {
+  try { return new URL(url).pathname || "/"; }
+  catch { return String(url || ""); }
+}
+
+function headerValue(headers = {}, name) {
+  const wanted = String(name || "").toLowerCase();
+  for (const [key, value] of Object.entries(headers || {})) {
+    if (String(key).toLowerCase() === wanted) return value;
+  }
+  return undefined;
+}
+
+function extractRecords(payload = {}) {
+  if (Array.isArray(payload.requests)) return payload.requests;
+  if (Array.isArray(payload?.bundle?.networkSummary?.requests)) return payload.bundle.networkSummary.requests;
+  if (Array.isArray(payload?.networkSummary?.requests)) return payload.networkSummary.requests;
+  return payload?.har?.log?.entries?.map((entry) => ({
+    method: entry.request?.method,
+    url: entry.request?.url,
+    status: entry.response?.status,
+  })) || [];
+}
+
+function diffRequestSets(beforeRecords = [], afterRecords = []) {
+  const shape = (record) => `${record.method || "GET"} ${urlOrigin(record.url)}${urlPath(record.url)}`;
+  const makeMap = (records) => {
+    const map = new Map();
+    for (const record of records || []) {
+      const key = shape(record);
+      const item = map.get(key) || { key, count: 0, statuses: {}, sampleUrls: [] };
+      item.count += 1;
+      item.statuses[String(record.status || "pending")] = (item.statuses[String(record.status || "pending")] || 0) + 1;
+      if (item.sampleUrls.length < 3 && record.url) item.sampleUrls.push(record.url);
+      map.set(key, item);
+    }
+    return map;
+  };
+  const before = makeMap(beforeRecords);
+  const after = makeMap(afterRecords);
+  const added = [];
+  const removed = [];
+  const changed = [];
+  for (const [key, item] of after) {
+    if (!before.has(key)) added.push(item);
+    else if (before.get(key).count !== item.count || JSON.stringify(before.get(key).statuses) !== JSON.stringify(item.statuses)) {
+      changed.push({ key, before: before.get(key), after: item });
+    }
+  }
+  for (const [key, item] of before) {
+    if (!after.has(key)) removed.push(item);
+  }
+  return { added, removed, changed };
+}
+
+async function evidenceManifest(params = {}) {
+  const active = await safeBridgeTool("devtools_tabs", {});
+  const roots = [screenshotDir, bodyDir, traceDir, harDir, applicationExportDir, cpuProfileDir].filter(existsSync);
+  const files = roots.flatMap((dir) => listFiles(dir, Math.ceil((params.maxFiles || 200) / Math.max(1, roots.length))));
+  const explicitArtifacts = [];
+  for (const file of params.artifactPaths || []) {
+    if (!file || !existsSync(file)) {
+      explicitArtifacts.push({ path: file, exists: false });
+      continue;
+    }
+    const stat = statSync(file);
+    explicitArtifacts.push({
+      path: file,
+      exists: true,
+      bytes: stat.size,
+      modifiedAt: stat.mtime.toISOString(),
+      sha256: stat.size <= 25_000_000 ? sha256File(file) : null,
+      hashSkipped: stat.size > 25_000_000,
+    });
+  }
+  const manifest = {
+    schema: "agent-browser-runtime.evidence-manifest.v1",
+    backend: "personal-chrome",
+    generatedAt: new Date().toISOString(),
+    activeTab: active.activeTab || active.tabs?.[0] || null,
+    fileCount: files.length,
+    files,
+    explicitArtifacts,
+    boundaries: ["Manifest records local bridge artifacts and hashes only.", "It does not classify vulnerability impact."],
+  };
+  let manifestPath = null;
+  if (params.save !== false) {
+    manifestPath = params.path || join(manifestDir, `${Date.now()}-evidence-manifest.json`);
+    mkdirSync(dirname(manifestPath), { recursive: true });
+    writeFileSync(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`, "utf8");
+  }
+  return { ...manifest, manifestPath };
+}
+
+async function requestCorrelationGraph(params = {}) {
+  const limit = typeof params.limit === "number" ? params.limit : 200;
+  const [network, frames, consoleLog, sources] = await Promise.all([
+    safeBridgeTool("devtools_network_log", { limit }),
+    safeBridgeTool("devtools_frame_tree", {}),
+    safeBridgeTool("devtools_console_log", { limit: 100, reload: false, waitMs: 50 }),
+    safeBridgeTool("devtools_sources_list", { limit }),
+  ]);
+  const nodes = [];
+  const edges = [];
+  const seen = new Set();
+  const addNode = (node) => {
+    if (!node?.id || seen.has(node.id)) return;
+    seen.add(node.id);
+    nodes.push(node);
+  };
+  const addEdge = (edge) => {
+    if (edge?.from && edge?.to) edges.push(edge);
+  };
+  for (const frame of frames.frames || []) addNode({ id: `frame:${frame.id || frame.url}`, type: "frame", label: frame.url, url: frame.url });
+  for (const script of sources.scripts || []) addNode({ id: `script:${script.scriptId || script.url}`, type: "script", label: script.url || script.scriptId, url: script.url });
+  for (const request of network.requests || []) {
+    const id = `request:${request.requestId || request.url}`;
+    addNode({ id, type: "request", label: `${request.method || "GET"} ${urlPath(request.url)}`, requestId: request.requestId, url: request.url, status: request.status });
+    if (request.frameId) addEdge({ from: `frame:${request.frameId}`, to: id, type: "frame-request" });
+  }
+  for (const entry of consoleLog.entries || []) addNode({ id: `console:${entry.timestamp || entry.text || nodes.length}`, type: "console", label: entry.text || entry.message || entry.level, level: entry.level, url: entry.url });
+  const graph = { backend: "personal-chrome", generatedAt: new Date().toISOString(), nodeCount: nodes.length, edgeCount: edges.length, nodes, edges };
+  let graphPath = null;
+  if (params.save) {
+    graphPath = params.path || join(graphDir, `${Date.now()}-request-correlation-graph.json`);
+    mkdirSync(dirname(graphPath), { recursive: true });
+    writeFileSync(graphPath, `${JSON.stringify(graph, null, 2)}\n`, "utf8");
+  }
+  return { ...graph, graphPath, boundaries: ["Edges are metadata correlations, not proof of causality."] };
+}
+
+async function captureDiff(params = {}) {
+  if (!params.beforePath) throw new Error("beforePath is required");
+  const before = readJsonFile(params.beforePath);
+  const after = params.afterPath ? readJsonFile(params.afterPath) : await safeBridgeTool("devtools_network_log", { limit: 1000000 });
+  const network = diffRequestSets(extractRecords(before), extractRecords(after));
+  const diff = {
+    schema: "agent-browser-runtime.capture-diff.v1",
+    backend: "personal-chrome",
+    generatedAt: new Date().toISOString(),
+    beforePath: params.beforePath,
+    afterPath: params.afterPath || null,
+    afterSource: params.afterPath ? "file" : "current-network-log",
+    network,
+    summary: {
+      addedRequestShapes: network.added.length,
+      removedRequestShapes: network.removed.length,
+      changedRequestShapes: network.changed.length,
+    },
+    boundaries: ["Diff reports observable changes; it does not decide authorization or vulnerability impact."],
+  };
+  let diffPath = null;
+  if (params.save) {
+    diffPath = params.path || join(diffDir, `${Date.now()}-capture-diff.json`);
+    mkdirSync(dirname(diffPath), { recursive: true });
+    writeFileSync(diffPath, `${JSON.stringify(diff, null, 2)}\n`, "utf8");
+  }
+  return { ...diff, diffPath };
+}
+
+async function authBoundaryReport(params = {}) {
+  const limit = typeof params.limit === "number" ? params.limit : 50;
+  const [network, cookies, storage, security, tokenScan] = await Promise.all([
+    safeBridgeTool("devtools_network_log", { limit: 1000000 }),
+    safeBridgeTool("devtools_cookie_summary", {}),
+    safeBridgeTool("devtools_storage_snapshot", {}),
+    safeBridgeTool("devtools_security_summary", {}),
+    params.includeTokenScan === false ? null : safeBridgeTool("devtools_token_scan", {}),
+  ]);
+  const authRequests = (network.requests || []).filter((request) => {
+    const headers = request.requestHeaders || request.headers || {};
+    return headerValue(headers, "authorization") || headerValue(headers, "cookie") || Object.keys(headers).some((key) => /csrf|xsrf/i.test(key));
+  }).slice(-limit).map((request) => ({
+    requestId: request.requestId,
+    method: request.method,
+    url: request.url,
+    status: request.status,
+    hasAuthorizationHeader: Boolean(headerValue(request.requestHeaders || request.headers || {}, "authorization")),
+    hasCookieHeader: Boolean(headerValue(request.requestHeaders || request.headers || {}, "cookie")),
+  }));
+  const report = {
+    schema: "agent-browser-runtime.auth-boundary-report.v1",
+    backend: "personal-chrome",
+    generatedAt: new Date().toISOString(),
+    page: security.page || {},
+    cookieSummary: cookies.summary || cookies,
+    storageSummary: {
+      localStorageKeys: Object.keys(storage.localStorage || {}),
+      sessionStorageKeys: Object.keys(storage.sessionStorage || {}),
+      cookieCount: Array.isArray(storage.cookies) ? storage.cookies.length : 0,
+    },
+    authRequests,
+    tokenScanSummary: tokenScan ? { findingCount: tokenScan.findingCount || tokenScan.findings?.length || 0, findings: (tokenScan.findings || []).slice(0, limit) } : null,
+    boundaries: ["This report lists authentication-related evidence only.", "It does not decide access-control correctness."],
+  };
+  let reportPath = null;
+  if (params.save) {
+    reportPath = params.path || join(authReportDir, `${Date.now()}-auth-boundary-report.json`);
+    mkdirSync(dirname(reportPath), { recursive: true });
+    writeFileSync(reportPath, `${JSON.stringify(report, null, 2)}\n`, "utf8");
+  }
+  return { ...report, reportPath };
+}
+
+async function workerFrameDeepDive(params = {}) {
+  const [frames, swSummary, swDetail, targets] = await Promise.all([
+    safeBridgeTool("devtools_frame_tree", {}),
+    safeBridgeTool("devtools_service_worker_summary", {}),
+    params.includeServiceWorkerDetail === false ? null : safeBridgeTool("devtools_service_worker_detail", {}),
+    safeBridgeTool("devtools_browser_targets", {}),
+  ]);
+  const targetList = Array.isArray(targets?.targets) ? targets.targets : (Array.isArray(targets) ? targets : []);
+  const workerTargets = targetList.filter((target) => ["worker", "shared_worker", "service_worker"].includes(target.type));
+  const report = {
+    schema: "agent-browser-runtime.worker-frame-deep-dive.v1",
+    backend: "personal-chrome",
+    generatedAt: new Date().toISOString(),
+    frameTree: frames,
+    serviceWorkers: { summary: swSummary, detail: swDetail },
+    workerTargets,
+    summary: {
+      frameCount: frames.frameCount || frames.frames?.length || 0,
+      inaccessibleFrameCount: frames.inaccessibleFrameCount || 0,
+      serviceWorkerRegistrationCount: swSummary.registrationCount || 0,
+      cacheCount: swSummary.cacheCount || 0,
+      workerTargetCount: workerTargets.length,
+    },
+    boundaries: ["Cross-origin frame internals may be unavailable to page-context tools."],
+  };
+  let reportPath = null;
+  if (params.save) {
+    reportPath = params.path || join(boundaryReportDir, `${Date.now()}-worker-frame-deep-dive.json`);
+    mkdirSync(dirname(reportPath), { recursive: true });
+    writeFileSync(reportPath, `${JSON.stringify(report, null, 2)}\n`, "utf8");
+  }
+  return { ...report, reportPath };
+}
+
 function persistCpuProfile(result, params = {}) {
   if (!result?.profile) return result;
   const path = params.path || join(cpuProfileDir, `${Date.now()}-cpu-profile.json`);
@@ -571,6 +859,21 @@ async function callBridgeTool(toolName, params = {}) {
   if (toolName === "personal_chrome_security_research_pack" || toolName === "devtools_security_research_pack") {
     return await securityResearchPack(params);
   }
+  if (toolName === "personal_chrome_evidence_manifest" || toolName === "devtools_evidence_manifest") {
+    return await evidenceManifest(params);
+  }
+  if (toolName === "personal_chrome_request_correlation_graph" || toolName === "devtools_request_correlation_graph") {
+    return await requestCorrelationGraph(params);
+  }
+  if (toolName === "personal_chrome_capture_diff" || toolName === "devtools_capture_diff") {
+    return await captureDiff(params);
+  }
+  if (toolName === "personal_chrome_auth_boundary_report" || toolName === "devtools_auth_boundary_report") {
+    return await authBoundaryReport(params);
+  }
+  if (toolName === "personal_chrome_worker_frame_deep_dive" || toolName === "devtools_worker_frame_deep_dive") {
+    return await workerFrameDeepDive(params);
+  }
   const command = normalizeCommand(toolName);
   const result = await callExtension(command, params);
   return postProcessToolResult(toolName, result, params);
@@ -624,12 +927,27 @@ async function securityResearchPack(params = {}) {
       artifacts.traceQuery = await safeBridgeTool("devtools_trace_query", { tracePath: artifacts.trace.tracePath, limit: 10 });
     }
   }
+  artifacts.correlationGraph = await safeBridgeTool("devtools_request_correlation_graph", { limit: 100, save: true });
+  artifacts.authBoundary = await safeBridgeTool("devtools_auth_boundary_report", { limit: 50, includeTokenScan: Boolean(params.includeTokenScan), save: true });
+  artifacts.workerFrame = await safeBridgeTool("devtools_worker_frame_deep_dive", { includeServiceWorkerDetail: true, save: true });
   artifacts.bundle = await safeBridgeTool("devtools_evidence_bundle", {
     save: true,
     networkLimit: 100,
     sourceLimit: 100,
     includeHar: false,
     includeTokenScan: Boolean(params.includeTokenScan),
+  });
+  artifacts.manifest = await safeBridgeTool("devtools_evidence_manifest", {
+    save: true,
+    artifactPaths: [
+      artifacts.har?.harPath,
+      artifacts.application?.exportPath,
+      artifacts.trace?.tracePath,
+      artifacts.bundle?.bundlePath,
+      artifacts.correlationGraph?.graphPath,
+      artifacts.authBoundary?.reportPath,
+      artifacts.workerFrame?.reportPath,
+    ].filter(Boolean),
   });
   const networkSummary = network?.evidence?.summary || {};
   const page = overview?.evidence?.diagnostics?.page || overview?.evidence?.backendCapabilities?.activeTab || {};
@@ -649,6 +967,10 @@ async function securityResearchPack(params = {}) {
       harPath: artifacts.har?.harPath || null,
       applicationExportPath: artifacts.application?.exportPath || null,
       evidenceBundlePath: artifacts.bundle?.bundlePath || null,
+      evidenceManifestPath: artifacts.manifest?.manifestPath || null,
+      correlationGraphPath: artifacts.correlationGraph?.graphPath || null,
+      authBoundaryReportPath: artifacts.authBoundary?.reportPath || null,
+      workerFrameReportPath: artifacts.workerFrame?.reportPath || null,
     },
     steps,
     evidence: {
@@ -665,7 +987,7 @@ async function securityResearchPack(params = {}) {
       "This workflow records only evidence observable after capture starts and during the reload/reproduction window.",
       "It organizes F12 evidence for security research but does not decide exploitability.",
     ],
-    nextTools: ["agent_inspect", "devtools_request_detail", "devtools_request_replay_batch", "devtools_global_search", "devtools_trace_query"],
+    nextTools: ["agent_inspect", "devtools_request_detail", "devtools_request_replay_batch", "devtools_capture_diff", "devtools_auth_boundary_report", "devtools_trace_query"],
   };
 }
 
@@ -756,8 +1078,7 @@ async function runAgentInspect(params = {}) {
   const withBase = (extra = {}) => ({ ...base, ...extra });
   const objectiveSignals = (payload) => {
     if (!payload || typeof payload !== "object") return payload;
-    const { riskCount, findings, ...rest } = payload;
-    return rest;
+    return payload;
   };
   const out = {
     backend: "personal-chrome",
@@ -932,14 +1253,13 @@ const tools = {
   personal_chrome_security_summary: "Return current page security context and TLS/certificate summary.",
   personal_chrome_page_diagnostics: "Return a dashboard-friendly page health summary across Network, Security, Storage, Console, and Accessibility.",
   personal_chrome_signal_summary: "Return objective cross-panel browser signals and next drill-down tools.",
-  personal_chrome_risk_summary: "Return a first-screen risk summary across Network, Cookies, Storage, Service Workers, Security, and optional token scan.",
   personal_chrome_issues_log: "Return Chrome DevTools Issues-panel events from the user's real Chrome tab.",
   personal_chrome_accessibility_snapshot: "Return Accessibility panel-style AX tree from the user's real Chrome tab.",
   personal_chrome_frame_tree: "Return the Page frame tree and recent frame events.",
   personal_chrome_hard_reload: "Disable cache, optionally bypass service worker, clear logs, and reload the tab.",
   personal_chrome_storage_snapshot: "Read local/session storage, document-visible cookies, and extension cookie API results.",
   personal_chrome_storage_origin_summary: "Return Application-panel origin, storage key, quota, and cookie partition evidence from the user's real Chrome tab.",
-  personal_chrome_cookie_summary: "Summarize cookie security attributes and risk hints from the user's real Chrome tab.",
+  personal_chrome_cookie_summary: "Summarize cookie security attributes and objective attribute signals from the user's real Chrome tab.",
   personal_chrome_service_worker_summary: "Return Application panel-style Service Worker and CacheStorage summary from the user's real Chrome tab.",
   personal_chrome_service_worker_detail: "Return deeper Application panel Service Worker evidence: registrations, scripts, CacheStorage entries, and worker debugger targets.",
   personal_chrome_application_export: "Export Application panel data from the user's real Chrome tab to a JSON file.",
@@ -961,6 +1281,11 @@ const tools = {
   personal_chrome_source_map_metadata: "Return sourceMappingURL and source map metadata from the user's real Chrome tab.",
   personal_chrome_global_search: "Search F12 evidence surfaces in the user's real Chrome tab for a literal query.",
   personal_chrome_evidence_bundle: "Export a compact objective F12 evidence bundle from the user's real Chrome tab.",
+  personal_chrome_evidence_manifest: "Write a manifest with Personal Chrome evidence paths, hashes, capture metadata, and provenance.",
+  personal_chrome_request_correlation_graph: "Build a frame/script/request/console correlation graph from Personal Chrome F12 evidence.",
+  personal_chrome_capture_diff: "Compare before/after Personal Chrome evidence artifacts or current captured traffic.",
+  personal_chrome_auth_boundary_report: "Collect objective Personal Chrome auth boundary evidence without deciding vulnerability impact.",
+  personal_chrome_worker_frame_deep_dive: "Inspect frame, iframe, worker, Service Worker, CacheStorage, and target boundaries in Personal Chrome.",
   personal_chrome_security_research_pack: "Run a one-call security research evidence workflow against the user's real Chrome tab and return artifact paths.",
   personal_chrome_sources_search: "Search parsed JavaScript sources captured through chrome.debugger.",
   personal_chrome_performance_trace: "Capture a short Performance panel-style snapshot from the user's real Chrome tab.",
@@ -1009,14 +1334,13 @@ const tools = {
   devtools_security_summary: "Unified Agent DevTools API: summarize page security context and TLS/certificate details.",
   devtools_page_diagnostics: "Unified Agent DevTools API: summarize page health for agent dashboards.",
   devtools_signal_summary: "Unified Agent DevTools API: summarize objective cross-panel browser signals and next drill-down tools.",
-  devtools_risk_summary: "Unified Agent DevTools API: summarize cross-panel browser risks and next drill-down tools.",
   devtools_issues_log: "Unified Agent DevTools API: read Chrome DevTools Issues-panel events.",
   devtools_accessibility_snapshot: "Unified Agent DevTools API: read Accessibility panel-style AX tree.",
   devtools_frame_tree: "Unified Agent DevTools API: read frame/iframe tree.",
   devtools_hard_reload: "Unified Agent DevTools API: disable cache, bypass service worker, and reload.",
   devtools_storage_snapshot: "Unified Agent DevTools API: read storage and cookies.",
   devtools_storage_origin_summary: "Unified Agent DevTools API: read Application-panel origin, storage key, quota, and cookie partition evidence.",
-  devtools_cookie_summary: "Unified Agent DevTools API: summarize cookie security attributes and risk hints.",
+  devtools_cookie_summary: "Unified Agent DevTools API: summarize cookie security attributes and objective attribute signals.",
   devtools_service_worker_summary: "Unified Agent DevTools API: summarize Service Worker registrations and CacheStorage state.",
   devtools_service_worker_detail: "Unified Agent DevTools API: inspect Service Worker registrations, scripts, CacheStorage entries, and worker targets.",
   devtools_application_export: "Unified Agent DevTools API: export Application panel data to a JSON file.",
@@ -1038,6 +1362,11 @@ const tools = {
   devtools_source_map_metadata: "Unified Agent DevTools API: read source map reference and metadata.",
   devtools_global_search: "Unified Agent DevTools API: search F12 evidence surfaces for a literal query.",
   devtools_evidence_bundle: "Unified Agent DevTools API: export a compact objective F12 evidence bundle.",
+  devtools_evidence_manifest: "Unified Agent DevTools API: write a manifest with evidence paths, hashes, capture metadata, and provenance.",
+  devtools_request_correlation_graph: "Unified Agent DevTools API: build a frame/script/request/console correlation graph from F12 evidence.",
+  devtools_capture_diff: "Unified Agent DevTools API: compare before/after evidence artifacts or current captured traffic.",
+  devtools_auth_boundary_report: "Unified Agent DevTools API: collect objective auth boundary evidence without deciding vulnerability impact.",
+  devtools_worker_frame_deep_dive: "Unified Agent DevTools API: inspect frame, iframe, worker, Service Worker, CacheStorage, and target boundaries.",
   devtools_security_research_pack: "Unified Agent DevTools API: run a one-call security research evidence workflow and return artifact paths.",
   devtools_sources_search: "Unified Agent DevTools API: search parsed JavaScript sources by literal query.",
   devtools_performance_trace: "Unified Agent DevTools API: capture navigation/resource/paint/long-task performance data.",

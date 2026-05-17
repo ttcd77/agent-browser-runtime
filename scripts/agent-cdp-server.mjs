@@ -3,6 +3,7 @@ import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { spawn } from "node:child_process";
+import { createHash } from "node:crypto";
 import http from "node:http";
 import CDP from "chrome-remote-interface";
 
@@ -242,11 +243,11 @@ function summarizeCookies(cookies = []) {
     if (!isSession && Number(expires) < nowSeconds) expiredCount += 1;
     const lowerName = String(cookie.name || "").toLowerCase();
     const likelySensitive = looksSensitiveKey(lowerName) || looksSensitiveValue(cookie.value);
-    const risks = [];
-    if (!cookie.secure) risks.push("missing-secure");
-    if (likelySensitive && !cookie.httpOnly) risks.push("sensitive-not-httponly");
-    if (!cookie.sameSite || /no_restriction|none/i.test(String(cookie.sameSite))) risks.push("samesite-none-or-unspecified");
-    if (risks.length) {
+    const attributeSignals = [];
+    if (!cookie.secure) attributeSignals.push("missing-secure");
+    if (likelySensitive && !cookie.httpOnly) attributeSignals.push("sensitive-not-httponly");
+    if (!cookie.sameSite || /no_restriction|none/i.test(String(cookie.sameSite))) attributeSignals.push("samesite-none-or-unspecified");
+    if (attributeSignals.length) {
       findings.push({
         name: cookie.name,
         domain: cookie.domain,
@@ -257,7 +258,7 @@ function summarizeCookies(cookies = []) {
         session: isSession,
         expiresAt: cookieExpiry(cookie),
         likelySensitive,
-        risks,
+        attributeSignals,
       });
     }
   }
@@ -372,25 +373,25 @@ function severityRank(severity) {
   return { high: 3, medium: 2, low: 1, info: 0 }[severity] ?? 0;
 }
 
-function buildRiskSummary({ diagnostics = {}, cookieSummary = {}, serviceWorkerSummary = {}, tokenScan = null } = {}) {
-  const findings = [];
+function buildSignalSummary({ diagnostics = {}, cookieSummary = {}, serviceWorkerSummary = {}, tokenScan = null } = {}) {
+  const signals = [];
   const network = diagnostics.network || {};
   const storage = diagnostics.storage || {};
   const page = diagnostics.page || {};
   const security = diagnostics.security || {};
   if (network.failedCount > 0) {
-    findings.push({
+    signals.push({
       id: "network.failed-requests",
       severity: "medium",
       panel: "Network",
-      title: "Failed Network requests",
+      title: "Failed Network requests observed",
       detail: `${network.failedCount} failed request(s) observed in the current capture.`,
       evidence: network.failed || [],
       nextTools: ["devtools_network_summary", "devtools_network_log", "devtools_request_body"],
     });
   }
   if (network.serviceWorkerCount > 0) {
-    findings.push({
+    signals.push({
       id: "network.service-worker-responses",
       severity: "info",
       panel: "Network",
@@ -401,19 +402,20 @@ function buildRiskSummary({ diagnostics = {}, cookieSummary = {}, serviceWorkerS
   }
   const cookieFindings = cookieSummary.findings || storage.cookieSummary?.findings || [];
   for (const finding of cookieFindings.slice(0, 20)) {
-    const hasSensitiveRisk = finding.risks?.includes("sensitive-not-httponly");
-    findings.push({
+    const attributeSignals = finding.attributeSignals || [];
+    const hasSensitiveSignal = attributeSignals.includes("sensitive-not-httponly");
+    signals.push({
       id: `cookie.${finding.domain || "domain"}.${finding.name || "cookie"}`,
-      severity: hasSensitiveRisk ? "high" : "medium",
+      severity: hasSensitiveSignal ? "high" : "medium",
       panel: "Application",
-      title: `Cookie risk: ${finding.name}`,
-      detail: (finding.risks || []).join(", "),
+      title: `Cookie attribute signal: ${finding.name}`,
+      detail: attributeSignals.join(", "),
       evidence: finding,
       nextTools: ["devtools_cookie_summary", "devtools_storage_snapshot", "devtools_application_export"],
     });
   }
   if (cookieSummary.insecureCount > 0 || storage.cookieSummary?.insecureCount > 0) {
-    findings.push({
+    signals.push({
       id: "cookies.insecure-count",
       severity: "medium",
       panel: "Application",
@@ -423,7 +425,7 @@ function buildRiskSummary({ diagnostics = {}, cookieSummary = {}, serviceWorkerS
     });
   }
   if (page?.isSecureContext === false) {
-    findings.push({
+    signals.push({
       id: "security.insecure-context",
       severity: "high",
       panel: "Security",
@@ -435,7 +437,7 @@ function buildRiskSummary({ diagnostics = {}, cookieSummary = {}, serviceWorkerS
   const swRegistrations = serviceWorkerSummary.registrationCount ?? storage.serviceWorkerRegistrations ?? 0;
   const cacheCount = serviceWorkerSummary.cacheCount ?? storage.cacheStorageCaches ?? 0;
   if (swRegistrations > 0 || cacheCount > 0) {
-    findings.push({
+    signals.push({
       id: "application.service-worker-cache-state",
       severity: "info",
       panel: "Application",
@@ -449,7 +451,7 @@ function buildRiskSummary({ diagnostics = {}, cookieSummary = {}, serviceWorkerS
     });
   }
   if (tokenScan?.findingCount > 0 || tokenScan?.findings?.length > 0) {
-    findings.push({
+    signals.push({
       id: "tokens.detected",
       severity: "high",
       panel: "Application",
@@ -460,7 +462,7 @@ function buildRiskSummary({ diagnostics = {}, cookieSummary = {}, serviceWorkerS
     });
   }
   if (security?.tlsHosts && Object.keys(security.tlsHosts).length === 0 && page?.protocol === "https:") {
-    findings.push({
+    signals.push({
       id: "security.no-tls-metadata",
       severity: "low",
       panel: "Security",
@@ -469,18 +471,228 @@ function buildRiskSummary({ diagnostics = {}, cookieSummary = {}, serviceWorkerS
       nextTools: ["devtools_capture_start", "devtools_hard_reload", "devtools_security_summary"],
     });
   }
-  findings.sort((a, b) => severityRank(b.severity) - severityRank(a.severity));
+  signals.sort((a, b) => severityRank(b.severity) - severityRank(a.severity));
   return {
     summaryKind: "signals",
-    signalCount: findings.length,
-    riskCount: findings.length,
-    signals: findings,
-    highCount: findings.filter((finding) => finding.severity === "high").length,
-    mediumCount: findings.filter((finding) => finding.severity === "medium").length,
-    lowCount: findings.filter((finding) => finding.severity === "low").length,
-    infoCount: findings.filter((finding) => finding.severity === "info").length,
-    findings,
+    signalCount: signals.length,
+    signals,
+    highCount: signals.filter((finding) => finding.severity === "high").length,
+    mediumCount: signals.filter((finding) => finding.severity === "medium").length,
+    lowCount: signals.filter((finding) => finding.severity === "low").length,
+    infoCount: signals.filter((finding) => finding.severity === "info").length,
   };
+}
+
+function fileSha256(file) {
+  return createHash("sha256").update(readFileSync(file)).digest("hex");
+}
+
+function listEvidenceFiles(rootDir, options = {}) {
+  const maxFiles = typeof options.maxFiles === "number" ? options.maxFiles : 200;
+  const maxBytesForHash = typeof options.maxBytesForHash === "number" ? options.maxBytesForHash : 25_000_000;
+  const out = [];
+  const walk = (dir) => {
+    if (out.length >= maxFiles || !existsSync(dir)) return;
+    for (const name of readdirSync(dir)) {
+      if (out.length >= maxFiles) break;
+      const file = join(dir, name);
+      let stat;
+      try {
+        stat = statSync(file);
+      } catch {
+        continue;
+      }
+      if (stat.isDirectory()) {
+        walk(file);
+        continue;
+      }
+      const relativePath = file.slice(rootDir.length).replace(/^[/\\]/, "");
+      out.push({
+        path: file,
+        relativePath,
+        bytes: stat.size,
+        modifiedAt: stat.mtime.toISOString(),
+        sha256: stat.size <= maxBytesForHash ? fileSha256(file) : null,
+        hashSkipped: stat.size > maxBytesForHash,
+      });
+    }
+  };
+  walk(rootDir);
+  return out;
+}
+
+function readJsonFile(file) {
+  return JSON.parse(readFileSync(file, "utf8"));
+}
+
+function requestOrigin(url) {
+  try {
+    return new URL(url).origin;
+  } catch {
+    return "";
+  }
+}
+
+function requestPathname(url) {
+  try {
+    return new URL(url).pathname || "/";
+  } catch {
+    return String(url || "");
+  }
+}
+
+function requestSet(records = []) {
+  const set = new Map();
+  for (const record of records || []) {
+    const key = `${record.method || "GET"} ${requestOrigin(record.url)}${requestPathname(record.url)}`;
+    const item = set.get(key) || { key, count: 0, statuses: {}, methods: {}, origins: {}, sampleUrls: [] };
+    item.count += 1;
+    item.statuses[String(record.status || record.statusCode || "pending")] = (item.statuses[String(record.status || record.statusCode || "pending")] || 0) + 1;
+    item.methods[String(record.method || "GET")] = (item.methods[String(record.method || "GET")] || 0) + 1;
+    const origin = requestOrigin(record.url) || "(unknown)";
+    item.origins[origin] = (item.origins[origin] || 0) + 1;
+    if (item.sampleUrls.length < 3 && record.url) item.sampleUrls.push(record.url);
+    set.set(key, item);
+  }
+  return set;
+}
+
+function diffRequestSets(beforeRecords = [], afterRecords = []) {
+  const before = requestSet(beforeRecords);
+  const after = requestSet(afterRecords);
+  const added = [];
+  const removed = [];
+  const changed = [];
+  for (const [key, value] of after) {
+    if (!before.has(key)) added.push(value);
+    else {
+      const prior = before.get(key);
+      if (JSON.stringify(prior.statuses) !== JSON.stringify(value.statuses) || prior.count !== value.count) {
+        changed.push({ key, before: prior, after: value });
+      }
+    }
+  }
+  for (const [key, value] of before) {
+    if (!after.has(key)) removed.push(value);
+  }
+  return { added, removed, changed };
+}
+
+function extractHarRecords(payload = {}) {
+  return payload?.har?.log?.entries?.map((entry) => ({
+    method: entry.request?.method,
+    url: entry.request?.url,
+    status: entry.response?.status,
+  })) || [];
+}
+
+function extractBundleNetworkRecords(payload = {}) {
+  const records = payload?.bundle?.networkSummary?.requests || payload?.networkSummary?.requests || payload?.requests;
+  return Array.isArray(records) ? records : extractHarRecords(payload);
+}
+
+function diffObjectKeys(before = {}, after = {}) {
+  const beforeKeys = new Set(Object.keys(before || {}));
+  const afterKeys = new Set(Object.keys(after || {}));
+  return {
+    added: [...afterKeys].filter((key) => !beforeKeys.has(key)).sort(),
+    removed: [...beforeKeys].filter((key) => !afterKeys.has(key)).sort(),
+    common: [...afterKeys].filter((key) => beforeKeys.has(key)).sort(),
+  };
+}
+
+function headerValue(headers = {}, name) {
+  const wanted = String(name || "").toLowerCase();
+  for (const [key, value] of Object.entries(headers || {})) {
+    if (String(key).toLowerCase() === wanted) return value;
+  }
+  return undefined;
+}
+
+function authHeaderEvidence(requests = [], limit = 50) {
+  const evidence = [];
+  for (const request of requests || []) {
+    const headers = request.requestHeaders || request.headers || {};
+    const authorization = headerValue(headers, "authorization");
+    const cookie = headerValue(headers, "cookie");
+    const csrf = Object.entries(headers).find(([key]) => /csrf|xsrf/i.test(key));
+    if (authorization || cookie || csrf) {
+      evidence.push({
+        requestId: request.requestId,
+        method: request.method,
+        url: request.url,
+        status: request.status,
+        hasAuthorizationHeader: authorization !== undefined,
+        authorizationScheme: authorization ? String(authorization).split(/\s+/)[0] : null,
+        hasCookieHeader: cookie !== undefined,
+        cookieHeaderBytes: cookie ? String(cookie).length : 0,
+        csrfHeader: csrf ? csrf[0] : null,
+      });
+    }
+    if (evidence.length >= limit) break;
+  }
+  return evidence;
+}
+
+function buildRequestCorrelationGraph({ requests = [], consoleEntries = [], scripts = [], frames = [], limit = 200 } = {}) {
+  const nodes = [];
+  const edges = [];
+  const seen = new Set();
+  const addNode = (node) => {
+    if (!node?.id || seen.has(node.id) || nodes.length >= limit) return;
+    seen.add(node.id);
+    nodes.push(node);
+  };
+  const addEdge = (edge) => {
+    if (!edge?.from || !edge?.to || edges.length >= limit * 2) return;
+    edges.push(edge);
+  };
+  for (const frame of frames || []) {
+    const id = `frame:${frame.id || frame.frameId || frame.url}`;
+    addNode({ id, type: "frame", label: frame.url || frame.name || id, url: frame.url, origin: frame.origin || frame.securityOrigin });
+  }
+  for (const script of scripts || []) {
+    const id = `script:${script.scriptId || script.url || nodes.length}`;
+    addNode({ id, type: "script", label: script.url || script.scriptId, url: script.url, sourceMapURL: script.sourceMapURL || "" });
+  }
+  for (const request of (requests || []).slice(-limit)) {
+    const id = `request:${request.requestId || request.url}`;
+    addNode({
+      id,
+      type: "request",
+      label: `${request.method || "GET"} ${requestPathname(request.url)}`,
+      requestId: request.requestId,
+      method: request.method,
+      url: request.url,
+      status: request.status,
+      resourceType: request.resourceType,
+    });
+    if (request.frameId) addEdge({ from: `frame:${request.frameId}`, to: id, type: "frame-request" });
+    const initiatorUrl = request.initiator?.url || request.initiator?.stack?.callFrames?.[0]?.url || "";
+    if (initiatorUrl) {
+      const script = (scripts || []).find((candidate) => candidate.url && initiatorUrl.includes(candidate.url));
+      const scriptId = script ? `script:${script.scriptId || script.url}` : `initiator:${initiatorUrl}`;
+      addNode({ id: scriptId, type: script ? "script" : "initiator", label: initiatorUrl, url: initiatorUrl });
+      addEdge({ from: scriptId, to: id, type: "initiates" });
+    }
+  }
+  for (const entry of (consoleEntries || []).slice(-limit)) {
+    const id = `console:${entry.timestamp || entry.text || nodes.length}`;
+    addNode({ id, type: "console", label: entry.text || entry.message || entry.level, level: entry.level, url: entry.url });
+    if (entry.url) {
+      const script = (scripts || []).find((candidate) => candidate.url && entry.url.includes(candidate.url));
+      if (script) addEdge({ from: `script:${script.scriptId || script.url}`, to: id, type: "emits-console" });
+    }
+  }
+  return { nodeCount: nodes.length, edgeCount: edges.length, nodes, edges };
+}
+
+function flattenFrameTree(frameTree, out = []) {
+  if (!frameTree) return out;
+  const frame = frameTree.frame || frameTree;
+  if (frame) out.push(frame);
+  for (const child of frameTree.childFrames || []) flattenFrameTree(child, out);
+  return out;
 }
 
 function requestDurationMs(request) {
@@ -4359,9 +4571,9 @@ function registerStandaloneBrowserTools(tools, cdpPort, profileRegistry, default
     },
   });
 
-  tools.set("browser_risk_summary", {
-    name: "browser_risk_summary",
-    description: "Return a first-screen risk summary across Network, Cookies, Storage, Service Workers, Security, and optional token scan.",
+  tools.set("browser_signal_summary", {
+    name: "browser_signal_summary",
+    description: "Return objective cross-panel browser signals across Network, Cookies, Storage, Service Workers, Security, and optional token scan. This does not decide vulnerability impact.",
     parameters: {
       type: "object",
       properties: {
@@ -4379,7 +4591,7 @@ function registerStandaloneBrowserTools(tools, cdpPort, profileRegistry, default
       const tokenScan = params?.includeTokenScan
         ? readPayload(await tools.get("browser_token_scan").execute(id, params))
         : null;
-      const summary = buildRiskSummary({
+      const summary = buildSignalSummary({
         diagnostics,
         cookieSummary: cookieResult.summary,
         serviceWorkerSummary,
@@ -4715,7 +4927,7 @@ function registerStandaloneBrowserTools(tools, cdpPort, profileRegistry, default
 
   tools.set("browser_cookie_summary", {
     name: "browser_cookie_summary",
-    description: "Summarize browser cookies for the current profile tab, including SameSite, Secure, HttpOnly, expiry, and risk hints.",
+    description: "Summarize browser cookies for the current profile tab, including SameSite, Secure, HttpOnly, expiry, and objective attribute signals.",
     parameters: {
       type: "object",
       properties: {
@@ -6516,8 +6728,7 @@ function registerStandaloneBrowserTools(tools, cdpPort, profileRegistry, default
       };
       const objectiveSignals = (payload) => {
         if (!payload || typeof payload !== "object") return payload;
-        const { riskCount, findings, ...rest } = payload;
-        return rest;
+        return payload;
       };
       const out = {
         backend: "managed-cdp",
@@ -6538,7 +6749,7 @@ function registerStandaloneBrowserTools(tools, cdpPort, profileRegistry, default
       if (focus === "overview") {
         out.evidence.backendCapabilities = await safeCall("devtools_backend_capabilities");
         out.evidence.diagnostics = await safeCall("browser_page_diagnostics", { limit });
-        out.evidence.signals = objectiveSignals(await safeCall("browser_risk_summary", { limit, includeTokenScan: false }));
+        out.evidence.signals = objectiveSignals(await safeCall("browser_signal_summary", { limit, includeTokenScan: false }));
         out.evidence.network = await safeProfileCall("profile_traffic_summary", { limit });
         out.evidence.console = await safeCall("browser_console_log", { reload: false, waitMs: 100, limit });
         out.summary = "Objective first pass across page, network, console, storage, and browser signals. This does not decide vulnerability impact.";
@@ -6692,6 +6903,315 @@ function registerStandaloneBrowserTools(tools, cdpPort, profileRegistry, default
     },
   });
 
+  tools.set("browser_evidence_manifest", {
+    name: "browser_evidence_manifest",
+    description: "Create a manifest for profile evidence files: capture window, artifact paths, sizes, hashes, and local provenance. This is objective evidence bookkeeping, not vulnerability analysis.",
+    parameters: {
+      type: "object",
+      properties: {
+        profile: { type: "string" },
+        tabId: { type: "string" },
+        artifactPaths: { type: "array", items: { type: "string" } },
+        maxFiles: { type: "number" },
+        save: { type: "boolean" },
+        path: { type: "string" },
+      },
+    },
+    async execute(id, params) {
+      const profile = await resolveProfile(params?.profile);
+      const readPayload = (result) => JSON.parse(result.content?.[0]?.text || "{}");
+      const diagnostics = readPayload(await tools.get("browser_page_diagnostics").execute(id, { profile: profile.name, tabId: params?.tabId, limit: 5 }));
+      const files = listEvidenceFiles(profile.evidenceDir, { maxFiles: params?.maxFiles || 200 });
+      const explicitArtifacts = [];
+      for (const file of params?.artifactPaths || []) {
+        if (!file || !existsSync(file)) {
+          explicitArtifacts.push({ path: file, exists: false });
+          continue;
+        }
+        const stat = statSync(file);
+        explicitArtifacts.push({
+          path: file,
+          exists: true,
+          bytes: stat.size,
+          modifiedAt: stat.mtime.toISOString(),
+          sha256: stat.size <= 25_000_000 ? fileSha256(file) : null,
+          hashSkipped: stat.size > 25_000_000,
+        });
+      }
+      const manifest = {
+        schema: "agent-browser-runtime.evidence-manifest.v1",
+        backend: "managed-cdp",
+        generatedAt: new Date().toISOString(),
+        profile: profile.name,
+        tabId: diagnostics.tabId || profile.tabId,
+        page: diagnostics.page || {},
+        capture: profileRegistry.getCapture(profile.name),
+        evidenceDir: profile.evidenceDir,
+        fileCount: files.length,
+        files,
+        explicitArtifacts,
+        boundaries: [
+          "Manifest records local evidence files and hashes only.",
+          "It does not classify findings or decide vulnerability impact.",
+        ],
+      };
+      let manifestPath = null;
+      if (params?.save !== false) {
+        manifestPath = params?.path || join(profile.evidenceDir, "manifests", `${Date.now()}-evidence-manifest.json`);
+        mkdirSync(dirname(manifestPath), { recursive: true });
+        writeFileSync(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`, "utf8");
+      }
+      return toolResult({ ...manifest, manifestPath });
+    },
+  });
+
+  tools.set("browser_request_correlation_graph", {
+    name: "browser_request_correlation_graph",
+    description: "Build an objective graph connecting frames, scripts, Network requests, and Console entries observed in current F12 evidence.",
+    parameters: {
+      type: "object",
+      properties: {
+        profile: { type: "string" },
+        tabId: { type: "string" },
+        limit: { type: "number" },
+        save: { type: "boolean" },
+        path: { type: "string" },
+      },
+    },
+    async execute(id, params) {
+      const profile = await resolveProfile(params?.profile);
+      const limit = typeof params?.limit === "number" ? params.limit : 200;
+      const readPayload = (result) => JSON.parse(result.content?.[0]?.text || "{}");
+      const framePayload = readPayload(await tools.get("browser_frame_tree").execute(id, { profile: profile.name, tabId: params?.tabId }));
+      const frames = framePayload.frames || flattenFrameTree(framePayload.frameTree);
+      const consoleLog = readPayload(await tools.get("browser_console_log").execute(id, { profile: profile.name, tabId: params?.tabId, limit: 100, reload: false, waitMs: 50 }));
+      const sources = readPayload(await tools.get("browser_sources_list").execute(id, { profile: profile.name, tabId: params?.tabId, limit }))?.scripts || [];
+      const requests = profileRegistry.queryTraffic(profile.name, { limit });
+      const graph = buildRequestCorrelationGraph({
+        requests,
+        consoleEntries: consoleLog.entries || [],
+        scripts: sources,
+        frames,
+        limit,
+      });
+      let graphPath = null;
+      if (params?.save) {
+        graphPath = params?.path || join(profile.evidenceDir, "graphs", `${Date.now()}-request-correlation-graph.json`);
+        mkdirSync(dirname(graphPath), { recursive: true });
+        writeFileSync(graphPath, `${JSON.stringify(graph, null, 2)}\n`, "utf8");
+      }
+      return toolResult({
+        backend: "managed-cdp",
+        profile: profile.name,
+        generatedAt: new Date().toISOString(),
+        graphPath,
+        ...graph,
+        boundaries: [
+          "Edges are evidence correlations from F12 metadata, not proof of causality.",
+          "Use request detail, source context, and debugger tools for drill-down.",
+        ],
+        nextTools: ["devtools_request_detail", "devtools_source_get", "devtools_console_source_context", "devtools_debugger_control"],
+      });
+    },
+  });
+
+  tools.set("browser_capture_diff", {
+    name: "browser_capture_diff",
+    description: "Compare two saved evidence artifacts or current captured traffic against a saved artifact. Useful for login/logout, role, account, and permission-boundary before/after research.",
+    parameters: {
+      type: "object",
+      properties: {
+        profile: { type: "string" },
+        beforePath: { type: "string" },
+        afterPath: { type: "string" },
+        includeCurrentAsAfter: { type: "boolean" },
+        save: { type: "boolean" },
+        path: { type: "string" },
+      },
+      required: ["beforePath"],
+    },
+    async execute(_id, params) {
+      const profile = await resolveProfile(params?.profile);
+      const before = readJsonFile(params.beforePath);
+      const after = params?.afterPath ? readJsonFile(params.afterPath) : { requests: profileRegistry.queryTraffic(profile.name, { limit: 1000000 }) };
+      const beforeRequests = extractBundleNetworkRecords(before);
+      const afterRequests = extractBundleNetworkRecords(after);
+      const network = diffRequestSets(beforeRequests, afterRequests);
+      const beforeStorage = before?.bundle?.storage || before?.storage || {};
+      const afterStorage = after?.bundle?.storage || after?.storage || {};
+      const storage = {
+        topLevelKeys: diffObjectKeys(beforeStorage, afterStorage),
+        cookieNames: diffObjectKeys(
+          Object.fromEntries((beforeStorage.cookies || []).map((cookie) => [cookie.name, true])),
+          Object.fromEntries((afterStorage.cookies || []).map((cookie) => [cookie.name, true])),
+        ),
+      };
+      const diff = {
+        schema: "agent-browser-runtime.capture-diff.v1",
+        backend: "managed-cdp",
+        generatedAt: new Date().toISOString(),
+        profile: profile.name,
+        beforePath: params.beforePath,
+        afterPath: params?.afterPath || null,
+        afterSource: params?.afterPath ? "file" : "current-profile-traffic",
+        network,
+        storage,
+        summary: {
+          addedRequestShapes: network.added.length,
+          removedRequestShapes: network.removed.length,
+          changedRequestShapes: network.changed.length,
+          addedStorageKeys: storage.topLevelKeys.added.length,
+          removedStorageKeys: storage.topLevelKeys.removed.length,
+        },
+        boundaries: [
+          "Diff reports observable changes between two evidence snapshots.",
+          "It does not decide whether a change is authorized, expected, or vulnerable.",
+        ],
+      };
+      let diffPath = null;
+      if (params?.save) {
+        diffPath = params?.path || join(profile.evidenceDir, "diffs", `${Date.now()}-capture-diff.json`);
+        mkdirSync(dirname(diffPath), { recursive: true });
+        writeFileSync(diffPath, `${JSON.stringify(diff, null, 2)}\n`, "utf8");
+      }
+      return toolResult({ ...diff, diffPath, nextTools: ["devtools_request_detail", "devtools_auth_boundary_report", "devtools_global_search"] });
+    },
+  });
+
+  tools.set("browser_auth_boundary_report", {
+    name: "browser_auth_boundary_report",
+    description: "Collect objective authentication and authorization boundary evidence: cookies, auth headers, token-like values, credentialed requests, storage tokens, and security context.",
+    parameters: {
+      type: "object",
+      properties: {
+        profile: { type: "string" },
+        tabId: { type: "string" },
+        limit: { type: "number" },
+        includeTokenScan: { type: "boolean" },
+        save: { type: "boolean" },
+        path: { type: "string" },
+      },
+    },
+    async execute(id, params) {
+      const profile = await resolveProfile(params?.profile);
+      const limit = typeof params?.limit === "number" ? params.limit : 50;
+      const readPayload = (result) => JSON.parse(result.content?.[0]?.text || "{}");
+      const requests = profileRegistry.queryTraffic(profile.name, { limit: 1000000 });
+      const cookies = readPayload(await tools.get("browser_cookie_summary").execute(id, { profile: profile.name, tabId: params?.tabId }));
+      const storage = readPayload(await tools.get("browser_storage_snapshot").execute(id, { profile: profile.name, tabId: params?.tabId }));
+      const security = readPayload(await tools.get("browser_security_summary").execute(id, { profile: profile.name, tabId: params?.tabId }));
+      const tokenScan = params?.includeTokenScan === false ? null : readPayload(await tools.get("browser_token_scan").execute(id, { profile: profile.name, tabId: params?.tabId }));
+      const authRequests = authHeaderEvidence(requests, limit);
+      const credentialedRequests = requests
+        .filter((request) => headerValue(request.requestHeaders || request.headers || {}, "cookie") || headerValue(request.requestHeaders || request.headers || {}, "authorization"))
+        .slice(-limit)
+        .map((request) => ({
+          requestId: request.requestId,
+          method: request.method,
+          url: request.url,
+          status: request.status,
+          resourceType: request.resourceType,
+          hasCookies: Boolean(headerValue(request.requestHeaders || request.headers || {}, "cookie")),
+          hasAuthorization: Boolean(headerValue(request.requestHeaders || request.headers || {}, "authorization")),
+        }));
+      const report = {
+        schema: "agent-browser-runtime.auth-boundary-report.v1",
+        backend: "managed-cdp",
+        generatedAt: new Date().toISOString(),
+        profile: profile.name,
+        page: security.page || {},
+        capture: profileRegistry.getCapture(profile.name),
+        cookieSummary: cookies.summary || cookies,
+        storageSummary: {
+          localStorageKeys: Object.keys(storage.localStorage || {}),
+          sessionStorageKeys: Object.keys(storage.sessionStorage || {}),
+          cookieCount: Array.isArray(storage.cookies) ? storage.cookies.length : 0,
+        },
+        authRequests,
+        credentialedRequests,
+        tokenScanSummary: tokenScan ? {
+          findingCount: tokenScan.findingCount || tokenScan.findings?.length || 0,
+          bySource: tokenScan.bySource || {},
+          findings: (tokenScan.findings || []).slice(0, limit),
+        } : null,
+        security: security.security || security,
+        boundaries: [
+          "This report lists authentication-related evidence only.",
+          "It does not decide whether access control is correct.",
+        ],
+      };
+      let reportPath = null;
+      if (params?.save) {
+        reportPath = params?.path || join(profile.evidenceDir, "auth", `${Date.now()}-auth-boundary-report.json`);
+        mkdirSync(dirname(reportPath), { recursive: true });
+        writeFileSync(reportPath, `${JSON.stringify(report, null, 2)}\n`, "utf8");
+      }
+      return toolResult({ ...report, reportPath, nextTools: ["devtools_request_replay_batch", "devtools_capture_diff", "devtools_token_scan", "devtools_cookie_summary"] });
+    },
+  });
+
+  tools.set("browser_worker_frame_deep_dive", {
+    name: "browser_worker_frame_deep_dive",
+    description: "Deep-dive frame, iframe, worker, Service Worker, CacheStorage, and target evidence so agents can inspect execution boundaries.",
+    parameters: {
+      type: "object",
+      properties: {
+        profile: { type: "string" },
+        tabId: { type: "string" },
+        includeServiceWorkerDetail: { type: "boolean" },
+        save: { type: "boolean" },
+        path: { type: "string" },
+      },
+    },
+    async execute(id, params) {
+      const profile = await resolveProfile(params?.profile);
+      const readPayload = (result) => JSON.parse(result.content?.[0]?.text || "{}");
+      const frames = readPayload(await tools.get("browser_frame_tree").execute(id, { profile: profile.name, tabId: params?.tabId }));
+      const swSummary = readPayload(await tools.get("browser_service_worker_summary").execute(id, { profile: profile.name, tabId: params?.tabId }));
+      const swDetail = params?.includeServiceWorkerDetail === false
+        ? null
+        : readPayload(await tools.get("browser_service_worker_detail").execute(id, { profile: profile.name, tabId: params?.tabId }));
+      const targets = await cdpJson(cdpPort, "/json/list").catch(() => []);
+      const workerTargets = (targets || []).filter((target) => ["worker", "shared_worker", "service_worker"].includes(target.type));
+      const report = {
+        schema: "agent-browser-runtime.worker-frame-deep-dive.v1",
+        backend: "managed-cdp",
+        generatedAt: new Date().toISOString(),
+        profile: profile.name,
+        frameTree: frames,
+        serviceWorkers: {
+          summary: swSummary,
+          detail: swDetail,
+        },
+        workerTargets: workerTargets.map((target) => ({
+          id: target.id,
+          type: target.type,
+          title: target.title,
+          url: target.url,
+          attached: target.attached,
+        })),
+        summary: {
+          frameCount: frames.frameCount || frames.frames?.length || flattenFrameTree(frames.frameTree).length || 0,
+          inaccessibleFrameCount: frames.inaccessibleFrameCount || 0,
+          serviceWorkerRegistrationCount: swSummary.registrationCount || 0,
+          cacheCount: swSummary.cacheCount || 0,
+          workerTargetCount: workerTargets.length,
+        },
+        boundaries: [
+          "Cross-origin frame internals may be intentionally unavailable to page-context tools.",
+          "Direct CDP target metadata is included when Chrome exposes it.",
+        ],
+      };
+      let reportPath = null;
+      if (params?.save) {
+        reportPath = params?.path || join(profile.evidenceDir, "boundaries", `${Date.now()}-worker-frame-deep-dive.json`);
+        mkdirSync(dirname(reportPath), { recursive: true });
+        writeFileSync(reportPath, `${JSON.stringify(report, null, 2)}\n`, "utf8");
+      }
+      return toolResult({ ...report, reportPath, nextTools: ["devtools_frame_tree", "devtools_service_worker_detail", "devtools_cache_entry_get", "devtools_cdp_command"] });
+    },
+  });
+
   tools.set("browser_security_research_pack", {
     name: "browser_security_research_pack",
     description: "One-call security research evidence workflow: optionally navigate, start capture, reload, collect agent_inspect routes, save HAR/Application/trace evidence, and return artifact paths.",
@@ -6752,12 +7272,27 @@ function registerStandaloneBrowserTools(tools, cdpPort, profileRegistry, default
           artifacts.traceQuery = await safeCall("devtools_trace_query", { tracePath: artifacts.trace.tracePath, limit: 10 });
         }
       }
+      artifacts.correlationGraph = await safeCall("devtools_request_correlation_graph", { limit: 100, save: true });
+      artifacts.authBoundary = await safeCall("devtools_auth_boundary_report", { limit: 50, includeTokenScan: Boolean(params?.includeTokenScan), save: true });
+      artifacts.workerFrame = await safeCall("devtools_worker_frame_deep_dive", { includeServiceWorkerDetail: true, save: true });
       artifacts.bundle = await safeCall("devtools_evidence_bundle", {
         save: true,
         networkLimit: 100,
         sourceLimit: 100,
         includeHar: false,
         includeTokenScan: Boolean(params?.includeTokenScan),
+      });
+      artifacts.manifest = await safeCall("devtools_evidence_manifest", {
+        save: true,
+        artifactPaths: [
+          artifacts.har?.harPath,
+          artifacts.application?.exportPath,
+          artifacts.trace?.tracePath,
+          artifacts.bundle?.bundlePath,
+          artifacts.correlationGraph?.graphPath,
+          artifacts.authBoundary?.reportPath,
+          artifacts.workerFrame?.reportPath,
+        ].filter(Boolean),
       });
       const networkSummary = network?.evidence?.summary || {};
       const page = overview?.evidence?.diagnostics?.page || {};
@@ -6778,6 +7313,10 @@ function registerStandaloneBrowserTools(tools, cdpPort, profileRegistry, default
           harPath: artifacts.har?.harPath || null,
           applicationExportPath: artifacts.application?.exportPath || null,
           evidenceBundlePath: artifacts.bundle?.bundlePath || null,
+          evidenceManifestPath: artifacts.manifest?.manifestPath || null,
+          correlationGraphPath: artifacts.correlationGraph?.graphPath || null,
+          authBoundaryReportPath: artifacts.authBoundary?.reportPath || null,
+          workerFrameReportPath: artifacts.workerFrame?.reportPath || null,
         },
         steps,
         evidence: {
@@ -6794,7 +7333,7 @@ function registerStandaloneBrowserTools(tools, cdpPort, profileRegistry, default
           "It organizes F12 evidence for security research but does not decide exploitability.",
           "Use returned requestId/scriptId/tracePath values for low-level drill-down tools.",
         ],
-        nextTools: ["agent_inspect", "devtools_request_detail", "devtools_request_replay_batch", "devtools_global_search", "devtools_trace_query"],
+        nextTools: ["agent_inspect", "devtools_request_detail", "devtools_request_replay_batch", "devtools_capture_diff", "devtools_auth_boundary_report", "devtools_trace_query"],
       });
     },
   });
@@ -7991,15 +8530,14 @@ function registerStandaloneBrowserTools(tools, cdpPort, profileRegistry, default
   aliasTool("devtools_console_source_context", "browser_console_source_context", "Unified Agent DevTools API: read source context around a console stack frame.");
   aliasTool("devtools_security_summary", "browser_security_summary", "Unified Agent DevTools API: summarize page security context and TLS/certificate details.");
   aliasTool("devtools_page_diagnostics", "browser_page_diagnostics", "Unified Agent DevTools API: summarize page health for agent dashboards.");
-  aliasTool("devtools_signal_summary", "browser_risk_summary", "Unified Agent DevTools API: summarize objective cross-panel browser signals and next drill-down tools.");
-  aliasTool("devtools_risk_summary", "browser_risk_summary", "Unified Agent DevTools API: summarize cross-panel browser risks and next drill-down tools.");
+  aliasTool("devtools_signal_summary", "browser_signal_summary", "Unified Agent DevTools API: summarize objective cross-panel browser signals and next drill-down tools.");
   aliasTool("devtools_issues_log", "browser_issues_log", "Unified Agent DevTools API: read Chrome DevTools Issues-panel events.");
   aliasTool("devtools_accessibility_snapshot", "browser_accessibility_snapshot", "Unified Agent DevTools API: read Accessibility panel-style AX tree.");
   aliasTool("devtools_frame_tree", "browser_frame_tree", "Unified Agent DevTools API: read frame/iframe tree.");
   aliasTool("devtools_hard_reload", "browser_hard_reload", "Unified Agent DevTools API: disable cache, bypass service worker, and reload.");
   aliasTool("devtools_storage_snapshot", "browser_storage_snapshot", "Unified Agent DevTools API: read storage and cookies.");
   aliasTool("devtools_storage_origin_summary", "browser_storage_origin_summary", "Unified Agent DevTools API: read Application-panel origin, storage key, quota, and cookie partition evidence.");
-  aliasTool("devtools_cookie_summary", "browser_cookie_summary", "Unified Agent DevTools API: summarize cookie security attributes and risk hints.");
+  aliasTool("devtools_cookie_summary", "browser_cookie_summary", "Unified Agent DevTools API: summarize cookie security attributes and objective attribute signals.");
   aliasTool("devtools_service_worker_summary", "browser_service_worker_summary", "Unified Agent DevTools API: summarize Service Worker registrations and CacheStorage state.");
   aliasTool("devtools_service_worker_detail", "browser_service_worker_detail", "Unified Agent DevTools API: inspect Service Worker registrations, scripts, CacheStorage entries, and worker targets.");
   aliasTool("devtools_application_export", "browser_application_export", "Unified Agent DevTools API: export Application panel data to a JSON file.");
@@ -8021,6 +8559,11 @@ function registerStandaloneBrowserTools(tools, cdpPort, profileRegistry, default
   aliasTool("devtools_source_map_metadata", "browser_source_map_metadata", "Unified Agent DevTools API: read source map reference and metadata.");
   aliasTool("devtools_global_search", "browser_global_search", "Unified Agent DevTools API: search F12 evidence surfaces for a literal query.");
   aliasTool("devtools_evidence_bundle", "browser_evidence_bundle", "Unified Agent DevTools API: export a compact objective F12 evidence bundle.");
+  aliasTool("devtools_evidence_manifest", "browser_evidence_manifest", "Unified Agent DevTools API: write a manifest with evidence paths, hashes, capture metadata, and provenance.");
+  aliasTool("devtools_request_correlation_graph", "browser_request_correlation_graph", "Unified Agent DevTools API: build a frame/script/request/console correlation graph from F12 evidence.");
+  aliasTool("devtools_capture_diff", "browser_capture_diff", "Unified Agent DevTools API: compare before/after evidence artifacts or current captured traffic.");
+  aliasTool("devtools_auth_boundary_report", "browser_auth_boundary_report", "Unified Agent DevTools API: collect objective auth boundary evidence without deciding vulnerability impact.");
+  aliasTool("devtools_worker_frame_deep_dive", "browser_worker_frame_deep_dive", "Unified Agent DevTools API: inspect frame, iframe, worker, Service Worker, CacheStorage, and target boundaries.");
   aliasTool("devtools_security_research_pack", "browser_security_research_pack", "Unified Agent DevTools API: run a one-call security research evidence workflow and return artifact paths.");
   aliasTool("devtools_sources_search", "browser_sources_search", "Unified Agent DevTools API: search parsed JavaScript sources by literal query.");
   aliasTool("devtools_performance_trace", "browser_performance_trace", "Unified Agent DevTools API: capture navigation/resource/paint/long-task performance data.");
