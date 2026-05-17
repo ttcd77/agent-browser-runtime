@@ -1491,6 +1491,85 @@ function summarizeRenderingTimeline(events = [], limit = 50) {
   };
 }
 
+function summarizeLayoutPaintFlameChart(events = [], limit = 50) {
+  const candidates = [];
+  let minTs = Infinity;
+  for (const event of events) {
+    if (typeof event.ts !== "number") continue;
+    minTs = Math.min(minTs, event.ts);
+    const name = String(event.name || "(unknown)");
+    const phase = classifyTraceEvent(name, event.cat);
+    if (!["rendering", "painting"].includes(phase)) continue;
+    if (typeof event.dur !== "number" || event.dur <= 0) continue;
+    candidates.push({
+      event,
+      name,
+      phase,
+      threadKey: `${event.pid || "?"}:${event.tid || "?"}`,
+      start: event.ts,
+      end: event.ts + event.dur,
+      durationMs: Math.round((event.dur / 1000) * 100) / 100,
+    });
+  }
+
+  candidates.sort((a, b) => a.threadKey.localeCompare(b.threadKey) || a.start - b.start || b.end - a.end);
+  const activeByThread = new Map();
+  const rows = [];
+  const phaseBuckets = {};
+  const threadBuckets = {};
+
+  for (const item of candidates) {
+    const active = activeByThread.get(item.threadKey) || [];
+    while (active.length && active[active.length - 1] <= item.start) active.pop();
+    const depth = active.length;
+    active.push(item.end);
+    activeByThread.set(item.threadKey, active);
+    addTraceBucket(phaseBuckets, item.phase, item.durationMs);
+    addTraceBucket(threadBuckets, item.threadKey, item.durationMs);
+    rows.push({
+      name: item.name,
+      phase: item.phase,
+      category: item.event.cat || "",
+      thread: item.event.tid,
+      process: item.event.pid,
+      threadKey: item.threadKey,
+      depth,
+      ts: item.start,
+      startOffsetMs: Number.isFinite(minTs) ? Math.round(((item.start - minTs) / 1000) * 100) / 100 : null,
+      durationMs: item.durationMs,
+      frame: item.event.args?.frame || item.event.args?.frameId || item.event.args?.data?.frame || null,
+      nodeId: item.event.args?.data?.nodeId || null,
+      layerId: item.event.args?.data?.layerId || null,
+      clip: item.event.args?.data?.clip || null,
+    });
+  }
+
+  const topDurationBuckets = (object) => Object.entries(object)
+    .sort((a, b) => b[1].durationMs - a[1].durationMs)
+    .slice(0, limit)
+    .map(([name, value]) => ({
+      name,
+      count: value.count,
+      durationMs: Math.round(value.durationMs * 100) / 100,
+    }));
+
+  return {
+    eventCount: rows.length,
+    returnedCount: Math.min(rows.length, limit),
+    threadCount: new Set(rows.map((row) => row.threadKey)).size,
+    maxDepth: rows.reduce((max, row) => Math.max(max, row.depth), 0),
+    byPhase: topDurationBuckets(phaseBuckets),
+    byThread: topDurationBuckets(threadBuckets),
+    rows: rows.slice(0, limit),
+    truncated: rows.length > limit,
+    captureBoundaries: [
+      "Layout/paint flame chart rows are reconstructed from complete Chrome trace events with timestamps and durations.",
+      "Depth is a same-thread nesting approximation for rendering and painting events, not a causal dependency graph.",
+      "Missing rows mean Chrome did not expose matching trace events in this capture window.",
+    ],
+  };
+}
+
 function summarizeTraceEvents(events = [], limit = 10) {
   const byCategory = {};
   const byName = {};
@@ -1570,6 +1649,7 @@ function summarizeTraceEvents(events = [], limit = 10) {
     busiestProcesses: topDurationBuckets(byProcess),
     topDurations: topDurations.slice(0, limit),
     renderingTimeline: summarizeRenderingTimeline(events, limit),
+    layoutPaintFlameChart: summarizeLayoutPaintFlameChart(events, limit),
     longEventCount: longEvents.length,
     longEvents: longEvents.slice(0, limit),
     screenshotEventCount: screenshots.length,

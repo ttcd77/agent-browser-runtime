@@ -257,7 +257,7 @@ Not fully implemented yet:
 
 - Fully lossless HAR export with exact timings and all bodies. Current HAR completeness reporting identifies which body/timing/redirect/security fields are present or missing.
 - Sources panel parity beyond raw/searchable script source: breakpoints, scopes, live debugging, and AST-lossless formatting. Heuristic pretty-print and source map metadata are already exposed.
-- Performance panel parity beyond current tracing: deeper layout/paint flame chart reconstruction.
+- Performance panel parity beyond current tracing: raw trace capture now returns `layoutPaintFlameChart` rows reconstructed from same-thread rendering/painting events; remaining work is richer UI-level explanation and edge-case fixture coverage.
 - Application panel deep browsing beyond current reads: CHIPS/partitioned-cookie write scenarios in smoke fixtures and deeper Cache/IndexedDB drill-down fixtures.
 - Network replay edge cases: raw socket-level replay and replay UI. Browser fetch replay already reports forbidden/skipped headers, supports raw/form/json/multipart body helpers, and can run batch variants with response diffs.
 - Browser UI/system dialogs and Chrome internal pages.

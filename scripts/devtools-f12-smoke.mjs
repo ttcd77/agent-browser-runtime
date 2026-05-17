@@ -269,6 +269,8 @@ try {
   assert(Array.isArray(trace.traceSummary?.topDurations), "Chrome trace summary missing topDurations");
   assert(Array.isArray(trace.traceSummary?.renderingTimeline?.rows), "Chrome trace summary missing rendering timeline rows");
   assert(Array.isArray(trace.traceSummary?.renderingTimeline?.captureBoundaries), "Chrome trace rendering timeline missing capture boundaries");
+  assert(Array.isArray(trace.traceSummary?.layoutPaintFlameChart?.rows), "Chrome trace summary missing layout/paint flame chart rows");
+  assert(Array.isArray(trace.traceSummary?.layoutPaintFlameChart?.captureBoundaries), "Chrome trace layout/paint flame chart missing capture boundaries");
   assert(Array.isArray(trace.traceScreenshots), "Chrome trace did not return screenshot frame evidence array");
 
   const traceQuery = await callTool(baseUrl, "devtools_trace_query", {

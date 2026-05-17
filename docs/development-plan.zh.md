@@ -89,7 +89,7 @@
 - HAR 导出继续接近 DevTools: 更完整 timing、body handle、redirect/body 证据。第一步先落地 `devtools_har_completeness`，让 Agent 知道当前 HAR 证据完整到什么程度。
 - Network: request detail 已补 initiator source context，在 Chrome 暴露脚本 frame 时直接返回发起请求附近源码行；request table / timing table 已补 URL、host、method、status 区间、resource type、redirect、cache、body visibility、header、排序等筛选。
 - Sources/Debugger: source map 原始文件导航已补 `devtools_source_map_source_get`；breakpoint probe 已并入 `devtools_debugger_control action=probeBreakpointByUrl`；paused scope 表达式求值已补 `evaluateExpressions`。
-- Performance: trace event 已补 `renderingTimeline`，按 loading/scripting/rendering/painting/screenshot 做时间线分组，不做性能风险判断，只做证据整理。
+- Performance: trace event 已补 `renderingTimeline` 和 `layoutPaintFlameChart`，按 loading/scripting/rendering/painting/screenshot 做时间线分组，并把 layout/paint 事件按同线程嵌套深度整理成 Agent 可读 flame chart 摘要；不做性能风险判断，只做证据整理。
 - Application: storage boundary 已补 quota usage breakdown、Storage Buckets support/bucket summary、cookie partition metadata；Cache/IndexedDB drill-down 已加入 Managed/Personal smoke；本地分区 cookie 写入 fixture 已覆盖 Managed/Personal，并记录 document-visible cookie names 与后端 cookie metadata 的可见性差异。
 - Elements/Frames: `devtools_frame_tree` 已补 iframe access + open shadow root boundary summary，并在 Managed/Personal smoke 中验证。closed shadow root 和跨源/沙箱 frame 内部不可见时作为浏览器边界返回。
 - Network Redirect: redirect chain 已在 Managed/Personal fixture 中真实 302 验证；`devtools_network_summary` 暴露 redirect row，`devtools_request_detail` 暴露链条细节。
@@ -311,3 +311,22 @@
 - `npm run contract:devtools`: Managed 91 / Personal 91。
 - `npm run smoke:f12`: 通过。
 - `npm run smoke:personal`: 通过。
+
+### 2026-05-17: Phase 2 layout/paint flame chart 摘要完成
+
+已经完成:
+
+- `devtools_chrome_trace` 的 `traceSummary` 新增 `layoutPaintFlameChart`。
+- Managed Browser 和 Personal Chrome 共用同一返回形状:
+  - layout/paint 事件列表
+  - same-thread nesting depth
+  - byPhase / byThread duration buckets
+  - frame / nodeId / layerId / clip 等 Chrome trace 暴露的定位信息
+- 返回 `captureBoundaries`，说明 depth 是同线程嵌套近似，不是因果判断。
+- 该能力只把 Performance 面板里的 layout/paint 证据结构化，不判断性能根因或漏洞。
+
+验证目标:
+
+- `npm run smoke:f12`
+- `npm run smoke:personal`
+- `npm run check:release`

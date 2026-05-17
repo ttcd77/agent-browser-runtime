@@ -164,7 +164,10 @@ DevTools UI source tree.
 browser-exposed performance entries with optional trace summaries and reports
 capture boundaries. `devtools_chrome_trace` saves the full raw trace and returns
 a first-pass summary with top categories, top event names, long events,
-screenshot events, and network-like events.
+screenshot events, network-like events, rendering timeline rows, and an
+agent-readable `layoutPaintFlameChart` reconstructed from timestamped
+rendering/painting trace events. The flame-chart depth is a same-thread nesting
+approximation for orientation, not a root-cause judgment.
 
 ## Personal And Managed Backends
 

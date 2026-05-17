@@ -306,6 +306,8 @@ const chromeTrace = await callTool("devtools_chrome_trace", {
   saveScreenshots: false,
 });
 assert(chromeTrace.tracePath, `Personal Chrome trace missing path: ${JSON.stringify(chromeTrace)}`);
+assert(Array.isArray(chromeTrace.traceSummary?.layoutPaintFlameChart?.rows), `Personal Chrome trace missing layout/paint flame chart rows: ${JSON.stringify(chromeTrace.traceSummary)}`);
+assert(Array.isArray(chromeTrace.traceSummary?.layoutPaintFlameChart?.captureBoundaries), `Personal Chrome trace missing layout/paint flame chart boundaries: ${JSON.stringify(chromeTrace.traceSummary)}`);
 const traceQuery = await callTool("devtools_trace_query", {
   tracePath: chromeTrace.tracePath,
   limit: 5,
