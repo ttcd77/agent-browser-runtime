@@ -49,9 +49,9 @@ evidence.
 | Clear recording | `devtools_capture_clear` |
 | Reload with cache disabled | `devtools_hard_reload` |
 | Split captured evidence into page, network, and realtime buckets | `devtools_capture_bisect` |
-| Inspect request table | `devtools_network_log` |
+| Inspect/filter request table | `devtools_network_log` |
 | Summarize request table | `devtools_network_summary` |
-| Inspect Timing/Initiator rows | `devtools_network_timeline` |
+| Inspect/filter Timing/Initiator rows | `devtools_network_timeline` |
 | Inspect redirect chain rows | `devtools_network_summary`, then `devtools_request_detail` |
 | Inspect WebSocket frames and EventSource/SSE messages | `devtools_realtime_log` |
 | Read response body | `devtools_request_body` |
@@ -62,6 +62,23 @@ evidence.
 | Export HAR object | `devtools_export_har` |
 | Save HAR file | `devtools_save_har` |
 | Check HAR body/timing/redirect/security completeness | `devtools_har_completeness` |
+
+`devtools_network_log` and `devtools_network_timeline` support objective
+Network-table filters shared by Personal and Managed backends:
+
+- URL/host/method/status: `url_contains`, `hostname`, `method`, `status`,
+  `status_min`, `status_max`.
+- Type and payload visibility: `resource_type`, `mime_contains`,
+  `has_request_body`, `has_response_body`.
+- Browser-observed flags: `failed`, `redirected`, `from_cache`,
+  `from_service_worker`.
+- Header presence/value filters: `request_header`, `response_header`, each as
+  `{ "name": "...", "valueContains": "..." }`.
+- Sorting: `sort_by` (`status`, `duration`, `size`, `start`, `url`, `method`)
+  and `sort_dir` (`asc`/`desc`).
+
+These filters are table-drilldown helpers only. They do not classify requests as
+vulnerable or safe.
 
 ## Elements And Accessibility Panels
 

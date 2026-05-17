@@ -780,6 +780,26 @@ try {
     requestId: redirectRow.requestId,
   });
   assert(redirectDetail.detail?.redirectChain?.some((entry) => String(entry.url || "").includes("/redirect-start") && Number(entry.status) === 302), `request detail missing redirect start evidence: ${JSON.stringify(redirectDetail.detail?.redirectChain)}`);
+  const filteredRedirects = await callTool(baseUrl, "devtools_network_log", {
+    profile: "default",
+    redirected: true,
+    status_min: 200,
+    status_max: 299,
+    resource_type: "Fetch",
+    response_header: { name: "content-type", valueContains: "json" },
+    sort_by: "status",
+    limit: 10,
+  });
+  assert(filteredRedirects.requests?.some((entry) => entry.requestId === redirectRow.requestId), `network log filters missed redirect row: ${JSON.stringify(filteredRedirects)}`);
+  const filteredTimeline = await callTool(baseUrl, "devtools_network_timeline", {
+    profile: "default",
+    url_contains: "/redirect-end",
+    redirected: true,
+    sort_by: "start",
+    sort_dir: "asc",
+    limit: 10,
+  });
+  assert(filteredTimeline.timeline?.some((entry) => entry.requestId === redirectRow.requestId), `network timeline filters missed redirect row: ${JSON.stringify(filteredTimeline)}`);
   const replayTraffic = await callTool(baseUrl, "devtools_network_log", {
     profile: "default",
     limit: 20,

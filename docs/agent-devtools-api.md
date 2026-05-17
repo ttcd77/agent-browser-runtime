@@ -161,6 +161,16 @@ DevTools/F12 data layer:
 - `devtools_request_payload`
 - `devtools_request_replay`
 - `devtools_request_replay_batch`
+
+Network table filters shared by `devtools_network_log` and
+`devtools_network_timeline`: `url_contains`, `hostname`, `method`, `status`,
+`status_min`, `status_max`, `resource_type`, `mime_contains`, `failed`,
+`redirected`, `from_cache`, `from_service_worker`, `has_request_body`,
+`has_response_body`, `request_header`, `response_header`, `sort_by`, and
+`sort_dir`. Header filters use an object such as
+`{"name":"content-type","valueContains":"json"}`. These filters only narrow
+captured rows; they do not make a security judgement.
+
 - `devtools_console_log`
 - `devtools_console_source_context`
 - `devtools_security_summary`

@@ -87,7 +87,7 @@
 开发项:
 
 - HAR 导出继续接近 DevTools: 更完整 timing、body handle、redirect/body 证据。第一步先落地 `devtools_har_completeness`，让 Agent 知道当前 HAR 证据完整到什么程度。
-- Network: request detail 已补 initiator source context，在 Chrome 暴露脚本 frame 时直接返回发起请求附近源码行。
+- Network: request detail 已补 initiator source context，在 Chrome 暴露脚本 frame 时直接返回发起请求附近源码行；request table / timing table 已补 URL、host、method、status 区间、resource type、redirect、cache、body visibility、header、排序等筛选。
 - Sources/Debugger: source map 原始文件导航已补 `devtools_source_map_source_get`；breakpoint probe 已并入 `devtools_debugger_control action=probeBreakpointByUrl`；paused scope 表达式求值已补 `evaluateExpressions`。
 - Performance: trace event 已补 `renderingTimeline`，按 loading/scripting/rendering/painting/screenshot 做时间线分组，不做性能风险判断，只做证据整理。
 - Application: storage boundary 已补 quota usage breakdown、Storage Buckets support/bucket summary、cookie partition metadata；Cache/IndexedDB drill-down 已加入 Managed/Personal smoke；本地分区 cookie 写入 fixture 已覆盖 Managed/Personal，并记录 document-visible cookie names 与后端 cookie metadata 的可见性差异。
@@ -275,3 +275,39 @@
 验证结果:
 
 - `npm run smoke:f12`: 通过，确认 `renderingTimeline.rows` 和 `captureBoundaries` 存在。
+
+### 2026-05-17: Phase 2 trace drilldown 上下文窗口完成
+
+已经完成:
+
+- `devtools_trace_query` / `personal_chrome_trace_query` 新增 `contextWindows`。
+- 查询 trace event 时可返回同 thread 的前后邻近事件，帮助 Agent 像 F12 Performance 面板一样看局部上下文。
+- 返回 `drilldown.contextWindowBasis` 和 `nextQueries`，说明上下文窗口是邻近事件证据，不是因果证明。
+
+验证结果:
+
+- `npm run smoke:f12`: 通过。
+- `npm run smoke:personal`: 通过。
+- `npm run check:release`: 通过。
+
+### 2026-05-17: Phase 2 Network table 筛选完成
+
+已经完成:
+
+- `devtools_network_log` 和 `devtools_network_timeline` 在 Managed Browser / Personal Chrome 两边支持同一套客观筛选:
+  - `url_contains`、`hostname`、`method`、`status`、`status_min`、`status_max`
+  - `resource_type`、`mime_contains`
+  - `failed`、`redirected`、`from_cache`、`from_service_worker`
+  - `has_request_body`、`has_response_body`
+  - `request_header`、`response_header`
+  - `sort_by`、`sort_dir`
+- 返回 `filtersApplied`，让证据记录保留“当时怎么缩小表格”的上下文。
+- Managed / Personal smoke 都用真实 302 redirect fixture 验证筛选结果。
+- 该能力只做 F12 Network 表格筛选，不判断请求是否有漏洞。
+
+验证结果:
+
+- `npm run check`: 通过。
+- `npm run contract:devtools`: Managed 91 / Personal 91。
+- `npm run smoke:f12`: 通过。
+- `npm run smoke:personal`: 通过。

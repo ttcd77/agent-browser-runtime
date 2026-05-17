@@ -1058,6 +1058,102 @@ function hostnameForUrl(url) {
   }
 }
 
+function pickFilterValue(filters = {}, ...names) {
+  for (const name of names) {
+    if (filters[name] !== undefined && filters[name] !== null && filters[name] !== "") return filters[name];
+  }
+  return undefined;
+}
+
+function booleanFilterValue(filters = {}, ...names) {
+  const value = pickFilterValue(filters, ...names);
+  if (value === undefined) return null;
+  if (typeof value === "boolean") return value;
+  if (typeof value === "number") return value !== 0;
+  const lowered = String(value).toLowerCase();
+  if (["true", "1", "yes"].includes(lowered)) return true;
+  if (["false", "0", "no"].includes(lowered)) return false;
+  return null;
+}
+
+function headerMatches(headers = {}, filter = {}) {
+  if (!filter || typeof filter !== "object") return true;
+  const requestedName = String(filter.name || "").toLowerCase();
+  const valueContains = filter.valueContains ?? filter.value_contains ?? filter.contains;
+  for (const [name, value] of Object.entries(headers || {})) {
+    if (requestedName && String(name).toLowerCase() !== requestedName) continue;
+    if (valueContains !== undefined && !String(value || "").toLowerCase().includes(String(valueContains).toLowerCase())) continue;
+    return true;
+  }
+  return false;
+}
+
+function networkRequestMatchesFilters(entry = {}, filters = {}) {
+  const urlContains = pickFilterValue(filters, "url_contains", "urlContains");
+  if (urlContains && !String(entry.url || "").toLowerCase().includes(String(urlContains).toLowerCase())) return false;
+  const host = pickFilterValue(filters, "hostname", "host");
+  if (host && hostnameForUrl(entry.url).toLowerCase() !== String(host).toLowerCase()) return false;
+  const method = pickFilterValue(filters, "method");
+  if (method && String(entry.method || "").toUpperCase() !== String(method).toUpperCase()) return false;
+  const status = pickFilterValue(filters, "status");
+  if (typeof status === "number" && entry.status !== status) return false;
+  const statusMin = pickFilterValue(filters, "status_min", "statusMin");
+  if (typeof statusMin === "number" && !(Number(entry.status) >= statusMin)) return false;
+  const statusMax = pickFilterValue(filters, "status_max", "statusMax");
+  if (typeof statusMax === "number" && !(Number(entry.status) <= statusMax)) return false;
+  const resourceType = pickFilterValue(filters, "resource_type", "resourceType", "type");
+  if (resourceType && String(entry.resourceType || "").toLowerCase() !== String(resourceType).toLowerCase()) return false;
+  const mimeContains = pickFilterValue(filters, "mime_contains", "mimeContains");
+  if (mimeContains && !String(entry.mimeType || "").toLowerCase().includes(String(mimeContains).toLowerCase())) return false;
+  const failed = booleanFilterValue(filters, "failed");
+  if (failed !== null && Boolean(entry.failed || Number(entry.status) >= 400) !== failed) return false;
+  const redirected = booleanFilterValue(filters, "redirected", "has_redirect", "hasRedirect");
+  if (redirected !== null && Boolean(Array.isArray(entry.redirectChain) && entry.redirectChain.length) !== redirected) return false;
+  const fromCache = booleanFilterValue(filters, "from_cache", "fromCache");
+  if (fromCache !== null && Boolean(entry.fromDiskCache) !== fromCache) return false;
+  const fromServiceWorker = booleanFilterValue(filters, "from_service_worker", "fromServiceWorker");
+  if (fromServiceWorker !== null && Boolean(entry.fromServiceWorker) !== fromServiceWorker) return false;
+  const hasRequestBody = booleanFilterValue(filters, "has_request_body", "hasRequestBody");
+  if (hasRequestBody !== null && Boolean(entry.hasPostData || entry.postData || entry.postDataLength) !== hasRequestBody) return false;
+  const hasResponseBody = booleanFilterValue(filters, "has_response_body", "hasResponseBody");
+  if (hasResponseBody !== null && Boolean(entry.bodyReadable || entry.bodyText || entry.bodyPath || entry.bodyBytes) !== hasResponseBody) return false;
+  const requestHeader = pickFilterValue(filters, "request_header", "requestHeader");
+  if (requestHeader && !headerMatches(entry.requestHeaders, requestHeader)) return false;
+  const responseHeader = pickFilterValue(filters, "response_header", "responseHeader");
+  if (responseHeader && !headerMatches(entry.responseHeaders, responseHeader)) return false;
+  return true;
+}
+
+function sortNetworkRequests(rows = [], filters = {}) {
+  const sortBy = pickFilterValue(filters, "sort_by", "sortBy");
+  if (!sortBy) return rows;
+  const direction = String(pickFilterValue(filters, "sort_dir", "sortDir") || "desc").toLowerCase() === "asc" ? 1 : -1;
+  const valueFor = (entry) => {
+    if (sortBy === "status") return Number(entry.status ?? -1);
+    if (sortBy === "duration") return requestDurationMs(entry) ?? -1;
+    if (sortBy === "size") return Number(entry.encodedDataLength ?? entry.bodyBytes ?? -1);
+    if (sortBy === "start" || sortBy === "time") return Date.parse(entry.timestamp || "") || 0;
+    if (sortBy === "url") return String(entry.url || "");
+    if (sortBy === "method") return String(entry.method || "");
+    return Date.parse(entry.timestamp || "") || 0;
+  };
+  return [...rows].sort((a, b) => {
+    const av = valueFor(a);
+    const bv = valueFor(b);
+    if (typeof av === "string" || typeof bv === "string") return String(av).localeCompare(String(bv)) * direction;
+    return (av - bv) * direction;
+  });
+}
+
+function filterNetworkRequests(rows = [], filters = {}) {
+  return sortNetworkRequests(rows.filter((entry) => networkRequestMatchesFilters(entry, filters)), filters);
+}
+
+function limitNetworkRequests(rows = [], filters = {}, limit = 50) {
+  if (pickFilterValue(filters, "sort_by", "sortBy")) return rows.slice(0, limit);
+  return rows.slice(-limit);
+}
+
 async function chromeCookiesForTab(tab) {
   const byKey = new Map();
   const addCookies = (cookies) => {
@@ -2105,11 +2201,12 @@ async function chromeCaptureStatus(params) {
 async function chromeNetworkLog(params) {
   const { tab, session } = await ensureDevtoolsAttached(params);
   const limit = Number(params.limit || 100);
-  const rows = [...session.requests.values()];
+  const rows = filterNetworkRequests([...session.requests.values()], params);
   return {
     tab: pickTab(tab),
     count: rows.length,
-    requests: rows.slice(-limit),
+    filtersApplied: params || {},
+    requests: limitNetworkRequests(rows, params, limit),
     websockets: [...session.websockets.values()].slice(-limit),
     websocketAndOtherNetworkEvents: session.network
       .filter((entry) => !entry.requestId || String(entry.method || "").startsWith("Network.webSocket"))
@@ -2132,27 +2229,13 @@ async function chromeNetworkSummary(params) {
 async function chromeNetworkTimeline(params) {
   const { tab, session } = await ensureDevtoolsAttached(params);
   const limit = Number(params.limit || 100);
-  let requests = [...session.requests.values()];
-  if (params.url_contains) {
-    const needle = String(params.url_contains).toLowerCase();
-    requests = requests.filter((entry) => String(entry.url || "").toLowerCase().includes(needle));
-  }
-  if (params.hostname) {
-    const hostname = String(params.hostname).toLowerCase();
-    requests = requests.filter((entry) => hostnameForUrl(entry.url).toLowerCase() === hostname);
-  }
-  if (params.method) {
-    const method = String(params.method).toUpperCase();
-    requests = requests.filter((entry) => String(entry.method || "").toUpperCase() === method);
-  }
-  if (typeof params.status === "number") {
-    requests = requests.filter((entry) => entry.status === params.status);
-  }
+  const requests = filterNetworkRequests([...session.requests.values()], params);
   return {
     tab: pickTab(tab),
     capture: session.capture,
+    filtersApplied: params || {},
     count: requests.length,
-    timeline: buildNetworkTimeline(requests, limit),
+    timeline: buildNetworkTimeline(limitNetworkRequests(requests, params, limit), limit),
   };
 }
 

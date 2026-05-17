@@ -208,6 +208,24 @@ const redirectDetail = await callTool("devtools_request_detail", {
   requestId: redirectRow.requestId,
 });
 assert(redirectDetail.detail?.redirectChain?.some((entry) => String(entry.url || "").includes("/redirect-start") && Number(entry.status) === 302), `Personal request detail missing redirect start evidence: ${JSON.stringify(redirectDetail.detail?.redirectChain)}`);
+const filteredRedirects = await callTool("devtools_network_log", {
+  redirected: true,
+  status_min: 200,
+  status_max: 299,
+  resource_type: "Fetch",
+  response_header: { name: "content-type", valueContains: "json" },
+  sort_by: "status",
+  limit: 10,
+});
+assert(filteredRedirects.requests?.some((entry) => entry.requestId === redirectRow.requestId), `Personal network log filters missed redirect row: ${JSON.stringify(filteredRedirects)}`);
+const filteredTimeline = await callTool("devtools_network_timeline", {
+  url_contains: "/redirect-end",
+  redirected: true,
+  sort_by: "start",
+  sort_dir: "asc",
+  limit: 10,
+});
+assert(filteredTimeline.timeline?.some((entry) => entry.requestId === redirectRow.requestId), `Personal network timeline filters missed redirect row: ${JSON.stringify(filteredTimeline)}`);
 
 const frameTree = await callTool("devtools_frame_tree");
 assert(frameTree.frameCount >= 1 || frameTree.frames?.length >= 1 || frameTree.frameTree?.frame?.id, `frame tree missing frames: ${JSON.stringify(frameTree)}`);

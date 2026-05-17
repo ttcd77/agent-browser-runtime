@@ -53,6 +53,25 @@ curl -X POST http://127.0.0.1:17335/tool/browser_inspect \
 Read `summary`, `completeness`, `nextTools`, and `toolPlan` before drilling
 down. If data is missing, decide whether a reload/capture boundary is needed.
 
+## Network Table Drilldown
+
+Use `devtools_network_summary` for first-pass counts. When the table is large,
+use `devtools_network_log` or `devtools_network_timeline` with filters instead
+of asking the model to scan everything:
+
+```bash
+curl -X POST http://127.0.0.1:17335/tool/devtools_network_log \
+  -H "content-type: application/json" \
+  -d "{\"profile\":\"default\",\"url_contains\":\"/api/\",\"status_min\":200,\"status_max\":299,\"resource_type\":\"Fetch\",\"sort_by\":\"start\",\"sort_dir\":\"asc\",\"limit\":50}"
+```
+
+Useful objective filters: `url_contains`, `hostname`, `method`, `status`,
+`status_min`, `status_max`, `resource_type`, `mime_contains`, `failed`,
+`redirected`, `from_cache`, `from_service_worker`, `has_request_body`,
+`has_response_body`, `request_header`, and `response_header`. Header filters use
+`{"name":"content-type","valueContains":"json"}`. The tool returns
+`filtersApplied` so the evidence record shows how the table was reduced.
+
 ## Redirect Drilldown
 
 Use `browser_inspect` or `devtools_network_summary` first. If a row reports a
