@@ -141,6 +141,7 @@ Unified Agent DevTools tools:
 - `devtools_performance_insights`
 - `devtools_performance_observer`
 - `devtools_chrome_trace`
+- `devtools_trace_query`
 - `devtools_cpu_profile`
 - `devtools_coverage_snapshot`
 - `devtools_coverage_detail`
@@ -217,6 +218,7 @@ Backend-specific aliases:
 - `personal_chrome_performance_insights`
 - `personal_chrome_performance_observer`
 - `personal_chrome_chrome_trace`
+- `personal_chrome_trace_query`
 - `personal_chrome_cpu_profile`
 - `personal_chrome_coverage_snapshot`
 - `personal_chrome_coverage_detail`

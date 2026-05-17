@@ -85,6 +85,20 @@ assert(Array.isArray(performanceObserver.snapshot?.supportedEntryTypes), "perfor
 assert(typeof performanceObserver.summary?.entryCount === "number", "performance observer missing entry count");
 assert(Array.isArray(performanceObserver.summary?.captureBoundaries), "performance observer missing capture boundaries");
 
+const chromeTrace = await callTool("devtools_chrome_trace", {
+  durationMs: 250,
+  maxEvents: 5,
+  saveScreenshots: false,
+});
+assert(chromeTrace.tracePath, `Personal Chrome trace missing path: ${JSON.stringify(chromeTrace)}`);
+const traceQuery = await callTool("devtools_trace_query", {
+  tracePath: chromeTrace.tracePath,
+  limit: 5,
+});
+assert(traceQuery.backend === "personal-chrome", `Personal Chrome trace query wrong backend: ${JSON.stringify(traceQuery)}`);
+assert(traceQuery.totalEvents > 0, "Personal Chrome trace query missing total event count");
+assert(Array.isArray(traceQuery.events), "Personal Chrome trace query missing events array");
+
 console.log("Personal Chrome smoke passed:");
 console.log(`- bridge: ${baseUrl}`);
 console.log(`- active tab: ${status.tab.title || "(untitled)"} ${status.tab.url}`);

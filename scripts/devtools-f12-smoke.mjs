@@ -228,6 +228,17 @@ try {
   assert(Array.isArray(trace.traceSummary?.topDurations), "Chrome trace summary missing topDurations");
   assert(Array.isArray(trace.traceScreenshots), "Chrome trace did not return screenshot frame evidence array");
 
+  const traceQuery = await callTool(baseUrl, "devtools_trace_query", {
+    profile: "default",
+    tracePath: trace.tracePath,
+    category: "devtools.timeline",
+    limit: 5,
+  });
+  assert(traceQuery.backend === "managed-cdp", `trace query wrong backend: ${JSON.stringify(traceQuery)}`);
+  assert(traceQuery.totalEvents > 0, "trace query missing total event count");
+  assert(Array.isArray(traceQuery.events), "trace query missing events array");
+  assert(Array.isArray(traceQuery.captureBoundaries), "trace query missing capture boundaries");
+
   const performanceInsights = await callTool(baseUrl, "devtools_performance_insights", {
     profile: "default",
     durationMs: 250,

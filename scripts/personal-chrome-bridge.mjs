@@ -1,6 +1,6 @@
 import http from "node:http";
 import { randomUUID } from "node:crypto";
-import { writeFileSync, mkdirSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { WebSocketServer } from "ws";
 
@@ -123,6 +123,7 @@ function normalizeCommand(toolName) {
     devtools_performance_insights: "chrome_performance_insights",
     devtools_performance_observer: "chrome_performance_observer",
     devtools_chrome_trace: "chrome_chrome_trace",
+    devtools_trace_query: "chrome_trace_query",
     devtools_cpu_profile: "chrome_cpu_profile",
     devtools_coverage_snapshot: "chrome_coverage_snapshot",
     devtools_coverage_detail: "chrome_coverage_detail",
@@ -238,6 +239,126 @@ function persistTraceScreenshots(traceText, params = {}) {
   return frames;
 }
 
+function findLatestTracePath(directory) {
+  if (!directory || !existsSync(directory)) return null;
+  const files = readdirSync(directory)
+    .filter((name) => name.endsWith(".json"))
+    .map((name) => {
+      const path = join(directory, name);
+      let mtimeMs = 0;
+      try {
+        mtimeMs = statSync(path).mtimeMs;
+      } catch {
+        // Ignore files that disappear between readdir and stat.
+      }
+      return { path, mtimeMs };
+    })
+    .sort((a, b) => b.mtimeMs - a.mtimeMs);
+  return files[0]?.path || null;
+}
+
+function summarizeTraceQuery(events = [], params = {}) {
+  const query = String(params.query || "").trim().toLowerCase();
+  const nameFilter = String(params.name || "").trim().toLowerCase();
+  const categoryFilter = String(params.category || "").trim().toLowerCase();
+  const phaseFilter = String(params.phase || "").trim();
+  const minDurationUs = typeof params.minDurationMs === "number" ? params.minDurationMs * 1000 : null;
+  const maxDurationUs = typeof params.maxDurationMs === "number" ? params.maxDurationMs * 1000 : null;
+  const limit = Math.max(1, Math.min(typeof params.limit === "number" ? params.limit : 50, 1000));
+  const sortBy = String(params.sortBy || "duration");
+  const timestamps = events.map((event) => Number(event.ts)).filter(Number.isFinite);
+  const minTs = Math.min(...timestamps);
+  const maxTs = Math.max(...timestamps);
+  const startUs = typeof params.startTimeMs === "number" && Number.isFinite(minTs) ? minTs + params.startTimeMs * 1000 : null;
+  const endUs = typeof params.endTimeMs === "number" && Number.isFinite(minTs) ? minTs + params.endTimeMs * 1000 : null;
+  const matches = events.filter((event) => {
+    const duration = Number(event.dur || 0);
+    const ts = Number(event.ts);
+    if (nameFilter && !String(event.name || "").toLowerCase().includes(nameFilter)) return false;
+    if (categoryFilter && !String(event.cat || "").toLowerCase().includes(categoryFilter)) return false;
+    if (phaseFilter && String(event.ph || "") !== phaseFilter) return false;
+    if (typeof params.processId === "number" && Number(event.pid) !== Number(params.processId)) return false;
+    if (typeof params.threadId === "number" && Number(event.tid) !== Number(params.threadId)) return false;
+    if (minDurationUs !== null && duration < minDurationUs) return false;
+    if (maxDurationUs !== null && duration > maxDurationUs) return false;
+    if (startUs !== null && ts < startUs) return false;
+    if (endUs !== null && ts > endUs) return false;
+    if (query && !JSON.stringify(event).toLowerCase().includes(query)) return false;
+    return true;
+  });
+  const sorted = [...matches].sort((a, b) => {
+    if (sortBy === "timestamp") return Number(a.ts || 0) - Number(b.ts || 0);
+    if (sortBy === "name") return String(a.name || "").localeCompare(String(b.name || ""));
+    return Number(b.dur || 0) - Number(a.dur || 0);
+  });
+  const countMap = (items, getKey) => {
+    const map = new Map();
+    for (const item of items) {
+      const key = getKey(item) || "(none)";
+      map.set(key, (map.get(key) || 0) + 1);
+    }
+    return [...map.entries()]
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 25)
+      .map(([key, count]) => ({ key, count }));
+  };
+  const returnedEvents = sorted.slice(0, limit).map((event) => ({
+    name: event.name || "",
+    category: event.cat || "",
+    phase: event.ph || "",
+    processId: event.pid,
+    threadId: event.tid,
+    timestampUs: event.ts,
+    relativeStartMs: Number.isFinite(minTs) && Number.isFinite(Number(event.ts)) ? Math.round(((Number(event.ts) - minTs) / 1000) * 100) / 100 : null,
+    durationMs: Math.round((Number(event.dur || 0) / 1000) * 100) / 100,
+    args: event.args || {},
+  }));
+  return {
+    totalEvents: events.length,
+    matchedCount: matches.length,
+    returnedCount: returnedEvents.length,
+    truncated: matches.length > returnedEvents.length,
+    timeRangeMs: Number.isFinite(minTs) && Number.isFinite(maxTs) ? Math.round(((maxTs - minTs) / 1000) * 100) / 100 : null,
+    filters: {
+      query: query || null,
+      name: nameFilter || null,
+      category: categoryFilter || null,
+      phase: phaseFilter || null,
+      processId: params.processId ?? null,
+      threadId: params.threadId ?? null,
+      minDurationMs: params.minDurationMs ?? null,
+      maxDurationMs: params.maxDurationMs ?? null,
+      startTimeMs: params.startTimeMs ?? null,
+      endTimeMs: params.endTimeMs ?? null,
+      sortBy,
+    },
+    categoryCounts: countMap(matches, (event) => String(event.cat || "").split(",")[0]),
+    phaseCounts: countMap(matches, (event) => event.ph),
+    topNames: countMap(matches, (event) => event.name),
+    threads: countMap(matches, (event) => `${event.pid}:${event.tid}`),
+    events: returnedEvents,
+    captureBoundaries: [
+      "This reads a saved Chrome trace JSON file; it cannot recover trace events that were not captured.",
+      "Durations are reported from Chrome trace event dur fields when present.",
+      "Use devtools_chrome_trace around the smallest reproducible action before querying.",
+    ],
+  };
+}
+
+function traceQuery(params = {}) {
+  const tracePath = params.tracePath || findLatestTracePath(traceDir);
+  if (!tracePath) throw new Error("tracePath is required and no saved personal Chrome trace was found");
+  const traceText = readFileSync(tracePath, "utf8");
+  const trace = JSON.parse(traceText);
+  const events = Array.isArray(trace?.traceEvents) ? trace.traceEvents : [];
+  return {
+    backend: "personal-chrome",
+    tracePath,
+    traceBytes: Buffer.byteLength(traceText, "utf8"),
+    ...summarizeTraceQuery(events, params),
+  };
+}
+
 function persistCpuProfile(result, params = {}) {
   if (!result?.profile) return result;
   const path = params.path || join(cpuProfileDir, `${Date.now()}-cpu-profile.json`);
@@ -324,6 +445,9 @@ function postProcessToolResult(toolName, result, params = {}) {
 }
 
 async function callBridgeTool(toolName, params = {}) {
+  if (toolName === "personal_chrome_trace_query" || toolName === "devtools_trace_query") {
+    return traceQuery(params);
+  }
   const command = normalizeCommand(toolName);
   const result = await callExtension(command, params);
   return postProcessToolResult(toolName, result, params);
@@ -385,7 +509,7 @@ function buildAgentInspectToolPlan(focus, options = {}) {
     return {
       ...base,
       firstPass: ["devtools_memory_snapshot", "devtools_performance_observer", "devtools_performance_insights", "devtools_performance_trace"],
-      drillDown: ["devtools_chrome_trace", "devtools_cpu_profile", "devtools_coverage_detail"],
+      drillDown: ["devtools_chrome_trace", "devtools_trace_query", "devtools_cpu_profile", "devtools_coverage_detail"],
       captureHint: "Use heavier traces only around the smallest reproducible action.",
       objectiveBoundary: "Trace summaries expose timing evidence, not root-cause conclusions.",
     };
@@ -634,6 +758,7 @@ const tools = {
   personal_chrome_performance_insights: "Summarize Performance panel timing, slow resources, long tasks, and optional Chrome trace evidence from the user's real Chrome tab.",
   personal_chrome_performance_observer: "Capture PerformanceObserver entries such as LCP, layout shifts, long tasks, event timing, and long animation frames from the user's real Chrome tab.",
   personal_chrome_chrome_trace: "Capture Chrome Tracing data from the user's real Chrome tab and write the full trace locally.",
+  personal_chrome_trace_query: "Query a saved Personal Chrome trace JSON file by event name, category, phase, duration, thread, or time range.",
   personal_chrome_cpu_profile: "Capture a JavaScript CPU profile from the user's real Chrome tab and write the full profile locally.",
   personal_chrome_coverage_snapshot: "Capture short JavaScript precise coverage and CSS rule usage from the user's real Chrome tab.",
   personal_chrome_coverage_detail: "Capture Coverage-panel JavaScript/CSS range drilldown data from the user's real Chrome tab.",
@@ -708,6 +833,7 @@ const tools = {
   devtools_performance_insights: "Unified Agent DevTools API: summarize Performance panel timing, resources, long tasks, and optional trace evidence.",
   devtools_performance_observer: "Unified Agent DevTools API: capture PerformanceObserver entries such as LCP, layout shifts, long tasks, event timing, and long animation frames.",
   devtools_chrome_trace: "Unified Agent DevTools API: capture Chrome Tracing data and return a summary plus full trace path.",
+  devtools_trace_query: "Unified Agent DevTools API: query saved Chrome trace events by name, category, duration, thread, or time range.",
   devtools_cpu_profile: "Unified Agent DevTools API: capture a JavaScript CPU profile and hotspot summary.",
   devtools_coverage_snapshot: "Unified Agent DevTools API: capture short JavaScript and CSS coverage data.",
   devtools_coverage_detail: "Unified Agent DevTools API: capture Coverage-panel JavaScript/CSS range drilldown data.",
