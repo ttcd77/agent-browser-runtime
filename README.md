@@ -159,6 +159,18 @@ F12 tools; it chooses the first useful evidence set for `overview`, `network`,
 intentionally objective: it organizes browser evidence but does not decide
 whether something is a vulnerability.
 
+One-call security research evidence pack:
+
+```bash
+curl -X POST http://127.0.0.1:17335/tool/devtools_security_research_pack \
+  -H "content-type: application/json" \
+  -d "{\"profile\":\"researcher\",\"url\":\"https://example.com\",\"includeHar\":true,\"includeTrace\":true,\"includeApplicationExport\":true}"
+```
+
+This starts a capture window, hard reloads the page, collects the first-pass
+F12 evidence areas, and returns saved HAR, Application export, Chrome trace, and
+evidence bundle paths. See `docs/security-research-pack.md`.
+
 ## Tools
 
 ### Agent Router
@@ -250,6 +262,8 @@ Chrome Extension Mode and Managed Browser Mode:
 
 See `docs/agent-devtools-api.md`.
 For an F12-to-tool lookup table, see `docs/devtools-panel-map.md`.
+For the one-call research workflow, see `docs/security-research-pack.md`.
+For public release readiness, see `docs/open-source-release-checklist.md`.
 
 Backend/debug tools:
 
