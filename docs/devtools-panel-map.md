@@ -155,7 +155,9 @@ DevTools UI source tree.
 | Summarize cookie security attributes | `devtools_cookie_summary` |
 | Summarize Service Worker and cache state | `devtools_service_worker_summary` |
 | Export Application panel data | `devtools_application_export` |
+| List IndexedDB databases, object stores, indexes, and counts | `devtools_indexeddb_list` |
 | Read IndexedDB page | `devtools_indexeddb_read` |
+| List CacheStorage caches and request/response metadata | `devtools_cache_storage_list` |
 | Read CacheStorage response body | `devtools_cache_entry_get` |
 | Scan authorized browser data for token-like values | `devtools_token_scan` |
 

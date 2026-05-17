@@ -267,6 +267,12 @@ const chipsCookie = storage.cookiePartitions?.find((cookie) => cookie.name === "
 if (chipsCookie) {
   assert(chipsCookie?.name === "agent_personal_chips", `Personal CHIPS cookie was visible to document.cookie but missing from backend cookie evidence: ${JSON.stringify(storage.cookiePartitions)}`);
 }
+const indexedDbList = await callTool("devtools_indexeddb_list", {
+  maxDatabases: 20,
+});
+assert(indexedDbList.page?.ok === true, `Personal IndexedDB list failed: ${JSON.stringify(indexedDbList)}`);
+const personalSmokeDb = indexedDbList.page?.databases?.find((db) => db.name === "agent-personal-smoke-db");
+assert(personalSmokeDb?.objectStores?.some((store) => store.name === "records" && store.recordCount >= 1), `Personal IndexedDB list missing smoke store/count: ${JSON.stringify(indexedDbList.page)}`);
 const indexedDbRead = await callTool("devtools_indexeddb_read", {
   database: "agent-personal-smoke-db",
   store: "records",
@@ -274,6 +280,13 @@ const indexedDbRead = await callTool("devtools_indexeddb_read", {
 });
 assert(indexedDbRead.page?.ok === true, `Personal IndexedDB read failed: ${JSON.stringify(indexedDbRead)}`);
 assert(indexedDbRead.page?.records?.some((record) => record.value?.value === "personal indexeddb smoke"), `Personal IndexedDB read missing smoke record: ${JSON.stringify(indexedDbRead)}`);
+const cacheStorageList = await callTool("devtools_cache_storage_list", {
+  maxCaches: 20,
+  maxEntries: 20,
+});
+assert(cacheStorageList.page?.ok === true, `Personal CacheStorage list failed: ${JSON.stringify(cacheStorageList)}`);
+const personalSmokeCache = cacheStorageList.page?.caches?.find((cache) => cache.name === "agent-personal-smoke-cache");
+assert(personalSmokeCache?.entries?.some((entry) => String(entry.url).endsWith("/personal-cached.txt") && entry.status === 200), `Personal CacheStorage list missing smoke entry: ${JSON.stringify(cacheStorageList.page)}`);
 const cacheEntry = await callTool("devtools_cache_entry_get", {
   cacheName: "agent-personal-smoke-cache",
   url: `${fixture.url}personal-cached.txt`,

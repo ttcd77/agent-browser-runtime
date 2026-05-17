@@ -873,6 +873,13 @@ try {
   assert(applicationExport.exportBytes > 0, "application export was empty");
   assert(applicationExport.indexedDbDatabaseCount >= 1, `application export missing IndexedDB: ${JSON.stringify(applicationExport)}`);
   assert(applicationExport.cacheCount >= 1, `application export missing CacheStorage: ${JSON.stringify(applicationExport)}`);
+  const indexedDbList = await callTool(baseUrl, "devtools_indexeddb_list", {
+    profile: "default",
+    maxDatabases: 20,
+  });
+  assert(indexedDbList.page?.ok === true, `IndexedDB list failed: ${JSON.stringify(indexedDbList)}`);
+  const smokeDb = indexedDbList.page?.databases?.find((db) => db.name === "agent-f12-smoke-db");
+  assert(smokeDb?.objectStores?.some((store) => store.name === "records" && store.recordCount >= 1), `IndexedDB list missing smoke store/count: ${JSON.stringify(indexedDbList.page)}`);
   const indexedDbRead = await callTool(baseUrl, "devtools_indexeddb_read", {
     profile: "default",
     database: "agent-f12-smoke-db",
@@ -881,6 +888,14 @@ try {
   });
   assert(indexedDbRead.page?.ok === true, `IndexedDB read failed: ${JSON.stringify(indexedDbRead)}`);
   assert(indexedDbRead.page?.records?.some((record) => record.value?.value === "indexeddb smoke"), `IndexedDB read missing smoke record: ${JSON.stringify(indexedDbRead)}`);
+  const cacheStorageList = await callTool(baseUrl, "devtools_cache_storage_list", {
+    profile: "default",
+    maxCaches: 20,
+    maxEntries: 20,
+  });
+  assert(cacheStorageList.page?.ok === true, `CacheStorage list failed: ${JSON.stringify(cacheStorageList)}`);
+  const smokeCache = cacheStorageList.page?.caches?.find((cache) => cache.name === "agent-f12-smoke-cache");
+  assert(smokeCache?.entries?.some((entry) => String(entry.url).endsWith("/cached.txt") && entry.status === 200), `CacheStorage list missing smoke entry: ${JSON.stringify(cacheStorageList.page)}`);
   const cacheEntry = await callTool(baseUrl, "devtools_cache_entry_get", {
     profile: "default",
     cacheName: "agent-f12-smoke-cache",

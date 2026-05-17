@@ -254,8 +254,12 @@ async function executeCommand(command, params) {
       return await chromeServiceWorkerDetail(params);
     case "chrome_application_export":
       return await chromeApplicationExport(params);
+    case "chrome_indexeddb_list":
+      return await chromeIndexedDbList(params);
     case "chrome_indexeddb_read":
       return await chromeIndexedDbRead(params);
+    case "chrome_cache_storage_list":
+      return await chromeCacheStorageList(params);
     case "chrome_cache_entry_get":
       return await chromeCacheEntryGet(params);
     case "chrome_elements_snapshot":
@@ -3769,6 +3773,95 @@ async function chromeApplicationExport(params) {
   };
 }
 
+async function chromeIndexedDbList(params) {
+  const tab = await getTargetTab(params);
+  const maxDatabases = Number(params.maxDatabases || 50);
+  const includeCounts = params.includeCounts !== false;
+  const page = await runInTab(tab.id, async ({ maxDatabases, includeCounts }) => {
+    const out = {
+      ok: true,
+      url: location.href,
+      origin: location.origin,
+      supported: Boolean(indexedDB),
+      databasesApiSupported: Boolean(indexedDB?.databases),
+      databases: [],
+      captureBoundaries: [
+        "IndexedDB listing is current page-origin state as exposed to page JavaScript.",
+        "Record counts use objectStore.count() and can change while the page is running.",
+        "If indexedDB.databases() is unavailable, the browser does not expose a full database name list to page JavaScript.",
+      ],
+    };
+    if (!indexedDB?.databases) {
+      out.ok = false;
+      out.error = "indexedDB.databases_unavailable";
+      return out;
+    }
+    const metas = (await indexedDB.databases()).slice(0, maxDatabases);
+    out.truncated = metas.length >= maxDatabases;
+    for (const meta of metas) {
+      const dbOut = { name: meta.name, version: meta.version, objectStores: [], error: null };
+      out.databases.push(dbOut);
+      if (!meta.name) continue;
+      await new Promise((resolve) => {
+        const open = indexedDB.open(meta.name);
+        open.onerror = () => {
+          dbOut.error = String(open.error?.message || open.error || "open_failed");
+          resolve();
+        };
+        open.onsuccess = () => {
+          const db = open.result;
+          dbOut.version = db.version;
+          const storeNames = Array.from(db.objectStoreNames || []);
+          if (!storeNames.length) {
+            db.close();
+            resolve();
+            return;
+          }
+          let pending = storeNames.length;
+          const done = () => {
+            pending -= 1;
+            if (pending === 0) {
+              db.close();
+              resolve();
+            }
+          };
+          for (const storeName of storeNames) {
+            const storeOut = { name: storeName, keyPath: null, autoIncrement: null, indexes: [], recordCount: null, error: null };
+            dbOut.objectStores.push(storeOut);
+            try {
+              const tx = db.transaction(storeName, "readonly");
+              const store = tx.objectStore(storeName);
+              storeOut.keyPath = store.keyPath;
+              storeOut.autoIncrement = store.autoIncrement;
+              storeOut.indexes = Array.from(store.indexNames || []).map((indexName) => {
+                const index = store.index(indexName);
+                return { name: index.name, keyPath: index.keyPath, unique: index.unique, multiEntry: index.multiEntry };
+              });
+              if (includeCounts) {
+                const countReq = store.count();
+                countReq.onsuccess = () => { storeOut.recordCount = countReq.result; };
+                countReq.onerror = () => { storeOut.countError = String(countReq.error?.message || countReq.error || "count_failed"); };
+              }
+              tx.oncomplete = done;
+              tx.onerror = () => {
+                storeOut.error = String(tx.error?.message || tx.error || "transaction_failed");
+                done();
+              };
+            } catch (error) {
+              storeOut.error = String(error?.message || error);
+              done();
+            }
+          }
+        };
+      });
+    }
+    out.databaseCount = out.databases.length;
+    out.objectStoreCount = out.databases.reduce((sum, db) => sum + (db.objectStores?.length || 0), 0);
+    return out;
+  }, [{ maxDatabases, includeCounts }]);
+  return { tab: pickTab(tab), page };
+}
+
 async function chromeIndexedDbRead(params) {
   if (!params.database) throw new Error("database is required");
   if (!params.store) throw new Error("store is required");
@@ -3813,6 +3906,65 @@ async function chromeIndexedDbRead(params) {
       };
     });
   }, [{ database: String(params.database), storeName: String(params.store), limit, offset }]);
+  return { tab: pickTab(tab), page };
+}
+
+async function chromeCacheStorageList(params) {
+  const tab = await getTargetTab(params);
+  const maxCaches = Number(params.maxCaches || 50);
+  const maxEntries = Number(params.maxEntries || 200);
+  const page = await runInTab(tab.id, async ({ maxCaches, maxEntries }) => {
+    const out = {
+      ok: true,
+      url: location.href,
+      origin: location.origin,
+      supported: Boolean(caches?.keys),
+      caches: [],
+      captureBoundaries: [
+        "CacheStorage listing is current page-origin state as exposed to page JavaScript.",
+        "Response bodies are not included in this list; use devtools_cache_entry_get for a selected cacheName/url.",
+        "Entry metadata can change while Service Workers or page scripts update caches.",
+      ],
+    };
+    if (!caches?.keys) {
+      out.ok = false;
+      out.error = "cacheStorage_unavailable";
+      return out;
+    }
+    const names = (await caches.keys()).slice(0, maxCaches);
+    out.truncatedCaches = names.length >= maxCaches;
+    for (const name of names) {
+      const cacheOut = { name, entryCount: 0, returnedCount: 0, truncated: false, entries: [], error: null };
+      out.caches.push(cacheOut);
+      try {
+        const cache = await caches.open(name);
+        const requests = await cache.keys();
+        cacheOut.entryCount = requests.length;
+        cacheOut.truncated = requests.length > maxEntries;
+        for (const request of requests.slice(0, maxEntries)) {
+          const response = await cache.match(request).catch(() => null);
+          cacheOut.entries.push({
+            url: request.url,
+            method: request.method,
+            mode: request.mode,
+            credentials: request.credentials,
+            destination: request.destination,
+            referrer: request.referrer,
+            status: response?.status ?? null,
+            statusText: response?.statusText ?? null,
+            type: response?.type ?? null,
+            headers: response ? Array.from(response.headers.entries()).map(([header, value]) => ({ name: header, value })) : [],
+          });
+        }
+        cacheOut.returnedCount = cacheOut.entries.length;
+      } catch (error) {
+        cacheOut.error = String(error?.message || error);
+      }
+    }
+    out.cacheCount = out.caches.length;
+    out.entryCount = out.caches.reduce((sum, cache) => sum + (cache.entryCount || 0), 0);
+    return out;
+  }, [{ maxCaches, maxEntries }]);
   return { tab: pickTab(tab), page };
 }
 

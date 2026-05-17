@@ -109,7 +109,9 @@ function normalizeCommand(toolName) {
     devtools_service_worker_summary: "chrome_service_worker_summary",
     devtools_service_worker_detail: "chrome_service_worker_detail",
     devtools_application_export: "chrome_application_export",
+    devtools_indexeddb_list: "chrome_indexeddb_list",
     devtools_indexeddb_read: "chrome_indexeddb_read",
+    devtools_cache_storage_list: "chrome_cache_storage_list",
     devtools_cache_entry_get: "chrome_cache_entry_get",
     devtools_elements_snapshot: "chrome_elements_snapshot",
     devtools_dom_snapshot: "chrome_dom_snapshot",
@@ -1948,7 +1950,7 @@ function buildAgentInspectToolPlan(focus, options = {}) {
     return {
       ...base,
       firstPass: ["devtools_storage_origin_summary", "devtools_cookie_summary", "devtools_service_worker_summary"],
-      drillDown: ["devtools_application_export", "devtools_indexeddb_read", "devtools_cache_entry_get"],
+      drillDown: ["devtools_application_export", "devtools_indexeddb_list", "devtools_indexeddb_read", "devtools_cache_storage_list", "devtools_cache_entry_get"],
       captureHint: "Storage is current-state evidence. Use Application export for handoff and repeatability.",
       objectiveBoundary: "Partition metadata is reported only when Chrome exposes it for the current page.",
     };
@@ -2056,7 +2058,7 @@ async function runAgentInspect(params = {}) {
     out.evidence.serviceWorkers = await safeBridgeTool("devtools_service_worker_summary", base);
     if (params.includeHeavy) out.evidence.storage = await safeBridgeTool("devtools_storage_snapshot", base);
     out.summary = "Application panel route: origin/quota, cookies, service workers, and optional full storage snapshot.";
-    out.nextTools = ["devtools_application_export", "devtools_indexeddb_read", "devtools_cache_entry_get", "agent_inspect focus=search query=<key/value>"];
+    out.nextTools = ["devtools_application_export", "devtools_indexeddb_list", "devtools_indexeddb_read", "devtools_cache_storage_list", "devtools_cache_entry_get", "agent_inspect focus=search query=<key/value>"];
   } else if (focus === "console") {
     out.evidence.console = await safeBridgeTool("devtools_console_log", withBase({ reload: false, waitMs: 300, limit }));
     out.evidence.issues = await safeBridgeTool("devtools_issues_log", withBase({ reload: false, waitMs: 100, limit }));
@@ -2213,7 +2215,9 @@ const tools = {
   personal_chrome_service_worker_summary: "Return Application panel-style Service Worker and CacheStorage summary from the user's real Chrome tab.",
   personal_chrome_service_worker_detail: "Return deeper Application panel Service Worker evidence: registrations, scripts, CacheStorage entries, and worker debugger targets.",
   personal_chrome_application_export: "Export Application panel data from the user's real Chrome tab to a JSON file.",
+  personal_chrome_indexeddb_list: "List IndexedDB databases, object stores, indexes, and record counts from the user's real Chrome tab.",
   personal_chrome_indexeddb_read: "Read records from a specific IndexedDB database and object store.",
+  personal_chrome_cache_storage_list: "List CacheStorage caches and request/response metadata from the user's real Chrome tab.",
   personal_chrome_cache_entry_get: "Read one CacheStorage response body by cache name and URL.",
   personal_chrome_elements_snapshot: "Return DOM tree, layout boxes, and computed style for the user's real Chrome tab.",
   personal_chrome_dom_snapshot: "Return Chrome DOMSnapshot.captureSnapshot data from the user's real Chrome tab.",
@@ -2304,7 +2308,9 @@ const tools = {
   devtools_service_worker_summary: "Unified Agent DevTools API: summarize Service Worker registrations and CacheStorage state.",
   devtools_service_worker_detail: "Unified Agent DevTools API: inspect Service Worker registrations, scripts, CacheStorage entries, and worker targets.",
   devtools_application_export: "Unified Agent DevTools API: export Application panel data to a JSON file.",
+  devtools_indexeddb_list: "Unified Agent DevTools API: list IndexedDB databases, object stores, indexes, and record counts.",
   devtools_indexeddb_read: "Unified Agent DevTools API: read IndexedDB records by database and object store.",
+  devtools_cache_storage_list: "Unified Agent DevTools API: list CacheStorage caches and request/response metadata.",
   devtools_cache_entry_get: "Unified Agent DevTools API: read a CacheStorage response by cache name and URL.",
   devtools_elements_snapshot: "Unified Agent DevTools API: read Elements panel-style DOM tree, layout boxes, and computed style.",
   devtools_dom_snapshot: "Unified Agent DevTools API: read raw Chrome DOMSnapshot data.",

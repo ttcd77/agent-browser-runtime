@@ -90,7 +90,7 @@
 - Network: request detail 已补 initiator source context，在 Chrome 暴露脚本 frame 时直接返回发起请求附近源码行；request table / timing table 已补 URL、host、method、status 区间、resource type、redirect、cache、body visibility、header、排序等筛选。
 - Sources/Debugger: source map 原始文件导航已补 `devtools_source_map_source_get`；breakpoint probe 已并入 `devtools_debugger_control action=probeBreakpointByUrl`；paused scope 表达式求值已补 `evaluateExpressions`。
 - Performance: trace event 已补 `renderingTimeline` 和 `layoutPaintFlameChart`，按 loading/scripting/rendering/painting/screenshot 做时间线分组，并把 layout/paint 事件按同线程嵌套深度整理成 Agent 可读 flame chart 摘要；不做性能风险判断，只做证据整理。
-- Application: storage boundary 已补 quota usage breakdown、Storage Buckets support/bucket summary、cookie partition metadata；Cache/IndexedDB drill-down 已加入 Managed/Personal smoke；本地分区 cookie 写入 fixture 已覆盖 Managed/Personal，并记录 document-visible cookie names 与后端 cookie metadata 的可见性差异。
+- Application: storage boundary 已补 quota usage breakdown、Storage Buckets support/bucket summary、cookie partition metadata；IndexedDB database/object-store/index/count list、CacheStorage cache/entry metadata list 和具体读取工具已覆盖 Managed/Personal smoke；本地分区 cookie 写入 fixture 已覆盖 Managed/Personal，并记录 document-visible cookie names 与后端 cookie metadata 的可见性差异。
 - Elements/Frames: `devtools_frame_tree` 已补 iframe access + open shadow root boundary summary，并在 Managed/Personal smoke 中验证。closed shadow root 和跨源/沙箱 frame 内部不可见时作为浏览器边界返回。
 - Network Redirect: redirect chain 已在 Managed/Personal fixture 中真实 302 验证；`devtools_network_summary` 暴露 redirect row，`devtools_request_detail` 暴露链条细节。
 - Replay: `devtools_request_replay` / `devtools_request_replay_batch` 已返回 `replayBoundary`，明确 forbidden header、browser fetch replay 与 raw socket-level replay 边界。
@@ -144,6 +144,15 @@
 - 它是后续开源展示和 Agent 自动选择工具的基础。
 
 ## 执行记录
+
+### 2026-05-17: Application 存储列表工具
+
+已经完成:
+
+- 新增统一工具 `devtools_indexeddb_list` 和 `devtools_cache_storage_list`，Managed Browser 与 Personal Chrome 共用同一语义。
+- IndexedDB list 返回 database、version、object store、keyPath、autoIncrement、index metadata 和可选 record count。
+- CacheStorage list 返回 cache name、entry count、request URL/method/mode/credentials/destination/referrer、response status/type/header metadata；response body 仍由 `devtools_cache_entry_get` 按需读取。
+- 这层只给 Agent 提供 F12 Application 面板证据，不判断安全风险。
 
 ### 2026-05-17: Phase 1 第一段完成
 

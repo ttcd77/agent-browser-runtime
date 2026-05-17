@@ -2129,7 +2129,7 @@ function buildAgentInspectToolPlan(focus, options = {}) {
     return {
       ...base,
       firstPass: ["devtools_storage_origin_summary", "devtools_cookie_summary", "devtools_service_worker_summary"],
-      drillDown: ["devtools_application_export", "devtools_indexeddb_read", "devtools_cache_entry_get"],
+      drillDown: ["devtools_application_export", "devtools_indexeddb_list", "devtools_indexeddb_read", "devtools_cache_storage_list", "devtools_cache_entry_get"],
       captureHint: "Storage is current-state evidence. Use Application export for handoff and repeatability.",
       objectiveBoundary: "Partition metadata is reported only when Chrome exposes it for the current page.",
     };
@@ -6909,6 +6909,117 @@ function registerStandaloneBrowserTools(tools, cdpPort, profileRegistry, default
     },
   });
 
+  tools.set("browser_indexeddb_list", {
+    name: "browser_indexeddb_list",
+    description: "List IndexedDB databases, object stores, indexes, and record counts for the current profile tab.",
+    parameters: {
+      type: "object",
+      properties: {
+        profile: { type: "string" },
+        tabId: { type: "string" },
+        maxDatabases: { type: "number" },
+        includeCounts: { type: "boolean" },
+      },
+    },
+    async execute(_id, params) {
+      const profile = await resolveProfile(params?.profile);
+      const maxDatabases = typeof params?.maxDatabases === "number" ? params.maxDatabases : 50;
+      const includeCounts = params?.includeCounts !== false;
+      return toolResult(await withPageClient(cdpPort, params?.tabId || profile.tabId, async (client, target) => {
+        const result = await client.Runtime.evaluate({
+          expression: `(async () => {
+            const maxDatabases = ${JSON.stringify(maxDatabases)};
+            const includeCounts = ${JSON.stringify(includeCounts)};
+            const out = {
+              ok: true,
+              url: location.href,
+              origin: location.origin,
+              supported: Boolean(indexedDB),
+              databasesApiSupported: Boolean(indexedDB?.databases),
+              databases: [],
+              captureBoundaries: [
+                "IndexedDB listing is current page-origin state as exposed to page JavaScript.",
+                "Record counts use objectStore.count() and can change while the page is running.",
+                "If indexedDB.databases() is unavailable, the browser does not expose a full database name list to page JavaScript."
+              ],
+            };
+            if (!indexedDB?.databases) {
+              out.ok = false;
+              out.error = "indexedDB.databases_unavailable";
+              return out;
+            }
+            const metas = (await indexedDB.databases()).slice(0, maxDatabases);
+            out.truncated = metas.length >= maxDatabases;
+            for (const meta of metas) {
+              const dbOut = { name: meta.name, version: meta.version, objectStores: [], error: null };
+              out.databases.push(dbOut);
+              if (!meta.name) continue;
+              await new Promise((resolve) => {
+                const open = indexedDB.open(meta.name);
+                open.onerror = () => {
+                  dbOut.error = String(open.error?.message || open.error || "open_failed");
+                  resolve();
+                };
+                open.onsuccess = () => {
+                  const db = open.result;
+                  dbOut.version = db.version;
+                  const storeNames = Array.from(db.objectStoreNames || []);
+                  if (!storeNames.length) {
+                    db.close();
+                    resolve();
+                    return;
+                  }
+                  let pending = storeNames.length;
+                  const done = () => {
+                    pending -= 1;
+                    if (pending === 0) {
+                      db.close();
+                      resolve();
+                    }
+                  };
+                  for (const storeName of storeNames) {
+                    const storeOut = { name: storeName, keyPath: null, autoIncrement: null, indexes: [], recordCount: null, error: null };
+                    dbOut.objectStores.push(storeOut);
+                    try {
+                      const tx = db.transaction(storeName, "readonly");
+                      const store = tx.objectStore(storeName);
+                      storeOut.keyPath = store.keyPath;
+                      storeOut.autoIncrement = store.autoIncrement;
+                      storeOut.indexes = Array.from(store.indexNames || []).map((indexName) => {
+                        const index = store.index(indexName);
+                        return { name: index.name, keyPath: index.keyPath, unique: index.unique, multiEntry: index.multiEntry };
+                      });
+                      if (includeCounts) {
+                        const countReq = store.count();
+                        countReq.onsuccess = () => { storeOut.recordCount = countReq.result; };
+                        countReq.onerror = () => { storeOut.countError = String(countReq.error?.message || countReq.error || "count_failed"); };
+                      }
+                      tx.oncomplete = done;
+                      tx.onerror = () => {
+                        storeOut.error = String(tx.error?.message || tx.error || "transaction_failed");
+                        done();
+                      };
+                    } catch (error) {
+                      storeOut.error = String(error?.message || error);
+                      done();
+                    }
+                  }
+                };
+              });
+            }
+            out.databaseCount = out.databases.length;
+            out.objectStoreCount = out.databases.reduce((sum, db) => sum + (db.objectStores?.length || 0), 0);
+            return out;
+          })()`,
+          returnByValue: true,
+          awaitPromise: true,
+        });
+        await profileRegistry.touchProfile(profile.name, { tabId: target.id });
+        return { profile: profile.name, tabId: target.id, page: result.result?.value, exception: result.exceptionDetails };
+      }));
+    },
+  });
+
   tools.set("browser_indexeddb_read", {
     name: "browser_indexeddb_read",
     description: "Read records from a specific IndexedDB database and object store in the current profile tab.",
@@ -6971,6 +7082,87 @@ function registerStandaloneBrowserTools(tools, cdpPort, profileRegistry, default
                 };
               };
             });
+          })()`,
+          returnByValue: true,
+          awaitPromise: true,
+        });
+        await profileRegistry.touchProfile(profile.name, { tabId: target.id });
+        return { profile: profile.name, tabId: target.id, page: result.result?.value, exception: result.exceptionDetails };
+      }));
+    },
+  });
+
+  tools.set("browser_cache_storage_list", {
+    name: "browser_cache_storage_list",
+    description: "List CacheStorage caches and request/response metadata for the current profile tab.",
+    parameters: {
+      type: "object",
+      properties: {
+        profile: { type: "string" },
+        tabId: { type: "string" },
+        maxCaches: { type: "number" },
+        maxEntries: { type: "number" },
+      },
+    },
+    async execute(_id, params) {
+      const profile = await resolveProfile(params?.profile);
+      const maxCaches = typeof params?.maxCaches === "number" ? params.maxCaches : 50;
+      const maxEntries = typeof params?.maxEntries === "number" ? params.maxEntries : 200;
+      return toolResult(await withPageClient(cdpPort, params?.tabId || profile.tabId, async (client, target) => {
+        const result = await client.Runtime.evaluate({
+          expression: `(async () => {
+            const maxCaches = ${JSON.stringify(maxCaches)};
+            const maxEntries = ${JSON.stringify(maxEntries)};
+            const out = {
+              ok: true,
+              url: location.href,
+              origin: location.origin,
+              supported: Boolean(caches?.keys),
+              caches: [],
+              captureBoundaries: [
+                "CacheStorage listing is current page-origin state as exposed to page JavaScript.",
+                "Response bodies are not included in this list; use devtools_cache_entry_get for a selected cacheName/url.",
+                "Entry metadata can change while Service Workers or page scripts update caches."
+              ],
+            };
+            if (!caches?.keys) {
+              out.ok = false;
+              out.error = "cacheStorage_unavailable";
+              return out;
+            }
+            const names = (await caches.keys()).slice(0, maxCaches);
+            out.truncatedCaches = names.length >= maxCaches;
+            for (const name of names) {
+              const cacheOut = { name, entryCount: 0, returnedCount: 0, truncated: false, entries: [], error: null };
+              out.caches.push(cacheOut);
+              try {
+                const cache = await caches.open(name);
+                const requests = await cache.keys();
+                cacheOut.entryCount = requests.length;
+                cacheOut.truncated = requests.length > maxEntries;
+                for (const request of requests.slice(0, maxEntries)) {
+                  const response = await cache.match(request).catch(() => null);
+                  cacheOut.entries.push({
+                    url: request.url,
+                    method: request.method,
+                    mode: request.mode,
+                    credentials: request.credentials,
+                    destination: request.destination,
+                    referrer: request.referrer,
+                    status: response?.status ?? null,
+                    statusText: response?.statusText ?? null,
+                    type: response?.type ?? null,
+                    headers: response ? Array.from(response.headers.entries()).map(([header, value]) => ({ name: header, value })) : [],
+                  });
+                }
+                cacheOut.returnedCount = cacheOut.entries.length;
+              } catch (error) {
+                cacheOut.error = String(error?.message || error);
+              }
+            }
+            out.cacheCount = out.caches.length;
+            out.entryCount = out.caches.reduce((sum, cache) => sum + (cache.entryCount || 0), 0);
+            return out;
           })()`,
           returnByValue: true,
           awaitPromise: true,
@@ -8663,7 +8855,7 @@ function registerStandaloneBrowserTools(tools, cdpPort, profileRegistry, default
         out.evidence.serviceWorkers = await safeCall("browser_service_worker_summary");
         if (params?.includeHeavy) out.evidence.storage = await safeCall("browser_storage_snapshot");
         out.summary = "Application panel route: origin/quota, cookies, service workers, and optional full storage snapshot.";
-        out.nextTools = ["devtools_application_export", "devtools_indexeddb_read", "devtools_cache_entry_get", "agent_inspect focus=search query=<key/value>"];
+        out.nextTools = ["devtools_application_export", "devtools_indexeddb_list", "devtools_indexeddb_read", "devtools_cache_storage_list", "devtools_cache_entry_get", "agent_inspect focus=search query=<key/value>"];
       } else if (focus === "console") {
         out.evidence.console = await safeCall("browser_console_log", { reload: false, waitMs: 300, limit });
         out.evidence.issues = await safeCall("browser_issues_log", { reload: false, waitMs: 100, limit });
@@ -10437,7 +10629,9 @@ function registerStandaloneBrowserTools(tools, cdpPort, profileRegistry, default
   aliasTool("devtools_service_worker_summary", "browser_service_worker_summary", "Unified Agent DevTools API: summarize Service Worker registrations and CacheStorage state.");
   aliasTool("devtools_service_worker_detail", "browser_service_worker_detail", "Unified Agent DevTools API: inspect Service Worker registrations, scripts, CacheStorage entries, and worker targets.");
   aliasTool("devtools_application_export", "browser_application_export", "Unified Agent DevTools API: export Application panel data to a JSON file.");
+  aliasTool("devtools_indexeddb_list", "browser_indexeddb_list", "Unified Agent DevTools API: list IndexedDB databases, object stores, indexes, and record counts.");
   aliasTool("devtools_indexeddb_read", "browser_indexeddb_read", "Unified Agent DevTools API: read IndexedDB records by database and object store.");
+  aliasTool("devtools_cache_storage_list", "browser_cache_storage_list", "Unified Agent DevTools API: list CacheStorage caches and request/response metadata.");
   aliasTool("devtools_cache_entry_get", "browser_cache_entry_get", "Unified Agent DevTools API: read a CacheStorage response by cache name and URL.");
   aliasTool("devtools_elements_snapshot", "browser_elements_snapshot", "Unified Agent DevTools API: read Elements panel-style DOM tree, layout boxes, and computed style.");
   aliasTool("devtools_dom_snapshot", "browser_dom_snapshot", "Unified Agent DevTools API: read raw Chrome DOMSnapshot data.");
