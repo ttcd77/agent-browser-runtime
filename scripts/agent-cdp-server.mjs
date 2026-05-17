@@ -840,6 +840,7 @@ function buildRequestCorrelationGraph({ requests = [], consoleEntries = [], scri
   const nodes = [];
   const edges = [];
   const seen = new Set();
+  const seenEdges = new Set();
   const addNode = (node) => {
     if (!node?.id || seen.has(node.id) || nodes.length >= limit) return;
     seen.add(node.id);
@@ -847,7 +848,44 @@ function buildRequestCorrelationGraph({ requests = [], consoleEntries = [], scri
   };
   const addEdge = (edge) => {
     if (!edge?.from || !edge?.to || edges.length >= limit * 2) return;
+    const key = `${edge.from}\u0000${edge.to}\u0000${edge.type || ""}`;
+    if (seenEdges.has(key)) return;
+    seenEdges.add(key);
     edges.push(edge);
+  };
+  const scriptIdForUrl = (url = "") => {
+    if (!url) return null;
+    const script = (scripts || []).find((candidate) => candidate.url && url.includes(candidate.url));
+    return script ? `script:${script.scriptId || script.url}` : `initiator:${url}`;
+  };
+  const addInitiatorStack = (request, requestNodeId) => {
+    const summary = buildInitiatorSummary(request.initiator || null);
+    if (!summary) return;
+    let previousFrameId = null;
+    for (const frame of (summary.callFrames || []).slice(0, 20)) {
+      const frameUrl = frame.url || summary.url || "";
+      if (!frameUrl && !frame.scriptId) continue;
+      const frameId = `initiator-frame:${frame.scriptId || frameUrl}:${frame.lineNumber ?? "?"}:${frame.columnNumber ?? "?"}:${frame.relation || "sync"}`;
+      addNode({
+        id: frameId,
+        type: "initiator-frame",
+        label: `${frame.functionName || "(anonymous)"} ${requestPathname(frameUrl)}`,
+        url: frameUrl,
+        functionName: frame.functionName || "",
+        lineNumber: frame.lineNumber,
+        columnNumber: frame.columnNumber,
+        scriptId: frame.scriptId || null,
+        relation: frame.relation || "sync",
+      });
+      if (frameUrl) {
+        const scriptId = scriptIdForUrl(frameUrl);
+        addNode({ id: scriptId, type: scriptId.startsWith("script:") ? "script" : "initiator", label: frameUrl, url: frameUrl });
+        addEdge({ from: scriptId, to: frameId, type: "has-call-frame" });
+      }
+      if (previousFrameId) addEdge({ from: previousFrameId, to: frameId, type: "async-parent" });
+      previousFrameId = frameId;
+    }
+    if (previousFrameId) addEdge({ from: previousFrameId, to: requestNodeId, type: "initiates" });
   };
   for (const frame of frames || []) {
     const id = `frame:${frame.id || frame.frameId || frame.url}`;
@@ -870,13 +908,27 @@ function buildRequestCorrelationGraph({ requests = [], consoleEntries = [], scri
       resourceType: request.resourceType,
     });
     if (request.frameId) addEdge({ from: `frame:${request.frameId}`, to: id, type: "frame-request" });
+    for (const [index, redirect] of (request.redirectChain || []).entries()) {
+      const redirectId = `redirect:${request.requestId || request.url}:${index}`;
+      addNode({
+        id: redirectId,
+        type: "redirect",
+        label: `${redirect.status || ""} ${requestPathname(redirect.url)}`.trim(),
+        requestId: request.requestId,
+        url: redirect.url,
+        status: redirect.status,
+        location: redirect.location || null,
+      });
+      addEdge({ from: redirectId, to: id, type: "redirects-to" });
+      if (index > 0) addEdge({ from: `redirect:${request.requestId || request.url}:${index - 1}`, to: redirectId, type: "redirect-next" });
+    }
     const initiatorUrl = request.initiator?.url || request.initiator?.stack?.callFrames?.[0]?.url || "";
     if (initiatorUrl) {
-      const script = (scripts || []).find((candidate) => candidate.url && initiatorUrl.includes(candidate.url));
-      const scriptId = script ? `script:${script.scriptId || script.url}` : `initiator:${initiatorUrl}`;
-      addNode({ id: scriptId, type: script ? "script" : "initiator", label: initiatorUrl, url: initiatorUrl });
+      const scriptId = scriptIdForUrl(initiatorUrl);
+      addNode({ id: scriptId, type: scriptId.startsWith("script:") ? "script" : "initiator", label: initiatorUrl, url: initiatorUrl });
       addEdge({ from: scriptId, to: id, type: "initiates" });
     }
+    addInitiatorStack(request, id);
   }
   for (const entry of (consoleEntries || []).slice(-limit)) {
     const id = `console:${entry.timestamp || entry.text || nodes.length}`;
@@ -6948,8 +7000,9 @@ function registerStandaloneBrowserTools(tools, cdpPort, profileRegistry, default
               out.error = "indexedDB.databases_unavailable";
               return out;
             }
-            const metas = (await indexedDB.databases()).slice(0, maxDatabases);
-            out.truncated = metas.length >= maxDatabases;
+            const allMetas = await indexedDB.databases();
+            const metas = allMetas.slice(0, maxDatabases);
+            out.truncated = allMetas.length > maxDatabases;
             for (const meta of metas) {
               const dbOut = { name: meta.name, version: meta.version, objectStores: [], error: null };
               out.databases.push(dbOut);
@@ -7130,8 +7183,9 @@ function registerStandaloneBrowserTools(tools, cdpPort, profileRegistry, default
               out.error = "cacheStorage_unavailable";
               return out;
             }
-            const names = (await caches.keys()).slice(0, maxCaches);
-            out.truncatedCaches = names.length >= maxCaches;
+            const allNames = await caches.keys();
+            const names = allNames.slice(0, maxCaches);
+            out.truncatedCaches = allNames.length > maxCaches;
             for (const name of names) {
               const cacheOut = { name, entryCount: 0, returnedCount: 0, truncated: false, entries: [], error: null };
               out.caches.push(cacheOut);

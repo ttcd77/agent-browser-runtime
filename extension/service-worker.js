@@ -3796,8 +3796,9 @@ async function chromeIndexedDbList(params) {
       out.error = "indexedDB.databases_unavailable";
       return out;
     }
-    const metas = (await indexedDB.databases()).slice(0, maxDatabases);
-    out.truncated = metas.length >= maxDatabases;
+    const allMetas = await indexedDB.databases();
+    const metas = allMetas.slice(0, maxDatabases);
+    out.truncated = allMetas.length > maxDatabases;
     for (const meta of metas) {
       const dbOut = { name: meta.name, version: meta.version, objectStores: [], error: null };
       out.databases.push(dbOut);
@@ -3931,8 +3932,9 @@ async function chromeCacheStorageList(params) {
       out.error = "cacheStorage_unavailable";
       return out;
     }
-    const names = (await caches.keys()).slice(0, maxCaches);
-    out.truncatedCaches = names.length >= maxCaches;
+    const allNames = await caches.keys();
+    const names = allNames.slice(0, maxCaches);
+    out.truncatedCaches = allNames.length > maxCaches;
     for (const name of names) {
       const cacheOut = { name, entryCount: 0, returnedCount: 0, truncated: false, entries: [], error: null };
       out.caches.push(cacheOut);

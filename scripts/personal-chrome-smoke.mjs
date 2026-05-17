@@ -208,6 +208,11 @@ const redirectDetail = await callTool("devtools_request_detail", {
   requestId: redirectRow.requestId,
 });
 assert(redirectDetail.detail?.redirectChain?.some((entry) => String(entry.url || "").includes("/redirect-start") && Number(entry.status) === 302), `Personal request detail missing redirect start evidence: ${JSON.stringify(redirectDetail.detail?.redirectChain)}`);
+const requestGraph = await callTool("devtools_request_correlation_graph", {
+  limit: 200,
+});
+assert(requestGraph.edges?.some((edge) => edge.type === "redirects-to"), `Personal request correlation graph missing redirect edge: ${JSON.stringify(requestGraph.edges)}`);
+assert(requestGraph.detailRequestsInspected >= 1, `Personal request correlation graph did not inspect request details: ${JSON.stringify(requestGraph)}`);
 const filteredRedirects = await callTool("devtools_network_log", {
   redirected: true,
   status_min: 200,

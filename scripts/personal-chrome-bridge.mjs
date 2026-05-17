@@ -978,39 +978,137 @@ async function evidenceManifest(params = {}) {
 
 async function requestCorrelationGraph(params = {}) {
   const limit = typeof params.limit === "number" ? params.limit : 200;
+  const maxDetailRequests = typeof params.maxDetailRequests === "number" ? params.maxDetailRequests : 50;
   const [network, frames, consoleLog, sources] = await Promise.all([
     safeBridgeTool("devtools_network_log", { limit }),
     safeBridgeTool("devtools_frame_tree", {}),
     safeBridgeTool("devtools_console_log", { limit: 100, reload: false, waitMs: 50 }),
     safeBridgeTool("devtools_sources_list", { limit }),
   ]);
+  const detailRows = await Promise.all((network.requests || [])
+    .filter((request) => request.requestId)
+    .slice(-maxDetailRequests)
+    .map(async (request) => {
+      const detail = await safeBridgeTool("devtools_request_detail", { requestId: request.requestId });
+      return [request.requestId, detail.detail || null];
+    }));
+  const detailByRequestId = new Map(detailRows.filter(([, detail]) => detail));
+  const requestRows = (network.requests || []).map((request) => {
+    const detail = detailByRequestId.get(request.requestId);
+    if (!detail) return request;
+    return {
+      ...request,
+      initiator: detail.initiator || request.initiator || null,
+      initiatorType: detail.initiatorType || request.initiatorType || null,
+      redirectChain: detail.redirectChain || request.redirectChain || [],
+      frameId: detail.frameId || request.frameId || null,
+      resourceType: detail.resourceType || request.resourceType || null,
+    };
+  });
   const nodes = [];
   const edges = [];
   const seen = new Set();
+  const seenEdges = new Set();
   const addNode = (node) => {
     if (!node?.id || seen.has(node.id)) return;
     seen.add(node.id);
     nodes.push(node);
   };
   const addEdge = (edge) => {
+    const key = `${edge?.from || ""}\u0000${edge?.to || ""}\u0000${edge?.type || ""}`;
+    if (seenEdges.has(key)) return;
+    seenEdges.add(key);
     if (edge?.from && edge?.to) edges.push(edge);
+  };
+  const scriptIdForUrl = (scriptUrl = "") => {
+    if (!scriptUrl) return null;
+    const script = (sources.scripts || []).find((candidate) => candidate.url && scriptUrl.includes(candidate.url));
+    return script ? `script:${script.scriptId || script.url}` : `initiator:${scriptUrl}`;
+  };
+  const addInitiatorStack = (request, requestNodeId) => {
+    const initiator = request.initiator || null;
+    const stack = initiator?.stack || initiator?.asyncStackTrace || null;
+    const callFrames = [];
+    const collect = (trace, relation = "sync") => {
+      if (!trace) return;
+      for (const frame of trace.callFrames || []) callFrames.push({ ...frame, relation });
+      if (trace.parent) collect(trace.parent, "parent");
+      if (trace.parentId) callFrames.push({ relation: "parentId", id: trace.parentId });
+    };
+    collect(stack);
+    if (initiator?.url && !callFrames.some((frame) => frame.url === initiator.url)) {
+      callFrames.push({
+        relation: "initiator-url",
+        functionName: "",
+        url: initiator.url,
+        lineNumber: initiator.lineNumber,
+        columnNumber: initiator.columnNumber,
+        scriptId: null,
+      });
+    }
+    let previousFrameId = null;
+    for (const frame of callFrames.slice(0, 20)) {
+      const frameUrl = frame.url || "";
+      if (!frameUrl && !frame.scriptId) continue;
+      const frameId = `initiator-frame:${frame.scriptId || frameUrl}:${frame.lineNumber ?? "?"}:${frame.columnNumber ?? "?"}:${frame.relation || "sync"}`;
+      addNode({
+        id: frameId,
+        type: "initiator-frame",
+        label: `${frame.functionName || "(anonymous)"} ${urlPath(frameUrl)}`,
+        url: frameUrl,
+        functionName: frame.functionName || "",
+        lineNumber: frame.lineNumber,
+        columnNumber: frame.columnNumber,
+        scriptId: frame.scriptId || null,
+        relation: frame.relation || "sync",
+      });
+      if (frameUrl) {
+        const scriptId = scriptIdForUrl(frameUrl);
+        addNode({ id: scriptId, type: scriptId.startsWith("script:") ? "script" : "initiator", label: frameUrl, url: frameUrl });
+        addEdge({ from: scriptId, to: frameId, type: "has-call-frame" });
+      }
+      if (previousFrameId) addEdge({ from: previousFrameId, to: frameId, type: "async-parent" });
+      previousFrameId = frameId;
+    }
+    if (previousFrameId) addEdge({ from: previousFrameId, to: requestNodeId, type: "initiates" });
   };
   for (const frame of frames.frames || []) addNode({ id: `frame:${frame.id || frame.url}`, type: "frame", label: frame.url, url: frame.url });
   for (const script of sources.scripts || []) addNode({ id: `script:${script.scriptId || script.url}`, type: "script", label: script.url || script.scriptId, url: script.url });
-  for (const request of network.requests || []) {
+  for (const request of requestRows) {
     const id = `request:${request.requestId || request.url}`;
-    addNode({ id, type: "request", label: `${request.method || "GET"} ${urlPath(request.url)}`, requestId: request.requestId, url: request.url, status: request.status });
+    addNode({ id, type: "request", label: `${request.method || "GET"} ${urlPath(request.url)}`, requestId: request.requestId, method: request.method, url: request.url, status: request.status, resourceType: request.resourceType });
     if (request.frameId) addEdge({ from: `frame:${request.frameId}`, to: id, type: "frame-request" });
+    for (const [index, redirect] of (request.redirectChain || []).entries()) {
+      const redirectId = `redirect:${request.requestId || request.url}:${index}`;
+      addNode({ id: redirectId, type: "redirect", label: `${redirect.status || ""} ${urlPath(redirect.url)}`.trim(), requestId: request.requestId, url: redirect.url, status: redirect.status, location: redirect.location || null });
+      addEdge({ from: redirectId, to: id, type: "redirects-to" });
+      if (index > 0) addEdge({ from: `redirect:${request.requestId || request.url}:${index - 1}`, to: redirectId, type: "redirect-next" });
+    }
+    const initiatorUrl = request.initiator?.url || request.initiator?.stack?.callFrames?.[0]?.url || "";
+    if (initiatorUrl) {
+      const scriptId = scriptIdForUrl(initiatorUrl);
+      addNode({ id: scriptId, type: scriptId.startsWith("script:") ? "script" : "initiator", label: initiatorUrl, url: initiatorUrl });
+      addEdge({ from: scriptId, to: id, type: "initiates" });
+    }
+    addInitiatorStack(request, id);
   }
   for (const entry of consoleLog.entries || []) addNode({ id: `console:${entry.timestamp || entry.text || nodes.length}`, type: "console", label: entry.text || entry.message || entry.level, level: entry.level, url: entry.url });
-  const graph = { backend: "personal-chrome", generatedAt: new Date().toISOString(), nodeCount: nodes.length, edgeCount: edges.length, nodes, edges };
+  const graph = { backend: "personal-chrome", generatedAt: new Date().toISOString(), detailRequestsInspected: detailByRequestId.size, nodeCount: nodes.length, edgeCount: edges.length, nodes, edges };
   let graphPath = null;
   if (params.save) {
     graphPath = params.path || join(graphDir, `${Date.now()}-request-correlation-graph.json`);
     mkdirSync(dirname(graphPath), { recursive: true });
     writeFileSync(graphPath, `${JSON.stringify(graph, null, 2)}\n`, "utf8");
   }
-  return { ...graph, graphPath, boundaries: ["Edges are metadata correlations, not proof of causality."] };
+  return {
+    ...graph,
+    graphPath,
+    boundaries: [
+      "Edges are metadata correlations, not proof of causality.",
+      "Redirect edges are reconstructed from request detail when Chrome exposes redirectChain.",
+      "Initiator stack frames are included only when chrome.debugger exposes initiator stack metadata for the request.",
+    ],
+  };
 }
 
 async function captureDiff(params = {}) {

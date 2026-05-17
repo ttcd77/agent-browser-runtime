@@ -145,6 +145,15 @@
 
 ## 执行记录
 
+### 2026-05-17: 请求关联图增强
+
+已经完成:
+
+- `devtools_request_correlation_graph` 增加 redirect chain 边和 initiator stack frame 节点。
+- Managed Browser 与 Personal Chrome 都返回同一类客观图边: `redirects-to`、`redirect-next`、`initiates`、`has-call-frame`、`async-parent`。
+- smoke 覆盖 redirect edge 和 initiator evidence，帮助 Agent 复刻 F12 Network Initiator/Redirect Chain 的分析入口。
+- 这些边是 F12 metadata correlation，不是因果或漏洞判断。
+
 ### 2026-05-17: Application 存储列表工具
 
 已经完成:

@@ -802,6 +802,11 @@ try {
     limit: 10,
   });
   assert(filteredTimeline.timeline?.some((entry) => entry.requestId === redirectRow.requestId), `network timeline filters missed redirect row: ${JSON.stringify(filteredTimeline)}`);
+  const requestGraph = await callTool(baseUrl, "devtools_request_correlation_graph", {
+    profile: "default",
+    limit: 200,
+  });
+  assert(requestGraph.edges?.some((edge) => edge.type === "redirects-to"), `request correlation graph missing redirect edge: ${JSON.stringify(requestGraph.edges)}`);
   const replayTraffic = await callTool(baseUrl, "devtools_network_log", {
     profile: "default",
     limit: 20,
@@ -817,6 +822,11 @@ try {
   if (echoDetail.detail.initiatorSourceContext.available) {
     assert(echoDetail.detail.initiatorSourceContext.lines?.some((line) => line.text.includes("__agentFetchEchoFromFixture")), `echo initiator source context missing fixture function: ${JSON.stringify(echoDetail.detail.initiatorSourceContext)}`);
   }
+  const initiatorGraph = await callTool(baseUrl, "devtools_request_correlation_graph", {
+    profile: "default",
+    limit: 200,
+  });
+  assert(initiatorGraph.nodes?.some((node) => node.type === "initiator-frame"), `request correlation graph missing initiator stack frames: ${JSON.stringify(initiatorGraph.nodes)}`);
   const formReplay = await callTool(baseUrl, "devtools_request_replay", {
     profile: "default",
     requestId: echoRequest.requestId,
