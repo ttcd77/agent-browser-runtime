@@ -553,6 +553,22 @@ try {
   assert(researchPack.summary?.workerFrameReportPath, "security research pack missing worker/frame report path");
   assert(typeof researchPack.summary?.requestCount === "number", "security research pack missing request count");
   assert(Array.isArray(researchPack.captureBoundaries), "security research pack missing capture boundaries");
+  const toolCatalog = await callTool(baseUrl, "devtools_tool_catalog", {
+    profile: "default",
+    query: "auth",
+  });
+  assert(toolCatalog.toolCount >= 1, "tool catalog did not return auth tools");
+  assert(toolCatalog.tools.some((tool) => tool.name === "devtools_auth_boundary_report"), "tool catalog missing auth boundary report");
+  const toolHelp = await callTool(baseUrl, "devtools_tool_help", {
+    profile: "default",
+    tool: "devtools_security_research_pack",
+  });
+  assert(toolHelp.parameters?.properties, "tool help missing parameter schema");
+  const workflowGuide = await callTool(baseUrl, "devtools_workflow_guide", {
+    profile: "default",
+    task: "auth-boundary",
+  });
+  assert(workflowGuide.steps?.some((step) => step.tool === "devtools_auth_boundary_report"), "workflow guide missing auth boundary step");
 
   await callTool(baseUrl, "browser_navigate", {
     profile: "default",

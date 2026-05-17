@@ -1553,6 +1553,141 @@ function buildAgentInspectToolPlan(focus, options = {}) {
   };
 }
 
+function devtoolsToolCategory(name) {
+  if (name === "agent_inspect" || /backend_capabilities|tool_catalog|tool_help|workflow_guide|protocol_schema/.test(name)) return "orientation";
+  if (/tabs|snapshot|screenshot|click|type|scroll|eval|hard_reload/.test(name)) return "page-control";
+  if (/network|request|har|capture_/.test(name)) return "network";
+  if (/console|issues|security_summary|signal_summary|page_diagnostics/.test(name)) return "diagnostics";
+  if (/storage|cookie|service_worker|application|indexeddb|cache|auth_boundary/.test(name)) return "application";
+  if (/frame|accessibility|elements|dom|css|event_listeners|worker_frame/.test(name)) return "dom-frame";
+  if (/source|debugger|token_flow|global_search/.test(name)) return "sources-debugger";
+  if (/performance|trace|cpu|coverage|memory/.test(name)) return "performance";
+  if (/evidence|manifest|correlation|diff|research_pack/.test(name)) return "evidence-workflow";
+  if (/cdp_command|browser_version|browser_targets|system_info/.test(name)) return "raw-cdp";
+  return "other";
+}
+
+function devtoolsToolCatalogFromEntries(entries, options = {}) {
+  const query = String(options.query || "").trim().toLowerCase();
+  const categoryFilter = String(options.category || "").trim().toLowerCase();
+  const includeBackendSpecific = Boolean(options.includeBackendSpecific);
+  const rows = entries
+    .filter((tool) => includeBackendSpecific || tool.name === "agent_inspect" || tool.name.startsWith("devtools_"))
+    .map((tool) => ({
+      name: tool.name,
+      category: devtoolsToolCategory(tool.name),
+      description: tool.description || "",
+      required: tool.parameters?.required || [],
+      parameterNames: Object.keys(tool.parameters?.properties || {}),
+    }))
+    .filter((tool) => !categoryFilter || tool.category === categoryFilter)
+    .filter((tool) => !query || `${tool.name} ${tool.category} ${tool.description} ${tool.parameterNames.join(" ")}`.toLowerCase().includes(query))
+    .sort((a, b) => a.category.localeCompare(b.category) || a.name.localeCompare(b.name));
+  const categories = {};
+  for (const tool of rows) {
+    categories[tool.category] = (categories[tool.category] || 0) + 1;
+  }
+  return {
+    generatedAt: new Date().toISOString(),
+    toolCount: rows.length,
+    categories,
+    tools: rows,
+    boundaries: [
+      "Tool catalog is a navigation aid; it does not choose or execute tools automatically.",
+      "Prefer agent_inspect or devtools_security_research_pack for first-pass work, then drill down.",
+    ],
+  };
+}
+
+function devtoolsWorkflowGuide(task = "first-pass") {
+  const key = String(task || "first-pass").trim().toLowerCase().replace(/[\s_]+/g, "-");
+  const recipes = {
+    "first-pass": {
+      title: "First page inspection",
+      goal: "Understand current page, backend layer, capture state, and first objective signals.",
+      steps: [
+        { tool: "devtools_backend_capabilities", why: "Know whether this is Managed CDP or Personal Chrome and what boundaries apply." },
+        { tool: "agent_inspect", input: { focus: "overview", limit: 10 }, why: "Get dashboard evidence and next drill-down tools." },
+        { tool: "devtools_signal_summary", why: "List objective cross-panel signals without deciding vulnerability impact." },
+      ],
+    },
+    "security-research-pack": {
+      title: "One-call security research evidence pack",
+      goal: "Create portable first-pass evidence for an authorized target.",
+      steps: [
+        { tool: "devtools_security_research_pack", input: { url: "https://example.com", profile: "researcher" }, why: "Capture, reload, collect F12 evidence, and save artifact paths." },
+        { tool: "devtools_evidence_manifest", why: "Verify artifact hashes and provenance when needed." },
+        { tool: "devtools_request_correlation_graph", why: "Choose which request/script/frame chain to drill into." },
+      ],
+    },
+    "network-capture": {
+      title: "Network capture and request drill-down",
+      goal: "Record a reproducible action and inspect request details.",
+      steps: [
+        { tool: "devtools_capture_start", input: { clear: true, label: "reproduce" }, why: "Start an explicit F12 recording window." },
+        { tool: "devtools_hard_reload", input: { waitMs: 1000 }, why: "Reload with cache disabled and Service Worker bypass where supported." },
+        { tool: "agent_inspect", input: { focus: "network", limit: 20 }, why: "Find request ids and request shapes." },
+        { tool: "devtools_request_detail", input: { requestId: "<request-id>" }, why: "Inspect headers, cookies, timing, initiator, and body availability." },
+      ],
+    },
+    "request-replay": {
+      title: "Request replay variants",
+      goal: "Replay an observed browser request with bounded variants and compare responses.",
+      steps: [
+        { tool: "agent_inspect", input: { focus: "network", limit: 20 }, why: "Pick a requestId from captured traffic." },
+        { tool: "devtools_request_replay_batch", input: { requestId: "<request-id>", variants: [{ label: "baseline" }] }, why: "Run variants and compare status, headers, and body previews." },
+      ],
+      boundary: "Replay evidence is not a vulnerability verdict; the agent or human must judge authorization and impact.",
+    },
+    "auth-boundary": {
+      title: "Authentication boundary evidence",
+      goal: "Collect cookies, auth headers, storage tokens, credentialed requests, and page security context.",
+      steps: [
+        { tool: "devtools_auth_boundary_report", input: { includeTokenScan: true, save: true }, why: "Collect objective auth-related evidence." },
+        { tool: "devtools_cookie_summary", why: "Inspect cookie attributes and objective attribute signals." },
+        { tool: "devtools_token_scan", why: "Search authorized browser evidence for token-like material." },
+      ],
+    },
+    "before-after-diff": {
+      title: "Before/after evidence diff",
+      goal: "Compare evidence before and after login, role switch, account switch, or permission change.",
+      steps: [
+        { tool: "devtools_evidence_bundle", input: { save: true }, why: "Save the before snapshot." },
+        { tool: "devtools_capture_start", input: { clear: true, label: "after-action" }, why: "Record the action window." },
+        { tool: "devtools_capture_diff", input: { beforePath: "<before-bundle-path>", save: true }, why: "Compare before snapshot to current captured traffic." },
+      ],
+    },
+    "source-debug": {
+      title: "Sources and debugger drill-down",
+      goal: "Find relevant scripts, read source, and pause around runtime behavior.",
+      steps: [
+        { tool: "agent_inspect", input: { focus: "sources", query: "<marker>" }, why: "List and search parsed scripts." },
+        { tool: "devtools_source_get", input: { scriptId: "<script-id>" }, why: "Read exact script source." },
+        { tool: "devtools_debugger_control", input: { action: "setBreakpointByUrl" }, why: "Use live runtime state when source text is insufficient." },
+      ],
+    },
+    performance: {
+      title: "Performance and trace drill-down",
+      goal: "Capture objective timing, observer, CPU, coverage, and trace evidence.",
+      steps: [
+        { tool: "agent_inspect", input: { focus: "performance" }, why: "Start with lightweight performance evidence." },
+        { tool: "devtools_chrome_trace", input: { durationMs: 1000 }, why: "Capture a bounded trace around the smallest reproducible action." },
+        { tool: "devtools_trace_query", input: { tracePath: "<trace-path>", minDurationMs: 5 }, why: "Search saved trace events." },
+      ],
+    },
+  };
+  const recipe = recipes[key] || recipes["first-pass"];
+  return {
+    task: key,
+    ...recipe,
+    availableTasks: Object.keys(recipes),
+    boundaries: [
+      "Workflow guide is a deterministic recipe, not model reasoning.",
+      "Tools return evidence; the agent or human decides interpretation.",
+    ],
+  };
+}
+
 function summarizeCpuProfile(profile = {}, limit = 20) {
   const nodes = Array.isArray(profile.nodes) ? profile.nodes : [];
   const samples = Array.isArray(profile.samples) ? profile.samples : [];
@@ -8576,6 +8711,70 @@ function registerStandaloneBrowserTools(tools, cdpPort, profileRegistry, default
   aliasTool("devtools_coverage_snapshot", "browser_coverage_snapshot", "Unified Agent DevTools API: capture short JavaScript and CSS coverage data.");
   aliasTool("devtools_coverage_detail", "browser_coverage_detail", "Unified Agent DevTools API: capture Coverage-panel JavaScript/CSS range drilldown data.");
   aliasTool("devtools_token_scan", "browser_token_scan", "Unified Agent DevTools API: scan headers, payloads, storage, and cookies for token-like material.");
+
+  tools.set("devtools_tool_catalog", {
+    name: "devtools_tool_catalog",
+    description: "Agent usability: list available tools by category, description, required fields, and parameter names so agents do not choose blindly.",
+    parameters: {
+      type: "object",
+      properties: {
+        query: { type: "string" },
+        category: { type: "string" },
+        includeBackendSpecific: { type: "boolean" },
+      },
+    },
+    async execute(_id, params) {
+      return toolResult({
+        backend: "managed-cdp",
+        ...devtoolsToolCatalogFromEntries([...tools.values()], params || {}),
+      });
+    },
+  });
+
+  tools.set("devtools_tool_help", {
+    name: "devtools_tool_help",
+    description: "Agent usability: return description, parameters, category, and small usage hints for one tool.",
+    parameters: {
+      type: "object",
+      properties: {
+        tool: { type: "string" },
+      },
+      required: ["tool"],
+    },
+    async execute(_id, params) {
+      const name = String(params?.tool || "").trim();
+      const tool = tools.get(name);
+      if (!tool) throw new Error(`unknown tool: ${name}`);
+      return toolResult({
+        backend: "managed-cdp",
+        name: tool.name,
+        category: devtoolsToolCategory(tool.name),
+        description: tool.description || "",
+        parameters: tool.parameters || { type: "object", properties: {} },
+        hints: {
+          firstPass: tool.name === "agent_inspect" || tool.name === "devtools_security_research_pack",
+          objectiveBoundary: "This help describes tool usage only; it does not interpret evidence.",
+        },
+      });
+    },
+  });
+
+  tools.set("devtools_workflow_guide", {
+    name: "devtools_workflow_guide",
+    description: "Agent usability: return deterministic tool recipes for common browser-security research tasks.",
+    parameters: {
+      type: "object",
+      properties: {
+        task: { type: "string" },
+      },
+    },
+    async execute(_id, params) {
+      return toolResult({
+        backend: "managed-cdp",
+        ...devtoolsWorkflowGuide(params?.task),
+      });
+    },
+  });
 }
 
 function createConfigManager({ defaultProfile, cdpPort, dataDir }) {

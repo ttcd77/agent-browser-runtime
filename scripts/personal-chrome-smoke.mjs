@@ -126,6 +126,13 @@ assert(researchPack.summary?.correlationGraphPath, "Personal Chrome security res
 assert(researchPack.summary?.authBoundaryReportPath, "Personal Chrome security research pack missing auth boundary report path");
 assert(researchPack.summary?.workerFrameReportPath, "Personal Chrome security research pack missing worker/frame report path");
 assert(typeof researchPack.summary?.requestCount === "number", "Personal Chrome security research pack missing request count");
+const toolCatalog = await callTool("devtools_tool_catalog", { query: "auth" });
+assert(toolCatalog.toolCount >= 1, "Personal Chrome tool catalog did not return auth tools");
+assert(toolCatalog.tools.some((tool) => tool.name === "devtools_auth_boundary_report"), "Personal Chrome tool catalog missing auth boundary report");
+const toolHelp = await callTool("devtools_tool_help", { tool: "devtools_security_research_pack" });
+assert(toolHelp.description, "Personal Chrome tool help missing description");
+const workflowGuide = await callTool("devtools_workflow_guide", { task: "auth-boundary" });
+assert(workflowGuide.steps?.some((step) => step.tool === "devtools_auth_boundary_report"), "Personal Chrome workflow guide missing auth boundary step");
 
 console.log("Personal Chrome smoke passed:");
 console.log(`- bridge: ${baseUrl}`);

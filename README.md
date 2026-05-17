@@ -185,6 +185,13 @@ the full response.
 ### Agent Router
 
 - `agent_inspect`
+- `devtools_tool_catalog`
+- `devtools_tool_help`
+- `devtools_workflow_guide`
+
+The three `devtools_tool_*` / `devtools_workflow_guide` tools are for usability:
+they help agents choose a tool, inspect one tool's parameters, and follow a
+deterministic workflow without guessing across the full tool list.
 
 ### Unified Agent DevTools API
 
@@ -199,6 +206,9 @@ Chrome Extension Mode and Managed Browser Mode:
 - `devtools_type`
 - `devtools_scroll`
 - `devtools_eval`
+- `devtools_tool_catalog`
+- `devtools_tool_help`
+- `devtools_workflow_guide`
 - `devtools_attach`
 - `devtools_detach`
 - `devtools_status`

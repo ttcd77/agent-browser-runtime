@@ -764,6 +764,139 @@ async function workerFrameDeepDive(params = {}) {
   return { ...report, reportPath };
 }
 
+function devtoolsToolCategory(name) {
+  if (name === "agent_inspect" || /backend_capabilities|tool_catalog|tool_help|workflow_guide|protocol_schema/.test(name)) return "orientation";
+  if (/tabs|snapshot|screenshot|click|type|scroll|eval|hard_reload/.test(name)) return "page-control";
+  if (/network|request|har|capture_/.test(name)) return "network";
+  if (/console|issues|security_summary|signal_summary|page_diagnostics/.test(name)) return "diagnostics";
+  if (/storage|cookie|service_worker|application|indexeddb|cache|auth_boundary/.test(name)) return "application";
+  if (/frame|accessibility|elements|dom|css|event_listeners|worker_frame/.test(name)) return "dom-frame";
+  if (/source|debugger|token_flow|global_search/.test(name)) return "sources-debugger";
+  if (/performance|trace|cpu|coverage|memory/.test(name)) return "performance";
+  if (/evidence|manifest|correlation|diff|research_pack/.test(name)) return "evidence-workflow";
+  if (/cdp_command|browser_version|browser_targets|system_info/.test(name)) return "raw-cdp";
+  return "other";
+}
+
+function toolCatalog(params = {}) {
+  const query = String(params.query || "").trim().toLowerCase();
+  const categoryFilter = String(params.category || "").trim().toLowerCase();
+  const includeBackendSpecific = Boolean(params.includeBackendSpecific);
+  const rows = Object.entries(tools)
+    .filter(([name]) => includeBackendSpecific || name === "agent_inspect" || name.startsWith("devtools_"))
+    .map(([name, description]) => ({
+      name,
+      category: devtoolsToolCategory(name),
+      description,
+      required: [],
+      parameterNames: [],
+    }))
+    .filter((tool) => !categoryFilter || tool.category === categoryFilter)
+    .filter((tool) => !query || `${tool.name} ${tool.category} ${tool.description}`.toLowerCase().includes(query))
+    .sort((a, b) => a.category.localeCompare(b.category) || a.name.localeCompare(b.name));
+  const categories = {};
+  for (const tool of rows) categories[tool.category] = (categories[tool.category] || 0) + 1;
+  return {
+    backend: "personal-chrome",
+    generatedAt: new Date().toISOString(),
+    toolCount: rows.length,
+    categories,
+    tools: rows,
+    boundaries: [
+      "Tool catalog is a navigation aid; it does not choose or execute tools automatically.",
+      "Personal Chrome parameter schemas are summarized in docs; use workflow guide and examples for detailed inputs.",
+    ],
+  };
+}
+
+function workflowGuide(task = "first-pass") {
+  const key = String(task || "first-pass").trim().toLowerCase().replace(/[\s_]+/g, "-");
+  const recipes = {
+    "first-pass": {
+      title: "First page inspection",
+      goal: "Understand current page, backend layer, capture state, and first objective signals.",
+      steps: [
+        { tool: "devtools_backend_capabilities", why: "Know this is Personal Chrome and what chrome.debugger boundaries apply." },
+        { tool: "agent_inspect", input: { focus: "overview", limit: 10 }, why: "Get dashboard evidence and next drill-down tools." },
+        { tool: "devtools_signal_summary", why: "List objective cross-panel signals without deciding vulnerability impact." },
+      ],
+    },
+    "security-research-pack": {
+      title: "One-call security research evidence pack",
+      goal: "Create portable first-pass evidence from the user's active Chrome tab.",
+      steps: [
+        { tool: "devtools_security_research_pack", input: { url: "https://example.com" }, why: "Capture, reload, collect F12 evidence, and save artifact paths." },
+        { tool: "devtools_evidence_manifest", why: "Verify artifact hashes and provenance when needed." },
+        { tool: "devtools_request_correlation_graph", why: "Choose which request/script/frame chain to drill into." },
+      ],
+    },
+    "network-capture": {
+      title: "Network capture and request drill-down",
+      goal: "Record a reproducible action and inspect request details.",
+      steps: [
+        { tool: "devtools_capture_start", input: { clear: true, label: "reproduce" }, why: "Start an explicit F12 recording window." },
+        { tool: "devtools_hard_reload", input: { waitMs: 1000 }, why: "Reload with cache disabled where supported." },
+        { tool: "agent_inspect", input: { focus: "network", limit: 20 }, why: "Find request ids and request shapes." },
+        { tool: "devtools_request_detail", input: { requestId: "<request-id>" }, why: "Inspect headers, cookies, timing, initiator, and body availability." },
+      ],
+    },
+    "request-replay": {
+      title: "Request replay variants",
+      goal: "Replay an observed browser request with bounded variants and compare responses.",
+      steps: [
+        { tool: "agent_inspect", input: { focus: "network", limit: 20 }, why: "Pick a requestId from captured traffic." },
+        { tool: "devtools_request_replay_batch", input: { requestId: "<request-id>", variants: [{ label: "baseline" }] }, why: "Run variants and compare observed browser fetch results." },
+      ],
+    },
+    "auth-boundary": {
+      title: "Authentication boundary evidence",
+      goal: "Collect cookies, auth headers, storage tokens, credentialed requests, and page security context.",
+      steps: [
+        { tool: "devtools_auth_boundary_report", input: { includeTokenScan: true, save: true }, why: "Collect objective auth-related evidence." },
+        { tool: "devtools_cookie_summary", why: "Inspect cookie attributes and objective attribute signals." },
+        { tool: "devtools_token_scan", why: "Search authorized browser evidence for token-like material." },
+      ],
+    },
+    "before-after-diff": {
+      title: "Before/after evidence diff",
+      goal: "Compare evidence before and after login, role switch, account switch, or permission change.",
+      steps: [
+        { tool: "devtools_evidence_bundle", input: { save: true }, why: "Save the before snapshot." },
+        { tool: "devtools_capture_start", input: { clear: true, label: "after-action" }, why: "Record the action window." },
+        { tool: "devtools_capture_diff", input: { beforePath: "<before-bundle-path>", save: true }, why: "Compare before snapshot to current captured traffic." },
+      ],
+    },
+    "source-debug": {
+      title: "Sources and debugger drill-down",
+      goal: "Find relevant scripts, read source, and pause around runtime behavior.",
+      steps: [
+        { tool: "agent_inspect", input: { focus: "sources", query: "<marker>" }, why: "List and search parsed scripts." },
+        { tool: "devtools_source_get", input: { scriptId: "<script-id>" }, why: "Read exact script source." },
+        { tool: "devtools_debugger_control", input: { action: "setBreakpointByUrl" }, why: "Use live runtime state when source text is insufficient." },
+      ],
+    },
+    performance: {
+      title: "Performance and trace drill-down",
+      goal: "Capture objective timing, observer, CPU, coverage, and trace evidence.",
+      steps: [
+        { tool: "agent_inspect", input: { focus: "performance" }, why: "Start with lightweight performance evidence." },
+        { tool: "devtools_chrome_trace", input: { durationMs: 1000 }, why: "Capture a bounded trace around the smallest reproducible action." },
+        { tool: "devtools_trace_query", input: { tracePath: "<trace-path>", minDurationMs: 5 }, why: "Search saved trace events." },
+      ],
+    },
+  };
+  return {
+    backend: "personal-chrome",
+    task: key,
+    ...(recipes[key] || recipes["first-pass"]),
+    availableTasks: Object.keys(recipes),
+    boundaries: [
+      "Workflow guide is a deterministic recipe, not model reasoning.",
+      "Tools return evidence; the agent or human decides interpretation.",
+    ],
+  };
+}
+
 function persistCpuProfile(result, params = {}) {
   if (!result?.profile) return result;
   const path = params.path || join(cpuProfileDir, `${Date.now()}-cpu-profile.json`);
@@ -873,6 +1006,27 @@ async function callBridgeTool(toolName, params = {}) {
   }
   if (toolName === "personal_chrome_worker_frame_deep_dive" || toolName === "devtools_worker_frame_deep_dive") {
     return await workerFrameDeepDive(params);
+  }
+  if (toolName === "devtools_tool_catalog" || toolName === "personal_chrome_tool_catalog") {
+    return toolCatalog(params);
+  }
+  if (toolName === "devtools_tool_help" || toolName === "personal_chrome_tool_help") {
+    const name = String(params?.tool || "").trim();
+    if (!tools[name]) throw new Error(`unknown tool: ${name}`);
+    return {
+      backend: "personal-chrome",
+      name,
+      category: devtoolsToolCategory(name),
+      description: tools[name],
+      parameters: { type: "object", properties: {}, note: "Personal Chrome bridge exposes detailed examples through devtools_workflow_guide and docs/personal-chrome-extension.md." },
+      hints: {
+        firstPass: name === "agent_inspect" || name === "devtools_security_research_pack",
+        objectiveBoundary: "This help describes tool usage only; it does not interpret evidence.",
+      },
+    };
+  }
+  if (toolName === "devtools_workflow_guide" || toolName === "personal_chrome_workflow_guide") {
+    return workflowGuide(params?.task);
   }
   const command = normalizeCommand(toolName);
   const result = await callExtension(command, params);
@@ -1287,6 +1441,9 @@ const tools = {
   personal_chrome_auth_boundary_report: "Collect objective Personal Chrome auth boundary evidence without deciding vulnerability impact.",
   personal_chrome_worker_frame_deep_dive: "Inspect frame, iframe, worker, Service Worker, CacheStorage, and target boundaries in Personal Chrome.",
   personal_chrome_security_research_pack: "Run a one-call security research evidence workflow against the user's real Chrome tab and return artifact paths.",
+  personal_chrome_tool_catalog: "Agent usability: list available tools by category, description, required fields, and parameter names.",
+  personal_chrome_tool_help: "Agent usability: return description, category, and usage hints for one tool.",
+  personal_chrome_workflow_guide: "Agent usability: return deterministic tool recipes for common browser-security research tasks.",
   personal_chrome_sources_search: "Search parsed JavaScript sources captured through chrome.debugger.",
   personal_chrome_performance_trace: "Capture a short Performance panel-style snapshot from the user's real Chrome tab.",
   personal_chrome_performance_insights: "Summarize Performance panel timing, slow resources, long tasks, and optional Chrome trace evidence from the user's real Chrome tab.",
@@ -1368,6 +1525,9 @@ const tools = {
   devtools_auth_boundary_report: "Unified Agent DevTools API: collect objective auth boundary evidence without deciding vulnerability impact.",
   devtools_worker_frame_deep_dive: "Unified Agent DevTools API: inspect frame, iframe, worker, Service Worker, CacheStorage, and target boundaries.",
   devtools_security_research_pack: "Unified Agent DevTools API: run a one-call security research evidence workflow and return artifact paths.",
+  devtools_tool_catalog: "Agent usability: list available tools by category, description, required fields, and parameter names.",
+  devtools_tool_help: "Agent usability: return description, category, and usage hints for one tool.",
+  devtools_workflow_guide: "Agent usability: return deterministic tool recipes for common browser-security research tasks.",
   devtools_sources_search: "Unified Agent DevTools API: search parsed JavaScript sources by literal query.",
   devtools_performance_trace: "Unified Agent DevTools API: capture navigation/resource/paint/long-task performance data.",
   devtools_performance_insights: "Unified Agent DevTools API: summarize Performance panel timing, resources, long tasks, and optional trace evidence.",

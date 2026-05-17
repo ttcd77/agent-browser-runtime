@@ -87,6 +87,12 @@ limitations such as truncated results, unavailable tools, parse errors, or
 frames that could not be inspected. The router is deliberately objective: it
 does not decide whether a signal is a vulnerability.
 
+Tool usability helpers:
+
+- `devtools_tool_catalog`: list tools by category, description, and parameter names.
+- `devtools_tool_help`: inspect one tool's description, schema, category, and hints.
+- `devtools_workflow_guide`: return deterministic tool recipes for common tasks.
+
 ## Unified Tools
 
 Page operation:
@@ -99,6 +105,12 @@ Page operation:
 - `devtools_type`
 - `devtools_scroll`
 - `devtools_eval`
+
+Agent usability:
+
+- `devtools_tool_catalog`
+- `devtools_tool_help`
+- `devtools_workflow_guide`
 
 DevTools/F12 data layer:
 

@@ -79,6 +79,9 @@ Unified Agent DevTools tools:
 - `devtools_type`
 - `devtools_scroll`
 - `devtools_eval`
+- `devtools_tool_catalog`
+- `devtools_tool_help`
+- `devtools_workflow_guide`
 - `devtools_attach`
 - `devtools_detach`
 - `devtools_status`
@@ -163,6 +166,9 @@ Backend-specific aliases:
 - `personal_chrome_type`
 - `personal_chrome_scroll`
 - `personal_chrome_eval`
+- `personal_chrome_tool_catalog`
+- `personal_chrome_tool_help`
+- `personal_chrome_workflow_guide`
 - `personal_chrome_devtools_attach`
 - `personal_chrome_devtools_detach`
 - `personal_chrome_devtools_status`
