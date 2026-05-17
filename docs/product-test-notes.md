@@ -76,8 +76,8 @@ not running, it still validates that Managed Browser exposes the contract.
 
 Current verified contract:
 
-- Managed Browser: 72 `devtools_*` tools.
-- Personal Chrome: 72 `devtools_*` tools.
+- Managed Browser: 73 `devtools_*` tools.
+- Personal Chrome: 73 `devtools_*` tools.
 - Drift: none.
 
 The contract smoke uses an isolated temporary browser profile so it does not
@@ -124,6 +124,8 @@ It starts an isolated temporary managed browser and verifies:
 - Chrome Tracing stream capture and trace file output,
 - Chrome Tracing summary extraction,
 - Performance insights summary for agent first-pass triage,
+- PerformanceObserver entries for LCP, layout shift, long tasks, event timing,
+  and long animation frames where Chrome exposes them,
 - JavaScript CPU profile capture, saved full profile, and hotspot summary,
 - short JavaScript/CSS coverage snapshot and range drilldown,
 - Sources-panel literal source search, heuristic pretty-print, and source map metadata,

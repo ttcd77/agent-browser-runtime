@@ -237,6 +237,17 @@ try {
   assert(typeof performanceInsights.insights?.resourceCount === "number", "performance insights missing resource count");
   assert(Array.isArray(performanceInsights.insights?.captureBoundaries), "performance insights missing capture boundaries");
 
+  const performanceObserver = await callTool(baseUrl, "devtools_performance_observer", {
+    profile: "default",
+    durationMs: 250,
+    maxItems: 5,
+    maxEntries: 50,
+  });
+  assert(performanceObserver.backend === "managed-cdp", `performance observer wrong backend: ${JSON.stringify(performanceObserver)}`);
+  assert(Array.isArray(performanceObserver.snapshot?.supportedEntryTypes), "performance observer missing supported entry types");
+  assert(typeof performanceObserver.summary?.entryCount === "number", "performance observer missing entry count");
+  assert(Array.isArray(performanceObserver.summary?.captureBoundaries), "performance observer missing capture boundaries");
+
   const cpuProfile = await callTool(baseUrl, "devtools_cpu_profile", {
     profile: "default",
     durationMs: 300,

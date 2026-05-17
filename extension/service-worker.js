@@ -292,6 +292,8 @@ async function executeCommand(command, params) {
       return await chromePerformanceTrace(params);
     case "chrome_performance_insights":
       return await chromePerformanceInsights(params);
+    case "chrome_performance_observer":
+      return await chromePerformanceObserver(params);
     case "chrome_chrome_trace":
       return await chromeChromeTrace(params);
     case "chrome_cpu_profile":
@@ -1381,6 +1383,102 @@ function summarizePerformanceInsights(page = {}, chromeTrace = null, limit = 10)
       "This is objective performance evidence, not a root-cause verdict.",
     ],
     nextTools: ["devtools_chrome_trace", "devtools_cpu_profile", "devtools_coverage_detail", "devtools_source_get"],
+  };
+}
+
+function summarizePerformanceObserverSnapshot(snapshot = {}, limit = 10) {
+  const entries = Array.isArray(snapshot.entries) ? snapshot.entries : [];
+  const byTypeCount = {};
+  for (const entry of entries) {
+    const type = entry.entryType || "unknown";
+    byTypeCount[type] = (byTypeCount[type] || 0) + 1;
+  }
+  const byType = (type) => entries.filter((entry) => entry.entryType === type);
+  const round = (value) => Math.round(Number(value || 0) * 100) / 100;
+  const topByDuration = (type) => byType(type)
+    .map((entry) => ({
+      name: entry.name || null,
+      startTime: round(entry.startTime),
+      duration: round(entry.duration),
+      url: entry.url || entry.renderURL || null,
+      detail: entry.detail || null,
+      value: entry.value,
+      hadRecentInput: entry.hadRecentInput,
+    }))
+    .sort((a, b) => b.duration - a.duration)
+    .slice(0, limit);
+  const layoutShifts = byType("layout-shift");
+  const unexpectedLayoutShifts = layoutShifts.filter((entry) => !entry.hadRecentInput);
+  const lcpCandidates = byType("largest-contentful-paint").sort((a, b) => Number(a.startTime || 0) - Number(b.startTime || 0));
+  const lcp = lcpCandidates.at(-1) || null;
+  const resources = byType("resource")
+    .map((entry) => ({
+      name: entry.name,
+      initiatorType: entry.initiatorType,
+      startTime: round(entry.startTime),
+      duration: round(entry.duration),
+      transferSize: entry.transferSize,
+      encodedBodySize: entry.encodedBodySize,
+      decodedBodySize: entry.decodedBodySize,
+    }))
+    .sort((a, b) => b.duration - a.duration)
+    .slice(0, limit);
+  return {
+    generatedAt: new Date().toISOString(),
+    source: "PerformanceObserver",
+    supportedEntryTypes: snapshot.supportedEntryTypes || [],
+    requestedEntryTypes: snapshot.requestedEntryTypes || [],
+    observedEntryTypes: Object.keys(byTypeCount).sort(),
+    unsupportedEntryTypes: snapshot.unsupportedEntryTypes || [],
+    observeErrors: snapshot.observeErrors || [],
+    entryCount: entries.length,
+    byTypeCount,
+    largestContentfulPaint: lcp ? {
+      name: lcp.name || null,
+      startTime: round(lcp.startTime),
+      renderTime: round(lcp.renderTime),
+      loadTime: round(lcp.loadTime),
+      size: lcp.size,
+      url: lcp.url || null,
+      id: lcp.id || null,
+    } : null,
+    layoutShift: {
+      count: layoutShifts.length,
+      totalScore: Math.round(layoutShifts.reduce((sum, entry) => sum + Number(entry.value || 0), 0) * 10000) / 10000,
+      unexpectedScore: Math.round(unexpectedLayoutShifts.reduce((sum, entry) => sum + Number(entry.value || 0), 0) * 10000) / 10000,
+      top: layoutShifts
+        .map((entry) => ({
+          startTime: round(entry.startTime),
+          value: entry.value,
+          hadRecentInput: Boolean(entry.hadRecentInput),
+          sourceCount: Array.isArray(entry.sources) ? entry.sources.length : 0,
+          sources: Array.isArray(entry.sources) ? entry.sources.slice(0, 5) : [],
+        }))
+        .sort((a, b) => Number(b.value || 0) - Number(a.value || 0))
+        .slice(0, limit),
+    },
+    longTasks: {
+      count: byType("longtask").length,
+      top: topByDuration("longtask"),
+    },
+    longAnimationFrames: {
+      count: byType("long-animation-frame").length,
+      top: topByDuration("long-animation-frame"),
+    },
+    eventTiming: {
+      count: byType("event").length,
+      top: topByDuration("event"),
+    },
+    paints: byType("paint").map((entry) => ({ name: entry.name, startTime: round(entry.startTime), duration: round(entry.duration) })),
+    navigation: byType("navigation").slice(0, 1),
+    slowResources: resources,
+    captureBoundaries: [
+      "PerformanceObserver reports entries Chrome exposes to the current page context.",
+      "Some entry types are browser-version dependent and appear in unsupportedEntryTypes when unavailable.",
+      "Entries are complete only for buffered entries plus the explicit observation window.",
+      "This is objective timing evidence, not a root-cause verdict.",
+    ],
+    nextTools: ["devtools_performance_insights", "devtools_chrome_trace", "devtools_cpu_profile", "devtools_cdp_command"],
   };
 }
 
@@ -5045,6 +5143,132 @@ async function chromePerformanceInsights(params) {
     backend: "personal-chrome",
     tab: page.tab,
     insights: summarizePerformanceInsights(page, chromeTrace, Number(params.maxItems || 10)),
+  };
+}
+
+async function chromePerformanceObserver(params) {
+  const tab = await getTargetTab(params);
+  const options = {
+    durationMs: Math.min(Math.max(Number(params.durationMs || 1000), 100), 15000),
+    entryTypes: Array.isArray(params.entryTypes) && params.entryTypes.length
+      ? params.entryTypes.map(String)
+      : ["navigation", "resource", "paint", "largest-contentful-paint", "layout-shift", "longtask", "event", "long-animation-frame"],
+    triggerExpression: params.triggerExpression ? String(params.triggerExpression) : "",
+    maxEntries: Number(params.maxEntries || 500),
+    durationThreshold: Number(params.durationThreshold || 16),
+  };
+  const snapshot = await runInTab(tab.id, async (options) => {
+    const startedAt = new Date().toISOString();
+    const supportedEntryTypes = typeof PerformanceObserver !== "undefined" && Array.isArray(PerformanceObserver.supportedEntryTypes)
+      ? PerformanceObserver.supportedEntryTypes
+      : [];
+    const requestedEntryTypes = Array.isArray(options.entryTypes) ? options.entryTypes : [];
+    const unsupportedEntryTypes = requestedEntryTypes.filter((type) => !supportedEntryTypes.includes(type));
+    const observeErrors = [];
+    const entries = [];
+    const observers = [];
+    const nodeLabel = (node) => node ? ({
+      nodeName: node.nodeName,
+      id: node.id || "",
+      className: typeof node.className === "string" ? node.className : "",
+    }) : null;
+    const rectLabel = (rect) => rect ? {
+      x: rect.x,
+      y: rect.y,
+      width: rect.width,
+      height: rect.height,
+      top: rect.top,
+      right: rect.right,
+      bottom: rect.bottom,
+      left: rect.left,
+    } : null;
+    const cleanEntry = (entry) => {
+      const base = entry.toJSON?.() || {};
+      const out = {
+        ...base,
+        name: entry.name,
+        entryType: entry.entryType,
+        startTime: entry.startTime,
+        duration: entry.duration,
+      };
+      if (entry.entryType === "layout-shift") {
+        out.value = entry.value;
+        out.hadRecentInput = entry.hadRecentInput;
+        out.lastInputTime = entry.lastInputTime;
+        out.sources = Array.from(entry.sources || []).map((source) => ({
+          node: nodeLabel(source.node),
+          previousRect: rectLabel(source.previousRect),
+          currentRect: rectLabel(source.currentRect),
+        }));
+      }
+      if (entry.entryType === "largest-contentful-paint") {
+        out.renderTime = entry.renderTime;
+        out.loadTime = entry.loadTime;
+        out.size = entry.size;
+        out.id = entry.id || "";
+        out.url = entry.url || "";
+        out.element = nodeLabel(entry.element);
+      }
+      if (entry.entryType === "long-animation-frame") {
+        out.blockingDuration = entry.blockingDuration;
+        out.renderStart = entry.renderStart;
+        out.styleAndLayoutStart = entry.styleAndLayoutStart;
+        out.scripts = Array.from(entry.scripts || []).slice(0, 20).map((script) => ({
+          name: script.name,
+          duration: script.duration,
+          invoker: script.invoker,
+          invokerType: script.invokerType,
+          sourceURL: script.sourceURL,
+          sourceFunctionName: script.sourceFunctionName,
+          sourceCharPosition: script.sourceCharPosition,
+          windowAttribution: script.windowAttribution,
+        }));
+      }
+      return JSON.parse(JSON.stringify(out));
+    };
+    for (const type of requestedEntryTypes) {
+      if (!supportedEntryTypes.includes(type)) continue;
+      try {
+        const observer = new PerformanceObserver((list) => {
+          for (const entry of list.getEntries()) {
+            if (entries.length < options.maxEntries) entries.push(cleanEntry(entry));
+          }
+        });
+        const init = { type, buffered: true };
+        if (type === "event") init.durationThreshold = options.durationThreshold;
+        observer.observe(init);
+        observers.push(observer);
+      } catch (error) {
+        observeErrors.push({ type, error: String(error?.message || error) });
+      }
+    }
+    let triggerResult = null;
+    if (options.triggerExpression) {
+      try {
+        triggerResult = await eval(options.triggerExpression);
+      } catch (error) {
+        triggerResult = { error: String(error?.message || error) };
+      }
+    }
+    await new Promise((resolve) => setTimeout(resolve, options.durationMs));
+    for (const observer of observers) observer.disconnect();
+    return {
+      startedAt,
+      finishedAt: new Date().toISOString(),
+      durationMs: options.durationMs,
+      requestedEntryTypes,
+      supportedEntryTypes,
+      unsupportedEntryTypes,
+      observeErrors,
+      triggerResult,
+      entries,
+    };
+  }, [options]);
+  return {
+    backend: "personal-chrome",
+    tab: pickTab(tab),
+    snapshot,
+    summary: summarizePerformanceObserverSnapshot(snapshot, Number(params.maxItems || 10)),
   };
 }
 

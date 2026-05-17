@@ -98,6 +98,7 @@ original-source tree.
 |---|---|
 | Navigation/resource/paint timing | `devtools_performance_trace` |
 | Agent-readable timing/resource/long-task summary | `devtools_performance_insights` |
+| LCP/layout shift/long task/event timing/long animation frame observer entries | `devtools_performance_observer` |
 | Chrome trace capture | `devtools_chrome_trace` |
 | JavaScript CPU profile and hotspot summary | `devtools_cpu_profile` |
 | JS/CSS coverage summary | `devtools_coverage_snapshot` |

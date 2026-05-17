@@ -72,6 +72,16 @@ assert(performanceInsights.insights?.source?.performanceEntries === true, "perfo
 assert(typeof performanceInsights.insights?.resourceCount === "number", "performance insights missing resource count");
 assert(Array.isArray(performanceInsights.insights?.captureBoundaries), "performance insights missing capture boundaries");
 
+const performanceObserver = await callTool("devtools_performance_observer", {
+  durationMs: 250,
+  maxItems: 5,
+  maxEntries: 50,
+});
+assert(performanceObserver.backend === "personal-chrome", `performance observer wrong backend: ${JSON.stringify(performanceObserver)}`);
+assert(Array.isArray(performanceObserver.snapshot?.supportedEntryTypes), "performance observer missing supported entry types");
+assert(typeof performanceObserver.summary?.entryCount === "number", "performance observer missing entry count");
+assert(Array.isArray(performanceObserver.summary?.captureBoundaries), "performance observer missing capture boundaries");
+
 console.log("Personal Chrome smoke passed:");
 console.log(`- bridge: ${baseUrl}`);
 console.log(`- active tab: ${status.tab.title || "(untitled)"} ${status.tab.url}`);

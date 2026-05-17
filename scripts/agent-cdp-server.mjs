@@ -925,6 +925,102 @@ function summarizePerformanceInsights(page = {}, chromeTrace = null, limit = 10)
   };
 }
 
+function summarizePerformanceObserverSnapshot(snapshot = {}, limit = 10) {
+  const entries = Array.isArray(snapshot.entries) ? snapshot.entries : [];
+  const byTypeCount = {};
+  for (const entry of entries) {
+    const type = entry.entryType || "unknown";
+    byTypeCount[type] = (byTypeCount[type] || 0) + 1;
+  }
+  const byType = (type) => entries.filter((entry) => entry.entryType === type);
+  const round = (value) => Math.round(Number(value || 0) * 100) / 100;
+  const topByDuration = (type) => byType(type)
+    .map((entry) => ({
+      name: entry.name || null,
+      startTime: round(entry.startTime),
+      duration: round(entry.duration),
+      url: entry.url || entry.renderURL || null,
+      detail: entry.detail || null,
+      value: entry.value,
+      hadRecentInput: entry.hadRecentInput,
+    }))
+    .sort((a, b) => b.duration - a.duration)
+    .slice(0, limit);
+  const layoutShifts = byType("layout-shift");
+  const unexpectedLayoutShifts = layoutShifts.filter((entry) => !entry.hadRecentInput);
+  const lcpCandidates = byType("largest-contentful-paint").sort((a, b) => Number(a.startTime || 0) - Number(b.startTime || 0));
+  const lcp = lcpCandidates.at(-1) || null;
+  const resources = byType("resource")
+    .map((entry) => ({
+      name: entry.name,
+      initiatorType: entry.initiatorType,
+      startTime: round(entry.startTime),
+      duration: round(entry.duration),
+      transferSize: entry.transferSize,
+      encodedBodySize: entry.encodedBodySize,
+      decodedBodySize: entry.decodedBodySize,
+    }))
+    .sort((a, b) => b.duration - a.duration)
+    .slice(0, limit);
+  return {
+    generatedAt: new Date().toISOString(),
+    source: "PerformanceObserver",
+    supportedEntryTypes: snapshot.supportedEntryTypes || [],
+    requestedEntryTypes: snapshot.requestedEntryTypes || [],
+    observedEntryTypes: Object.keys(byTypeCount).sort(),
+    unsupportedEntryTypes: snapshot.unsupportedEntryTypes || [],
+    observeErrors: snapshot.observeErrors || [],
+    entryCount: entries.length,
+    byTypeCount,
+    largestContentfulPaint: lcp ? {
+      name: lcp.name || null,
+      startTime: round(lcp.startTime),
+      renderTime: round(lcp.renderTime),
+      loadTime: round(lcp.loadTime),
+      size: lcp.size,
+      url: lcp.url || null,
+      id: lcp.id || null,
+    } : null,
+    layoutShift: {
+      count: layoutShifts.length,
+      totalScore: Math.round(layoutShifts.reduce((sum, entry) => sum + Number(entry.value || 0), 0) * 10000) / 10000,
+      unexpectedScore: Math.round(unexpectedLayoutShifts.reduce((sum, entry) => sum + Number(entry.value || 0), 0) * 10000) / 10000,
+      top: layoutShifts
+        .map((entry) => ({
+          startTime: round(entry.startTime),
+          value: entry.value,
+          hadRecentInput: Boolean(entry.hadRecentInput),
+          sourceCount: Array.isArray(entry.sources) ? entry.sources.length : 0,
+          sources: Array.isArray(entry.sources) ? entry.sources.slice(0, 5) : [],
+        }))
+        .sort((a, b) => Number(b.value || 0) - Number(a.value || 0))
+        .slice(0, limit),
+    },
+    longTasks: {
+      count: byType("longtask").length,
+      top: topByDuration("longtask"),
+    },
+    longAnimationFrames: {
+      count: byType("long-animation-frame").length,
+      top: topByDuration("long-animation-frame"),
+    },
+    eventTiming: {
+      count: byType("event").length,
+      top: topByDuration("event"),
+    },
+    paints: byType("paint").map((entry) => ({ name: entry.name, startTime: round(entry.startTime), duration: round(entry.duration) })),
+    navigation: byType("navigation").slice(0, 1),
+    slowResources: resources,
+    captureBoundaries: [
+      "PerformanceObserver reports entries Chrome exposes to the current page context.",
+      "Some entry types are browser-version dependent and appear in unsupportedEntryTypes when unavailable.",
+      "Entries are complete only for buffered entries plus the explicit observation window.",
+      "This is objective timing evidence, not a root-cause verdict.",
+    ],
+    nextTools: ["devtools_performance_insights", "devtools_chrome_trace", "devtools_cpu_profile", "devtools_cdp_command"],
+  };
+}
+
 function extractTraceScreenshots(events = [], directory, options = {}) {
   const maxScreenshots = Math.max(0, Number(options.maxScreenshots || 5));
   if (!maxScreenshots || !directory) return [];
@@ -1021,7 +1117,7 @@ function buildAgentInspectToolPlan(focus, options = {}) {
   if (focus === "performance") {
     return {
       ...base,
-      firstPass: ["devtools_memory_snapshot", "devtools_performance_insights", "devtools_performance_trace"],
+      firstPass: ["devtools_memory_snapshot", "devtools_performance_observer", "devtools_performance_insights", "devtools_performance_trace"],
       drillDown: ["devtools_chrome_trace", "devtools_cpu_profile", "devtools_coverage_detail"],
       captureHint: "Use heavier traces only around the smallest reproducible action.",
       objectiveBoundary: "Trace summaries expose timing evidence, not root-cause conclusions.",
@@ -6294,11 +6390,12 @@ function registerStandaloneBrowserTools(tools, cdpPort, profileRegistry, default
         out.nextTools = ["devtools_source_get", "devtools_source_pretty_print", "devtools_source_map_metadata", "agent_inspect focus=debug"];
       } else if (focus === "performance") {
         out.evidence.memory = await safeCall("browser_memory_snapshot");
+        out.evidence.observer = await safeCall("browser_performance_observer", { durationMs: 500, maxItems: limit });
         out.evidence.insights = await safeCall("browser_performance_insights", { durationMs: 500, maxItems: limit, includeChromeTrace: Boolean(params?.includeHeavy) });
         out.evidence.performance = await safeCall("browser_performance_trace", { durationMs: 500 });
         if (params?.includeHeavy) out.evidence.cpuProfile = await safeCall("browser_cpu_profile", { durationMs: 500, maxNodes: limit });
         out.summary = "Performance route: memory counters plus objective timing, resource, long-task, and optional trace evidence.";
-        out.nextTools = ["devtools_performance_insights", "devtools_chrome_trace", "devtools_cpu_profile", "devtools_coverage_detail"];
+        out.nextTools = ["devtools_performance_observer", "devtools_performance_insights", "devtools_chrome_trace", "devtools_cpu_profile", "devtools_coverage_detail"];
       } else if (focus === "search") {
         if (!params?.query) throw new Error("query is required for focus=search");
         out.evidence.search = await safeCall("browser_global_search", { query: params.query, maxMatches: limit });
@@ -6691,6 +6788,159 @@ function registerStandaloneBrowserTools(tools, cdpPort, profileRegistry, default
         tabId: page.tabId || params?.tabId || profile.tabId,
         insights: summarizePerformanceInsights(page, chromeTrace, params?.maxItems || 10),
       });
+    },
+  });
+
+  tools.set("browser_performance_observer", {
+    name: "browser_performance_observer",
+    description: "Capture browser PerformanceObserver entries such as LCP, layout shift, long tasks, event timing, and long animation frames.",
+    parameters: {
+      type: "object",
+      properties: {
+        profile: { type: "string" },
+        tabId: { type: "string" },
+        durationMs: { type: "number" },
+        entryTypes: { type: "array", items: { type: "string" } },
+        triggerExpression: { type: "string" },
+        maxEntries: { type: "number" },
+        maxItems: { type: "number" },
+        durationThreshold: { type: "number" },
+      },
+    },
+    async execute(_id, params) {
+      const profile = await resolveProfile(params?.profile);
+      const options = {
+        durationMs: Math.min(Math.max(typeof params?.durationMs === "number" ? params.durationMs : 1000, 100), 15000),
+        entryTypes: Array.isArray(params?.entryTypes) && params.entryTypes.length
+          ? params.entryTypes.map(String)
+          : ["navigation", "resource", "paint", "largest-contentful-paint", "layout-shift", "longtask", "event", "long-animation-frame"],
+        triggerExpression: params?.triggerExpression ? String(params.triggerExpression) : "",
+        maxEntries: typeof params?.maxEntries === "number" ? params.maxEntries : 500,
+        durationThreshold: typeof params?.durationThreshold === "number" ? params.durationThreshold : 16,
+      };
+      return toolResult(await withPageClient(cdpPort, params?.tabId || profile.tabId, async (client, target) => {
+        const result = await client.Runtime.evaluate({
+          expression: `(${async (options) => {
+            const startedAt = new Date().toISOString();
+            const supportedEntryTypes = typeof PerformanceObserver !== "undefined" && Array.isArray(PerformanceObserver.supportedEntryTypes)
+              ? PerformanceObserver.supportedEntryTypes
+              : [];
+            const requestedEntryTypes = Array.isArray(options.entryTypes) ? options.entryTypes : [];
+            const unsupportedEntryTypes = requestedEntryTypes.filter((type) => !supportedEntryTypes.includes(type));
+            const observeErrors = [];
+            const entries = [];
+            const observers = [];
+            const nodeLabel = (node) => node ? ({
+              nodeName: node.nodeName,
+              id: node.id || "",
+              className: typeof node.className === "string" ? node.className : "",
+            }) : null;
+            const rectLabel = (rect) => rect ? {
+              x: rect.x,
+              y: rect.y,
+              width: rect.width,
+              height: rect.height,
+              top: rect.top,
+              right: rect.right,
+              bottom: rect.bottom,
+              left: rect.left,
+            } : null;
+            const cleanEntry = (entry) => {
+              const base = entry.toJSON?.() || {};
+              const out = {
+                ...base,
+                name: entry.name,
+                entryType: entry.entryType,
+                startTime: entry.startTime,
+                duration: entry.duration,
+              };
+              if (entry.entryType === "layout-shift") {
+                out.value = entry.value;
+                out.hadRecentInput = entry.hadRecentInput;
+                out.lastInputTime = entry.lastInputTime;
+                out.sources = Array.from(entry.sources || []).map((source) => ({
+                  node: nodeLabel(source.node),
+                  previousRect: rectLabel(source.previousRect),
+                  currentRect: rectLabel(source.currentRect),
+                }));
+              }
+              if (entry.entryType === "largest-contentful-paint") {
+                out.renderTime = entry.renderTime;
+                out.loadTime = entry.loadTime;
+                out.size = entry.size;
+                out.id = entry.id || "";
+                out.url = entry.url || "";
+                out.element = nodeLabel(entry.element);
+              }
+              if (entry.entryType === "long-animation-frame") {
+                out.blockingDuration = entry.blockingDuration;
+                out.renderStart = entry.renderStart;
+                out.styleAndLayoutStart = entry.styleAndLayoutStart;
+                out.scripts = Array.from(entry.scripts || []).slice(0, 20).map((script) => ({
+                  name: script.name,
+                  duration: script.duration,
+                  invoker: script.invoker,
+                  invokerType: script.invokerType,
+                  sourceURL: script.sourceURL,
+                  sourceFunctionName: script.sourceFunctionName,
+                  sourceCharPosition: script.sourceCharPosition,
+                  windowAttribution: script.windowAttribution,
+                }));
+              }
+              return JSON.parse(JSON.stringify(out));
+            };
+            for (const type of requestedEntryTypes) {
+              if (!supportedEntryTypes.includes(type)) continue;
+              try {
+                const observer = new PerformanceObserver((list) => {
+                  for (const entry of list.getEntries()) {
+                    if (entries.length < options.maxEntries) entries.push(cleanEntry(entry));
+                  }
+                });
+                const init = { type, buffered: true };
+                if (type === "event") init.durationThreshold = options.durationThreshold;
+                observer.observe(init);
+                observers.push(observer);
+              } catch (error) {
+                observeErrors.push({ type, error: String(error?.message || error) });
+              }
+            }
+            let triggerResult = null;
+            if (options.triggerExpression) {
+              try {
+                triggerResult = await eval(options.triggerExpression);
+              } catch (error) {
+                triggerResult = { error: String(error?.message || error) };
+              }
+            }
+            await new Promise((resolve) => setTimeout(resolve, options.durationMs));
+            for (const observer of observers) observer.disconnect();
+            return {
+              startedAt,
+              finishedAt: new Date().toISOString(),
+              durationMs: options.durationMs,
+              requestedEntryTypes,
+              supportedEntryTypes,
+              unsupportedEntryTypes,
+              observeErrors,
+              triggerResult,
+              entries,
+            };
+          }})(${JSON.stringify(options)})`,
+          returnByValue: true,
+          awaitPromise: true,
+        });
+        await profileRegistry.touchProfile(profile.name, { tabId: target.id });
+        const snapshot = result.result?.value || {};
+        return {
+          backend: "managed-cdp",
+          profile: profile.name,
+          tabId: target.id,
+          snapshot,
+          summary: summarizePerformanceObserverSnapshot(snapshot, params?.maxItems || 10),
+          exception: result.exceptionDetails,
+        };
+      }));
     },
   });
 
@@ -7278,6 +7528,7 @@ function registerStandaloneBrowserTools(tools, cdpPort, profileRegistry, default
   aliasTool("devtools_performance_trace", "browser_performance_trace", "Unified Agent DevTools API: capture navigation/resource/paint/long-task performance data.");
   aliasTool("devtools_chrome_trace", "browser_chrome_trace", "Unified Agent DevTools API: capture Chrome Tracing data and return a summary plus full trace path.");
   aliasTool("devtools_performance_insights", "browser_performance_insights", "Unified Agent DevTools API: summarize Performance panel timing, resources, long tasks, and optional trace evidence.");
+  aliasTool("devtools_performance_observer", "browser_performance_observer", "Unified Agent DevTools API: capture PerformanceObserver entries such as LCP, layout shifts, long tasks, event timing, and long animation frames.");
   aliasTool("devtools_cpu_profile", "browser_cpu_profile", "Unified Agent DevTools API: capture a JavaScript CPU profile and hotspot summary.");
   aliasTool("devtools_coverage_snapshot", "browser_coverage_snapshot", "Unified Agent DevTools API: capture short JavaScript and CSS coverage data.");
   aliasTool("devtools_coverage_detail", "browser_coverage_detail", "Unified Agent DevTools API: capture Coverage-panel JavaScript/CSS range drilldown data.");
