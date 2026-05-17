@@ -173,3 +173,12 @@
 - 新增 `docs/continuous-development.zh.md`，固定每轮开发循环。
 - 新增 `npm run dev:loop-check`，输出 repo 状态、计划状态、验证脚本状态和下一步建议。
 - 新增 `npm run check:devtools` 和 `npm run check:full`，把完整验收命令固定下来。
+
+### 2026-05-17: 外部自动开发 Loop 建立
+
+已经完成:
+
+- 新增 `docs/agent-auto-loop.zh.md`，解释当前聊天不能自己醒来，以及如何用外部 CLI agent 定时继续开发。
+- 新增 `scripts/agent-auto-loop.mjs`。
+- 新增 `npm run agent:auto-once` 和 `npm run agent:auto-loop`。
+- `logs/` 已加入 `.gitignore`，避免自动开发日志进入公开仓库。

@@ -9,3 +9,4 @@ tmp/
 *.log
 *.tgz
 research/competitors/
+logs/

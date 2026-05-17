@@ -22,7 +22,10 @@
     "research:pack": "node scripts/security-research-pack-cli.mjs",
     "check": "npm run build && npm run test",
     "check:devtools": "npm run contract:devtools && npm run smoke:f12 && npm run smoke:personal",
-    "check:full": "npm run check && npm run check:devtools"
+    "check:full": "npm run check && npm run check:devtools",
+    "agent:auto-dry-run": "node scripts/agent-auto-loop.mjs --once --dry-run",
+    "agent:auto-once": "node scripts/agent-auto-loop.mjs --once",
+    "agent:auto-loop": "node scripts/agent-auto-loop.mjs --interval-minutes 45 --max-iterations 3"
   },
   "dependencies": {
     "chrome-remote-interface": "^0.34.0",

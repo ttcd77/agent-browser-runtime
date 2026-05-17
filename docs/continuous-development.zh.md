@@ -56,6 +56,15 @@ npm run contract:devtools
 npm run check:full
 ```
 
+外部 agent 自动开发 loop:
+
+```bash
+npm run agent:auto-once
+npm run agent:auto-loop
+```
+
+说明见 `docs/agent-auto-loop.zh.md`。这不是当前聊天自己醒来，而是本地进程定时调用 CLI agent。
+
 ## 选择下一项的规则
 
 优先级:
@@ -81,3 +90,12 @@ npm run check:full
 - 不把 80+ 个底层工具作为默认入口。
 - 不把私人 Chrome 证据、真实目标数据、账号截图提交到仓库。
 
+## 自动醒来的现实边界
+
+聊天里的 agent 不能自己醒来。要做到“连续开发”，必须由外部进程触发:
+
+- Codex CLI: `codex exec ...`
+- Claude CLI: `claude --print ...`
+- Windows Task Scheduler / 后台 PowerShell / Node loop
+
+本项目用 `scripts/agent-auto-loop.mjs` 包装这个过程。
