@@ -322,6 +322,8 @@ const harCompleteness = await callTool("devtools_har_completeness", {
 });
 assert(harCompleteness.backend === "personal-chrome", `Personal Chrome HAR completeness wrong backend: ${JSON.stringify(harCompleteness)}`);
 assert(typeof harCompleteness.entryCount === "number", "Personal Chrome HAR completeness missing entry count");
+assert(harCompleteness.coverage?.bodiesIncluded && typeof harCompleteness.coverage.bodiesIncluded.present === "number", `Personal Chrome HAR completeness missing body coverage: ${JSON.stringify(harCompleteness.coverage)}`);
+assert(harCompleteness.coverage?.totalTiming && typeof harCompleteness.coverage.totalTiming.present === "number", `Personal Chrome HAR completeness missing timing coverage: ${JSON.stringify(harCompleteness.coverage)}`);
 assert(harCompleteness.body, "Personal Chrome HAR completeness missing body summary");
 assert(harCompleteness.timing, "Personal Chrome HAR completeness missing timing summary");
 

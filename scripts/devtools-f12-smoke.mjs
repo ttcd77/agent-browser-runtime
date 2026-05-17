@@ -953,6 +953,8 @@ try {
   });
   assert(harCompleteness.backend === "managed-cdp", `HAR completeness wrong backend: ${JSON.stringify(harCompleteness)}`);
   assert(harCompleteness.entryCount >= 1, "HAR completeness missing entries");
+  assert(typeof harCompleteness.coverage?.bodiesIncluded?.ratio === "number", `HAR completeness missing body coverage ratio: ${JSON.stringify(harCompleteness.coverage)}`);
+  assert(typeof harCompleteness.coverage?.totalTiming?.ratio === "number", `HAR completeness missing timing coverage ratio: ${JSON.stringify(harCompleteness.coverage)}`);
   assert(harCompleteness.body?.includedCount >= 1, `HAR completeness missing included bodies: ${JSON.stringify(harCompleteness.body)}`);
   assert(harCompleteness.timing?.entriesWithTotalTime >= 1, `HAR completeness missing timing evidence: ${JSON.stringify(harCompleteness.timing)}`);
   assert(harCompleteness.reportPath, "HAR completeness did not save a report");

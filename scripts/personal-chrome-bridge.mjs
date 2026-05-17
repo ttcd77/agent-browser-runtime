@@ -768,11 +768,35 @@ function analyzeHarCompleteness(har = {}, options = {}) {
       validTo: entry._securityDetails?.validTo || null,
     }));
   const maxRows = typeof options.maxRows === "number" ? options.maxRows : 50;
+  const ratio = (count, total) => total > 0 ? Number((count / total).toFixed(4)) : null;
+  const total = entries.length;
+  const entriesWithBody = bodyRows.filter((row) => row.bodyIncluded).length;
+  const entriesWithReadableBody = bodyRows.filter((row) => row.bodyReadable).length;
+  const entriesWithTotalTime = entries.filter((entry) => typeof entry.time === "number" && entry.time >= 0).length;
+  const entriesWithAllTimingPhases = timingRows.filter((row) => row.missingPhases.length === 0).length;
+  const entriesWithSecurityDetails = securityRows.length;
+  const httpsEntries = entries.filter((entry) => {
+    try { return new URL(entry.request?.url || "").protocol === "https:"; }
+    catch { return false; }
+  });
+  const httpsEntriesWithSecurityDetails = entries.filter((entry) => {
+    try { return new URL(entry.request?.url || "").protocol === "https:" && entry._securityDetails; }
+    catch { return false; }
+  }).length;
   return {
     generatedAt: new Date().toISOString(),
-    entryCount: entries.length,
+    entryCount: total,
     includeBodies: Boolean(options.includeBodies),
     maxBodyBytes: options.maxBodyBytes ?? null,
+    coverage: {
+      bodiesIncluded: { present: entriesWithBody, total, ratio: ratio(entriesWithBody, total) },
+      readableBodies: { present: entriesWithReadableBody, total, ratio: ratio(entriesWithReadableBody, total) },
+      totalTiming: { present: entriesWithTotalTime, total, ratio: ratio(entriesWithTotalTime, total) },
+      allTimingPhases: { present: entriesWithAllTimingPhases, total, ratio: ratio(entriesWithAllTimingPhases, total) },
+      securityDetails: { present: entriesWithSecurityDetails, total, ratio: ratio(entriesWithSecurityDetails, total) },
+      httpsSecurityDetails: { present: httpsEntriesWithSecurityDetails, total: httpsEntries.length, ratio: ratio(httpsEntriesWithSecurityDetails, httpsEntries.length) },
+      redirects: { present: redirectRows.length, total, ratio: ratio(redirectRows.length, total) },
+    },
     body: {
       readableCount: bodyRows.filter((row) => row.bodyReadable).length,
       includedCount: bodyRows.filter((row) => row.bodyIncluded).length,
