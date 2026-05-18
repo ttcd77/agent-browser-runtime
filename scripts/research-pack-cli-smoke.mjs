@@ -42,6 +42,9 @@ printSummary({
     handoffReady: true,
     handoffPresentCount: 7,
     handoffMissing: [],
+    artifactCoverageReady: true,
+    artifactCoverageMissing: [],
+    artifactCoverageSkipped: ["trace"],
     harPath: "tmp/example.har",
     researchPackPath: "tmp/security-research-pack.json",
     capture: {
@@ -58,6 +61,11 @@ printSummary({
     presentCount: 7,
     missing: [],
   },
+  artifactCoverage: {
+    ready: true,
+    missing: [],
+    skipped: ["trace"],
+  },
   drilldownPlan: {
     drilldowns: [{ label: "Request detail", tool: "devtools_request_detail" }],
   },
@@ -68,6 +76,8 @@ assert(output.includes("- workflow: professional-appsec"), "summary missing work
 assert(output.includes("- handoff ready: true"), "summary missing handoff readiness");
 assert(output.includes("present: 7"), "summary missing handoff present count");
 assert(output.includes("missing: (none)"), "summary missing handoff missing list");
+assert(output.includes("- artifact coverage ready: true"), "summary missing artifact coverage readiness");
+assert(output.includes("skipped: trace"), "summary missing artifact coverage skipped list");
 assert(output.includes("browser_open -> browser_capture -> browser_inspect -> browser_security_pack -> drilldownPlan"), "summary missing workflow path");
 assert(output.includes("- capture:"), "summary missing capture section");
 assert(output.includes("trafficCount: 2"), "summary missing capture traffic count");

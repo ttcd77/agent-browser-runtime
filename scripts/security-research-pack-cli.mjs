@@ -130,6 +130,14 @@ export function printSummary(pack, output = console.log) {
     const missing = summary.handoffMissing || completeness.missing || [];
     output(`  - missing: ${Array.isArray(missing) && missing.length ? missing.join(", ") : "(none)"}`);
   }
+  if (summary.artifactCoverageReady !== undefined || pack.artifactCoverage) {
+    const coverage = pack.artifactCoverage || {};
+    const missing = summary.artifactCoverageMissing || coverage.missing || [];
+    const skipped = summary.artifactCoverageSkipped || coverage.skipped || [];
+    output(`- artifact coverage ready: ${summary.artifactCoverageReady ?? coverage.ready ?? "(unknown)"}`);
+    output(`  - missing: ${Array.isArray(missing) && missing.length ? missing.join(", ") : "(none)"}`);
+    output(`  - skipped: ${Array.isArray(skipped) && skipped.length ? skipped.join(", ") : "(none)"}`);
+  }
   if (workflow.task || Array.isArray(workflow.defaultPath)) {
     output(`- workflow: ${workflow.task || "(unknown)"}`);
     if (Array.isArray(workflow.defaultPath)) output(`  - path: ${workflow.defaultPath.join(" -> ")}`);
