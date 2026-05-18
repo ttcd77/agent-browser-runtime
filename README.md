@@ -269,6 +269,12 @@ node examples/security-research-pack.mjs https://example.com
 The example prints pre/post professional readiness, handoff paths, artifact
 coverage, and first drill-down routes.
 
+Example smoke:
+
+```bash
+npm run smoke:example
+```
+
 ## Tools
 
 ### Agent Router
