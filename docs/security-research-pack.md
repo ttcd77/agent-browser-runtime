@@ -85,7 +85,9 @@ The CLI shortcut also calls `devtools_professional_readiness` after the pack is
 created. This gives the agent a separate mechanical check for workflow,
 capture, artifact inventory, evidence timeline, and the first F12 request-detail
 route. It is still only an evidence-readiness check, not a vulnerability
-judgment.
+judgment. The human-readable CLI summary also prints the first captured request's
+available F12 detail sections, header counts, and body availability so an agent
+can orient itself without immediately loading the full request detail.
 
 ## Why This Helps Security Research
 

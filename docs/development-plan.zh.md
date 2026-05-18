@@ -859,3 +859,12 @@
 - `summary.firstF12RequestDetailSections` 暴露当前已拿到哪些 F12 detail sections。
 - Managed Browser、Personal Chrome、example smoke 都覆盖了该摘要。
 - 该能力只让 evidence pack 更自足，不判断首个请求是否重要或有漏洞。
+
+### 2026-05-18: CLI 首个 F12 Request Detail 摘要完成
+
+已经完成:
+
+- `npm run research:pack` 的人类可读摘要现在会打印 `firstF12RequestDetail`。
+- 摘要包含 requestId、status、可用 F12 detail sections、request/response header 数量、body readable 和 body bytes。
+- `smoke:cli` 已覆盖这些输出，确保 CLI 不会落后于 evidence pack schema。
+- 该能力只是让命令行入口更容易被 Agent 接手，不输出 header value，也不判断漏洞。

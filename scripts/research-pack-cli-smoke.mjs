@@ -71,6 +71,30 @@ printSummary({
       detail: { tool: "devtools_request_detail", input: { requestId: "request-1" } },
     }],
   },
+  firstF12RequestDetail: {
+    requestId: "request-1",
+    status: 200,
+    sectionAvailability: {
+      overview: true,
+      headers: true,
+      payload: true,
+      cookies: true,
+      timing: true,
+      initiator: true,
+      redirects: true,
+      security: true,
+    },
+    sections: {
+      headers: {
+        requestHeaderCount: 6,
+        responseHeaderCount: 4,
+      },
+      payload: {
+        bodyReadable: true,
+        bodyBytes: 42,
+      },
+    },
+  },
   nextTools: ["devtools_request_detail"],
   handoffCompleteness: {
     ready: true,
@@ -130,6 +154,11 @@ assert(output.includes("trafficCount: 2"), "summary missing capture traffic coun
 assert(output.includes("research-pack=1"), "summary missing artifact kind counts");
 assert(output.includes("devtools_artifact_inspect path=tmp/security-research-pack.json"), "summary missing handoff inspect command");
 assert(output.includes("devtools_artifact_read path=tmp/security-research-pack.json"), "summary missing handoff read command");
+assert(output.includes("- first F12 request detail:"), "summary missing first F12 request detail section");
+assert(output.includes("requestId: request-1"), "summary missing first F12 request id");
+assert(output.includes("sections: overview, headers, payload, cookies, timing, initiator, redirects, security"), "summary missing first F12 request sections");
+assert(output.includes("request headers: 6"), "summary missing first F12 request header count");
+assert(output.includes("body readable: true"), "summary missing first F12 request body readability");
 assert(output.includes("Request detail: devtools_request_detail"), "summary missing first drilldown");
 
 console.log("Research pack CLI smoke passed");

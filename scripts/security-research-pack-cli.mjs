@@ -213,6 +213,24 @@ export function printSummary(pack, output = console.log) {
     output(`  - inspect: devtools_artifact_inspect path=${summary.researchPackPath}`);
     output(`  - read: devtools_artifact_read path=${summary.researchPackPath} mode=line startLine=1 maxLines=120`);
   }
+  if (pack.firstF12RequestDetail) {
+    const first = pack.firstF12RequestDetail;
+    const available = Object.entries(first.sectionAvailability || {})
+      .filter(([, present]) => present)
+      .map(([name]) => name);
+    output("- first F12 request detail:");
+    output(`  - requestId: ${first.requestId || "(unknown)"}`);
+    output(`  - status: ${first.status ?? "(unknown)"}`);
+    output(`  - sections: ${available.length ? available.join(", ") : "(none)"}`);
+    if (first.sections?.headers) {
+      output(`  - request headers: ${first.sections.headers.requestHeaderCount ?? "(unknown)"}`);
+      output(`  - response headers: ${first.sections.headers.responseHeaderCount ?? "(unknown)"}`);
+    }
+    if (first.sections?.payload) {
+      output(`  - body readable: ${first.sections.payload.bodyReadable ?? "(unknown)"}`);
+      output(`  - body bytes: ${first.sections.payload.bodyBytes ?? "(unknown)"}`);
+    }
+  }
   if (Array.isArray(pack.nextTools) && pack.nextTools.length) {
     output(`- next tools: ${pack.nextTools.join(", ")}`);
   }
