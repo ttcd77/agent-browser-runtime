@@ -33,6 +33,7 @@ evidence.
 | What F12 capability area should I use? | `devtools_capability_map` |
 | How close is this backend to professional F12 evidence parity? | `devtools_f12_parity_matrix` |
 | What workflow should I follow for this task? | `devtools_workflow_guide` |
+| Is the professional evidence workflow mechanically ready? | `devtools_professional_readiness` |
 | Which raw CDP methods/events can this browser expose? | `devtools_protocol_schema` |
 | What F12 signals should I inspect first? | `devtools_signal_summary` |
 | Is capture running? | `devtools_capture_status` |

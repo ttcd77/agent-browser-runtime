@@ -38,6 +38,7 @@ const requiredReadmePhrases = [
   "What This Is Not",
   "Safety Boundaries",
   "devtools_security_research_pack",
+  "devtools_professional_readiness",
   "browser_inspect",
 ];
 
@@ -95,6 +96,9 @@ if (existsSync("docs/agent-devtools-api.md")) {
   if (!api.includes("browser_*") || !api.includes("devtools_*")) {
     failures.push("agent-devtools-api.md must explain facade and low-level tool layers");
   }
+  if (!api.includes("devtools_professional_readiness")) {
+    failures.push("agent-devtools-api.md must document devtools_professional_readiness");
+  }
   if (/decide whether.*vulnerab/i.test(api) === false) {
     failures.push("agent-devtools-api.md must preserve the objective-tool boundary");
   }
@@ -102,8 +106,15 @@ if (existsSync("docs/agent-devtools-api.md")) {
 
 if (existsSync("docs/agent-operator-runbook.md")) {
   const runbook = readText("docs/agent-operator-runbook.md");
-  for (const phrase of ["professional-appsec", "handoffReady", "devtools_artifact_read"]) {
+  for (const phrase of ["professional-appsec", "devtools_professional_readiness", "handoffReady", "devtools_artifact_read"]) {
     if (!runbook.includes(phrase)) failures.push(`agent-operator-runbook.md missing operator phrase: ${phrase}`);
+  }
+}
+
+if (existsSync("docs/devtools-panel-map.md")) {
+  const panelMap = readText("docs/devtools-panel-map.md");
+  if (!panelMap.includes("devtools_professional_readiness")) {
+    failures.push("devtools-panel-map.md must include devtools_professional_readiness in the first-screen/orientation map");
   }
 }
 
