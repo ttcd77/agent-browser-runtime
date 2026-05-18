@@ -25,6 +25,7 @@ const requiredPackageScripts = [
   "smoke:personal",
   "smoke:cli",
   "check:devtools",
+  "check:professional",
   "check:full",
   "research:pack",
   "release:readiness",

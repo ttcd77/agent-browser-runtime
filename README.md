@@ -101,6 +101,12 @@ npm run smoke:f12
 npm run smoke:browser
 ```
 
+Professional evidence-runtime gate:
+
+```bash
+npm run check:professional
+```
+
 Open-source readiness gate:
 
 ```bash

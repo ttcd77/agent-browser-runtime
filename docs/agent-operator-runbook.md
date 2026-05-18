@@ -149,6 +149,13 @@ For a repeatable first-pass evidence package:
 npm run research:pack -- --url https://example.com --profile researcher
 ```
 
+For a local professional gate before handing the tool to another agent or
+reviewer:
+
+```bash
+npm run check:professional
+```
+
 This calls `devtools_security_research_pack` and prints local artifact paths,
 the workflow used, capture status, artifact kind counts, handoff readiness, and
 first drill-down tools. Use `--json` for the full response.
