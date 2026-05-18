@@ -2345,6 +2345,16 @@ function buildProfessionalReadiness({
   const capture = captureStatus?.capture || captureStatus;
   const artifactCount = artifactIndex?.totalFileCount ?? artifactIndex?.summary?.totalFileCount ?? null;
   const artifactKinds = artifactIndex?.kinds || artifactIndex?.summary?.kinds || null;
+  const latestArtifacts = artifactIndex?.latestByKind ? Object.fromEntries(Object.entries(artifactIndex.latestByKind).map(([kind, artifact]) => [kind, {
+    path: artifact.path || null,
+    relativePath: artifact.relativePath || null,
+    kind: artifact.kind || kind,
+    bytes: artifact.bytes ?? null,
+    modifiedAt: artifact.modifiedAt || null,
+    sha256: artifact.sha256 || null,
+    inspect: artifact.inspectInput ? { tool: "devtools_artifact_inspect", input: artifact.inspectInput } : null,
+    read: artifact.readInput ? { tool: "devtools_artifact_read", input: artifact.readInput } : null,
+  }])) : null;
   const timelineCount = evidenceTimeline?.eventCount ?? evidenceTimeline?.summary?.eventCount ?? null;
   const timelineTypes = evidenceTimeline?.byType || evidenceTimeline?.summary?.byType || null;
   const parityRows = Array.isArray(parityMatrix?.rows) ? parityMatrix.rows : [];
@@ -2453,6 +2463,11 @@ function buildProfessionalReadiness({
       evidence: artifactCount,
     },
     {
+      name: "latestArtifactsReachable",
+      present: artifactIndex === null || Boolean(!artifactIndex.unavailable && !artifactIndex.error && latestArtifacts),
+      evidence: latestArtifacts ? Object.keys(latestArtifacts) : null,
+    },
+    {
       name: "artifactDrilldownsReachable",
       present: artifactIndex === null || artifactDrilldowns.length > 0,
       evidence: artifactDrilldowns.map((entry) => entry.tool),
@@ -2528,6 +2543,7 @@ function buildProfessionalReadiness({
     harCoverage,
     artifactCount,
     artifactKinds,
+    latestArtifacts,
     timelineEventCount: timelineCount,
     timelineTypes,
     f12Coverage,

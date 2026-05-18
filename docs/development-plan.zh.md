@@ -351,6 +351,16 @@
 - Managed Professional smoke 和 Personal Chrome smoke 都已覆盖 request-detail drilldown 与 next action。
 - 这只是确定性路线暴露，不读取证据正文、不判断漏洞。
 
+### 2026-05-18: Readiness Latest Artifact Pointers
+
+已经完成:
+
+- `devtools_professional_readiness` / `personal_chrome_professional_readiness` 现在返回 `latestArtifacts`。
+- Agent 可以从 readiness 直接拿到每类最新 artifact 的 path、bytes、mtime、hash 以及 inspect/read 工具输入。
+- readiness 新增 `latestArtifactsReachable` 机械检查。
+- Managed Professional smoke 和 Personal Chrome smoke 都已覆盖 HAR 与 research-pack 最新指针。
+- 这只是 artifact 导航元数据，不读取正文、不判断漏洞。
+
 ### 2026-05-18: Professional Readiness Tool
 
 已经完成:

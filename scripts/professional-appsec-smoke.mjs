@@ -263,6 +263,9 @@ try {
   assert(finalReadiness.evidenceReady === true, `professional readiness missing evidence after pack: ${JSON.stringify(finalReadiness)}`);
   assert(finalReadiness.artifactCount >= 1, "professional readiness missing artifact count after pack");
   assert(finalReadiness.artifactKinds?.["research-pack"] >= 1, `professional readiness missing artifact kind distribution: ${JSON.stringify(finalReadiness.artifactKinds)}`);
+  assert(finalReadiness.latestArtifacts?.har?.inspect?.tool === "devtools_artifact_inspect", `professional readiness missing latest HAR artifact pointer: ${JSON.stringify(finalReadiness.latestArtifacts)}`);
+  assert(finalReadiness.latestArtifacts?.["research-pack"]?.read?.tool === "devtools_artifact_read", `professional readiness missing latest research-pack artifact pointer: ${JSON.stringify(finalReadiness.latestArtifacts)}`);
+  assert(finalReadiness.checks?.some((check) => check.name === "latestArtifactsReachable" && check.present), `professional readiness missing latest artifacts check: ${JSON.stringify(finalReadiness.checks)}`);
   assert(finalReadiness.timelineEventCount >= 1, "professional readiness missing timeline count after pack");
   assert(finalReadiness.timelineTypes?.artifact >= 1 || finalReadiness.timelineTypes?.["network-request"] >= 1, `professional readiness missing timeline type distribution: ${JSON.stringify(finalReadiness.timelineTypes)}`);
   assert(finalReadiness.f12Coverage?.panelCount >= 8, `professional readiness missing F12 coverage summary: ${JSON.stringify(finalReadiness.f12Coverage)}`);
