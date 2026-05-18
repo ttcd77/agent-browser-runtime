@@ -26,6 +26,9 @@
     "README.md",
     "LICENSE"
   ],
+  "bin": {
+    "agent-browser-research-pack": "./scripts/security-research-pack-cli.mjs"
+  },
   "scripts": {
     "build": "tsc && node scripts/copy-plugin-manifests.mjs",
     "test": "vitest run src/plugins/cdp-traffic-capture/schemas.test.ts src/plugins/browser-profile-pool/lease-store.test.ts",

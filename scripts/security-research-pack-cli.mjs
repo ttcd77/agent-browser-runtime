@@ -96,6 +96,9 @@ async function callTool(server, name, input = {}) {
 
 function printSummary(pack) {
   const summary = pack.summary || {};
+  const workflow = pack.workflow || {};
+  const capture = summary.capture || {};
+  const artifactKinds = summary.artifactKinds || pack.artifacts?.artifactIndex?.kinds || {};
   const artifacts = {
     har: summary.harPath,
     application: summary.applicationExportPath,
@@ -118,9 +121,29 @@ function printSummary(pack) {
   console.log(`- evidence timeline events: ${summary.evidenceTimelineEventCount ?? "(unknown)"}`);
   console.log(`- F12 parity panels: ${summary.f12ParityPanelCount ?? "(unknown)"}`);
   console.log(`- drilldowns: ${summary.drilldownCount ?? "(unknown)"}`);
+  if (workflow.task || Array.isArray(workflow.defaultPath)) {
+    console.log(`- workflow: ${workflow.task || "(unknown)"}`);
+    if (Array.isArray(workflow.defaultPath)) console.log(`  - path: ${workflow.defaultPath.join(" -> ")}`);
+  }
+  if (summary.capture) {
+    console.log("- capture:");
+    console.log(`  - enabled: ${capture.enabled ?? "(unknown)"}`);
+    console.log(`  - label: ${capture.label || "(none)"}`);
+    console.log(`  - startedAt: ${capture.startedAt || "(unknown)"}`);
+    console.log(`  - stoppedAt: ${capture.stoppedAt || "(still active or unknown)"}`);
+    console.log(`  - trafficCount: ${capture.trafficCount ?? "(unknown)"}`);
+  }
+  if (Object.keys(artifactKinds).length) {
+    console.log(`- artifact kinds: ${Object.entries(artifactKinds).map(([kind, count]) => `${kind}=${count}`).join(", ")}`);
+  }
   console.log("- artifacts:");
   for (const [name, value] of Object.entries(artifacts)) {
     if (value) console.log(`  - ${name}: ${value}`);
+  }
+  if (summary.researchPackPath) {
+    console.log("- handoff:");
+    console.log(`  - inspect: devtools_artifact_inspect path=${summary.researchPackPath}`);
+    console.log(`  - read: devtools_artifact_read path=${summary.researchPackPath} mode=line startLine=1 maxLines=120`);
   }
   if (Array.isArray(pack.nextTools) && pack.nextTools.length) {
     console.log(`- next tools: ${pack.nextTools.join(", ")}`);

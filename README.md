@@ -244,8 +244,9 @@ CLI shortcut:
 npm run research:pack -- --url https://example.com --profile researcher
 ```
 
-The CLI prints the key artifact paths. Use `--json` when an agent or script needs
-the full response.
+The CLI prints key artifact paths plus the professional workflow, capture status,
+artifact kind counts, and handoff read/inspect commands. Use `--json` when an
+agent or script needs the full response.
 
 ## Tools
 
