@@ -257,6 +257,9 @@ try {
   assert(finalReadiness.evidenceReady === true, `professional readiness missing evidence after pack: ${JSON.stringify(finalReadiness)}`);
   assert(finalReadiness.artifactCount >= 1, "professional readiness missing artifact count after pack");
   assert(finalReadiness.timelineEventCount >= 1, "professional readiness missing timeline count after pack");
+  assert(finalReadiness.latestResearchPackHandoff?.path, "professional readiness missing latest research pack handoff route");
+  assert(finalReadiness.latestResearchPackHandoff?.inspect?.tool === "devtools_artifact_inspect", "professional readiness missing latest handoff inspect route");
+  assert(finalReadiness.nextActions?.some((entry) => entry.tool === "devtools_artifact_inspect"), "professional readiness missing handoff inspect next action");
   assert(pack.drilldownPlan?.drilldowns?.some((entry) => entry.tool === "devtools_request_detail"), "professional pack missing request-detail drilldown");
   assert(pack.drilldownPlan?.planPath === pack.summary.drilldownPlanPath, "professional pack drilldown path mismatch");
   const requestDetailStep = pack.drilldownPlan.drilldowns.find((entry) => entry.tool === "devtools_request_detail");

@@ -184,6 +184,16 @@
 - Managed Browser 和 Personal Chrome smoke 都已覆盖。
 - 这只是 handoff 结构检查和路线提取，不判断漏洞或安全影响。
 
+### 2026-05-18: Readiness Latest Handoff Route
+
+已经完成:
+
+- `devtools_professional_readiness` / `personal_chrome_professional_readiness` 现在会从 artifact index 中定位最新 `research-pack` handoff。
+- readiness 返回 `latestResearchPackHandoff`，包含 path、mtime、bytes、`devtools_artifact_inspect` 输入和 `devtools_artifact_read` 输入。
+- 如果已有 research pack，`nextActions` 会优先给出 inspect 最新 handoff 的路线；如果没有，仍然建议先生成 `browser_security_pack`。
+- Managed Browser 和 Personal Chrome smoke 都已覆盖。
+- 这只是机械 readiness 和交接路线，不判断证据含义。
+
 ### 2026-05-18: Professional Readiness Tool
 
 已经完成:

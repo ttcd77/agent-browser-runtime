@@ -2985,6 +2985,16 @@ function buildProfessionalReadiness({
   const capture = captureStatus?.capture || captureStatus;
   const artifactCount = artifactIndex?.totalFileCount ?? artifactIndex?.summary?.totalFileCount ?? null;
   const timelineCount = evidenceTimeline?.eventCount ?? evidenceTimeline?.summary?.eventCount ?? null;
+  const latestResearchPack = (artifactIndex?.artifacts || [])
+    .filter((artifact) => artifact.kind === "research-pack" && artifact.path)
+    .sort((a, b) => String(b.modifiedAt || "").localeCompare(String(a.modifiedAt || "")))[0] || null;
+  const latestResearchPackHandoff = latestResearchPack ? {
+    path: latestResearchPack.path,
+    bytes: latestResearchPack.bytes ?? null,
+    modifiedAt: latestResearchPack.modifiedAt || null,
+    inspect: { tool: "devtools_artifact_inspect", input: { path: latestResearchPack.path, maxBytes: 300000 } },
+    read: { tool: "devtools_artifact_read", input: { path: latestResearchPack.path, mode: "line", startLine: 1, lineCount: 160 } },
+  } : null;
   const checks = [
     {
       name: "professionalWorkflow",
@@ -3033,6 +3043,12 @@ function buildProfessionalReadiness({
       input: profile ? { profile, includeHar: true, includeTrace: true, includeApplicationExport: true } : { includeHar: true, includeTrace: true, includeApplicationExport: true },
       why: "Create the portable evidence pack, artifact index, timeline, and drilldown plan.",
     });
+  } else if (latestResearchPackHandoff) {
+    nextActions.push({
+      tool: "devtools_artifact_inspect",
+      input: latestResearchPackHandoff.inspect.input,
+      why: "Inspect the latest saved research-pack handoff and continue from its objective agent route.",
+    });
   }
   nextActions.push({
     tool: "devtools_workflow_guide",
@@ -3051,6 +3067,7 @@ function buildProfessionalReadiness({
     capture: capture || null,
     artifactCount,
     timelineEventCount: timelineCount,
+    latestResearchPackHandoff,
     workflowPath: workflow?.defaultPath || null,
     nextActions,
     objectiveBoundary: "This readiness report checks tool workflow and evidence availability only; it does not judge vulnerabilities or security impact.",
