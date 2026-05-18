@@ -20,6 +20,7 @@ const graphDir = process.env.PERSONAL_CHROME_GRAPH_DIR || join(process.cwd(), "t
 const diffDir = process.env.PERSONAL_CHROME_DIFF_DIR || join(process.cwd(), "tmp", "personal-chrome-diffs");
 const authReportDir = process.env.PERSONAL_CHROME_AUTH_REPORT_DIR || join(process.cwd(), "tmp", "personal-chrome-auth");
 const boundaryReportDir = process.env.PERSONAL_CHROME_BOUNDARY_REPORT_DIR || join(process.cwd(), "tmp", "personal-chrome-boundaries");
+const drilldownPlanDir = process.env.PERSONAL_CHROME_DRILLDOWN_PLAN_DIR || join(process.cwd(), "tmp", "personal-chrome-drilldowns");
 
 const clients = new Map();
 const pending = new Map();
@@ -2056,7 +2057,7 @@ function f12ParityMatrix() {
   };
 }
 
-function buildResearchPackDrilldowns(artifacts = {}) {
+function buildResearchPackDrilldowns(artifacts = {}, options = {}) {
   const artifactRows = Array.isArray(artifacts.artifactIndex?.artifacts) ? artifacts.artifactIndex.artifacts : [];
   const timelineEvents = Array.isArray(artifacts.evidenceTimeline?.events) ? artifacts.evidenceTimeline.events : [];
   const firstRequest = timelineEvents.find((event) => event.type === "network-request" && event.requestId);
@@ -2127,7 +2128,7 @@ function buildResearchPackDrilldowns(artifacts = {}) {
     input: { query: "<literal-url-token-header-or-marker>", maxFiles: 200, maxMatches: 20 },
     why: "Search saved evidence files for a concrete string chosen by the agent or human.",
   });
-  return {
+  const plan = {
     generatedAt: new Date().toISOString(),
     count: rows.length,
     drilldowns: rows,
@@ -2136,6 +2137,10 @@ function buildResearchPackDrilldowns(artifacts = {}) {
       "Inputs with placeholder values must be filled by the agent or human from observed evidence.",
     ],
   };
+  const planPath = options.path || join(drilldownPlanDir, `${Date.now()}-research-pack-drilldowns.json`);
+  mkdirSync(dirname(planPath), { recursive: true });
+  writeFileSync(planPath, `${JSON.stringify(plan, null, 2)}\n`, "utf8");
+  return { ...plan, planPath };
 }
 
 function workflowGuide(task = "first-pass") {
@@ -2765,6 +2770,11 @@ async function securityResearchPack(params = {}) {
     includeHar: false,
     includeTokenScan: Boolean(params.includeTokenScan),
   });
+  artifacts.artifactIndex = await safeBridgeTool("devtools_artifact_index", { maxFiles: 200 });
+  artifacts.evidenceTimeline = await safeBridgeTool("devtools_evidence_timeline", { maxEvents: 80, maxArtifacts: 120 });
+  const parityMatrix = await safeBridgeTool("devtools_f12_parity_matrix");
+  const drilldownPlan = buildResearchPackDrilldowns(artifacts);
+  artifacts.drilldownPlan = drilldownPlan;
   artifacts.manifest = await safeBridgeTool("devtools_evidence_manifest", {
     save: true,
     artifactPaths: [
@@ -2775,12 +2785,9 @@ async function securityResearchPack(params = {}) {
       artifacts.correlationGraph?.graphPath,
       artifacts.authBoundary?.reportPath,
       artifacts.workerFrame?.reportPath,
+      artifacts.drilldownPlan?.planPath,
     ].filter(Boolean),
   });
-  artifacts.artifactIndex = await safeBridgeTool("devtools_artifact_index", { maxFiles: 200 });
-  artifacts.evidenceTimeline = await safeBridgeTool("devtools_evidence_timeline", { maxEvents: 80, maxArtifacts: 120 });
-  const parityMatrix = await safeBridgeTool("devtools_f12_parity_matrix");
-  const drilldownPlan = buildResearchPackDrilldowns(artifacts);
   const networkSummary = network?.evidence?.summary || {};
   const page = overview?.evidence?.diagnostics?.page || overview?.evidence?.backendCapabilities?.activeTab || {};
   return {
@@ -2803,6 +2810,7 @@ async function securityResearchPack(params = {}) {
       correlationGraphPath: artifacts.correlationGraph?.graphPath || null,
       authBoundaryReportPath: artifacts.authBoundary?.reportPath || null,
       workerFrameReportPath: artifacts.workerFrame?.reportPath || null,
+      drilldownPlanPath: drilldownPlan.planPath || null,
       artifactFileCount: artifacts.artifactIndex?.totalFileCount ?? null,
       evidenceTimelineEventCount: artifacts.evidenceTimeline?.eventCount ?? null,
       f12ParityPanelCount: parityMatrix?.summary?.panelCount ?? null,

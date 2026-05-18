@@ -177,6 +177,7 @@
 - `devtools_security_research_pack` / `browser_security_pack` 新增 `drilldownPlan`。
 - `drilldownPlan` 会从研究包里的 timeline、artifact index、requestId、HAR、trace、bundle 等客观证据生成下一步工具调用建议。
 - `nextTools` 现在来自 drilldown plan，而不是固定字符串列表；这让 Agent 能从一次研究包直接进入 request detail、replay boundary、artifact inspect、trace query、artifact search 等后续动作。
+- drilldown plan 现在会保存为独立 artifact，并写入 manifest；`summary.drilldownPlanPath` 可用于跨 session 交接。
 - 这个 plan 只是确定性导航提示，不判断漏洞、不替代模型推理。
 
 ### 2026-05-18: Evidence Timeline Filters

@@ -387,8 +387,10 @@ assert(researchPack.summary?.artifactFileCount >= 1, "Personal Chrome security r
 assert(researchPack.summary?.evidenceTimelineEventCount >= 1, "Personal Chrome security research pack missing evidence timeline count");
 assert(researchPack.summary?.f12ParityPanelCount >= 1, "Personal Chrome security research pack missing F12 parity count");
 assert(researchPack.summary?.drilldownCount >= 3, "Personal Chrome security research pack missing drilldown count");
+assert(researchPack.summary?.drilldownPlanPath, "Personal Chrome security research pack missing drilldown plan path");
 assert(researchPack.parityMatrix?.backend === "personal-chrome", "Personal Chrome security research pack missing parity snapshot");
 assert(researchPack.drilldownPlan?.drilldowns?.some((entry) => entry.tool === "devtools_evidence_timeline"), "Personal Chrome security research pack missing evidence timeline drilldown");
+assert(researchPack.drilldownPlan?.planPath === researchPack.summary.drilldownPlanPath, "Personal Chrome security research pack drilldown path mismatch");
 assert(typeof researchPack.summary?.requestCount === "number", "Personal Chrome security research pack missing request count");
 
 const facadeInspect = await callTool("browser_inspect", {
@@ -420,6 +422,7 @@ assert(facadePack.summary?.artifactFileCount >= 1, "Personal Chrome browser_secu
 assert(facadePack.summary?.evidenceTimelineEventCount >= 1, "Personal Chrome browser_security_pack missing evidence timeline count");
 assert(facadePack.summary?.f12ParityPanelCount >= 1, "Personal Chrome browser_security_pack missing F12 parity count");
 assert(facadePack.summary?.drilldownCount >= 3, "Personal Chrome browser_security_pack missing drilldown count");
+assert(facadePack.summary?.drilldownPlanPath, "Personal Chrome browser_security_pack missing drilldown plan path");
 assert(facadePack.parityMatrix?.backend === "personal-chrome", "Personal Chrome browser_security_pack missing parity snapshot");
 
 const captureBisect = await callTool("devtools_capture_bisect", {

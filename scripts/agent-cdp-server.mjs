@@ -3067,7 +3067,7 @@ function buildResearchPackDrilldowns(artifacts = {}, options = {}) {
     input: { ...profileInput, query: "<literal-url-token-header-or-marker>", maxFiles: 200, maxMatches: 20 },
     why: "Search saved evidence files for a concrete string chosen by the agent or human.",
   });
-  return {
+  const plan = {
     generatedAt: new Date().toISOString(),
     count: rows.length,
     drilldowns: rows,
@@ -3076,6 +3076,13 @@ function buildResearchPackDrilldowns(artifacts = {}, options = {}) {
       "Inputs with placeholder values must be filled by the agent or human from observed evidence.",
     ],
   };
+  if (options.evidenceDir) {
+    const planPath = options.path || join(options.evidenceDir, "drilldowns", `${Date.now()}-research-pack-drilldowns.json`);
+    mkdirSync(dirname(planPath), { recursive: true });
+    writeFileSync(planPath, `${JSON.stringify(plan, null, 2)}\n`, "utf8");
+    return { ...plan, planPath };
+  }
+  return plan;
 }
 
 function devtoolsWorkflowGuide(task = "first-pass") {
@@ -10327,6 +10334,11 @@ function registerStandaloneBrowserTools(tools, cdpPort, profileRegistry, default
         includeHar: false,
         includeTokenScan: Boolean(params?.includeTokenScan),
       });
+      artifacts.artifactIndex = await safeCall("devtools_artifact_index", { maxFiles: 200 });
+      artifacts.evidenceTimeline = await safeCall("devtools_evidence_timeline", { maxEvents: 80, maxArtifacts: 120 });
+      const parityMatrix = await safeCall("devtools_f12_parity_matrix");
+      const drilldownPlan = buildResearchPackDrilldowns(artifacts, { profile: profile.name, evidenceDir: profile.evidenceDir });
+      artifacts.drilldownPlan = drilldownPlan;
       artifacts.manifest = await safeCall("devtools_evidence_manifest", {
         save: true,
         artifactPaths: [
@@ -10337,12 +10349,9 @@ function registerStandaloneBrowserTools(tools, cdpPort, profileRegistry, default
           artifacts.correlationGraph?.graphPath,
           artifacts.authBoundary?.reportPath,
           artifacts.workerFrame?.reportPath,
+          artifacts.drilldownPlan?.planPath,
         ].filter(Boolean),
       });
-      artifacts.artifactIndex = await safeCall("devtools_artifact_index", { maxFiles: 200 });
-      artifacts.evidenceTimeline = await safeCall("devtools_evidence_timeline", { maxEvents: 80, maxArtifacts: 120 });
-      const parityMatrix = await safeCall("devtools_f12_parity_matrix");
-      const drilldownPlan = buildResearchPackDrilldowns(artifacts, { profile: profile.name });
       const networkSummary = network?.evidence?.summary || {};
       const page = overview?.evidence?.diagnostics?.page || {};
       return toolResult({
@@ -10366,6 +10375,7 @@ function registerStandaloneBrowserTools(tools, cdpPort, profileRegistry, default
           correlationGraphPath: artifacts.correlationGraph?.graphPath || null,
           authBoundaryReportPath: artifacts.authBoundary?.reportPath || null,
           workerFrameReportPath: artifacts.workerFrame?.reportPath || null,
+          drilldownPlanPath: drilldownPlan.planPath || null,
           artifactFileCount: artifacts.artifactIndex?.totalFileCount ?? null,
           evidenceTimelineEventCount: artifacts.evidenceTimeline?.eventCount ?? null,
           f12ParityPanelCount: parityMatrix?.summary?.panelCount ?? null,
