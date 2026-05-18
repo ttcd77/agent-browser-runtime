@@ -3041,6 +3041,7 @@ function buildProfessionalReadiness({
 } = {}) {
   const capture = captureStatus?.capture || captureStatus;
   const artifactCount = artifactIndex?.totalFileCount ?? artifactIndex?.summary?.totalFileCount ?? null;
+  const artifactKinds = artifactIndex?.kinds || artifactIndex?.summary?.kinds || null;
   const timelineCount = evidenceTimeline?.eventCount ?? evidenceTimeline?.summary?.eventCount ?? null;
   const agentUsage = capabilityMap?.agentUsage || null;
   const recommendedRoute = Array.isArray(agentUsage?.defaultRoute) ? agentUsage.defaultRoute : [];
@@ -3148,6 +3149,7 @@ function buildProfessionalReadiness({
     missing,
     capture: capture || null,
     artifactCount,
+    artifactKinds,
     timelineEventCount: timelineCount,
     latestResearchPackHandoff,
     recommendedRoute,

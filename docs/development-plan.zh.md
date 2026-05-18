@@ -282,6 +282,15 @@
 - Managed Professional smoke 和 Personal Chrome smoke 都已覆盖 `agentUsageRoute` handoff check 和 HAR artifact coverage row。
 - 这只是 checklist 暴露，不读取隐藏数据、不判断漏洞。
 
+### 2026-05-18: Readiness Artifact Kind Distribution
+
+已经完成:
+
+- `devtools_professional_readiness` / `personal_chrome_professional_readiness` 现在返回 `artifactKinds`。
+- Agent 可以从 readiness 直接看到当前证据目录里 HAR、research-pack、drilldown-plan、bundle、manifest 等 artifact 类型分布。
+- Managed Professional smoke 和 Personal Chrome smoke 都已覆盖 `research-pack` kind。
+- 这只是 artifact inventory 的客观计数，不读取正文、不判断漏洞。
+
 ### 2026-05-18: Professional Readiness Tool
 
 已经完成:

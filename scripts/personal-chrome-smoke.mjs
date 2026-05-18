@@ -600,6 +600,7 @@ assert(professionalReadiness.checks?.some((check) => check.name === "agentUsageR
 assert(professionalReadiness.checks?.some((check) => check.name === "artifactDrilldownsReachable" && check.present), `Personal Chrome professional readiness missing artifact drilldown check: ${JSON.stringify(professionalReadiness.checks)}`);
 assert(professionalReadiness.latestResearchPackHandoff?.path, "Personal Chrome professional readiness missing latest research pack handoff route");
 assert(professionalReadiness.latestResearchPackHandoff?.inspect?.tool === "devtools_artifact_inspect", "Personal Chrome professional readiness missing latest handoff inspect route");
+assert(professionalReadiness.artifactKinds?.["research-pack"] >= 1, `Personal Chrome professional readiness missing artifact kind distribution: ${JSON.stringify(professionalReadiness.artifactKinds)}`);
 assert(professionalReadiness.recommendedRoute?.some((step) => step.tool === "browser_security_pack"), "Personal Chrome professional readiness missing recommended route");
 assert(professionalReadiness.panelRoutes?.network?.some((step) => step.tool === "devtools_request_detail"), "Personal Chrome professional readiness missing network panel route");
 assert(professionalReadiness.artifactDrilldowns?.some((entry) => entry.tool === "devtools_artifact_inspect" && entry.input?.path), "Personal Chrome professional readiness missing artifact drilldown route");
