@@ -2477,6 +2477,7 @@ function buildProfessionalReadiness({
   } : null;
   const firstF12RequestDetailPath = latestResearchPackSummary?.artifactPaths?.firstF12RequestDetailPath || null;
   const f12NavigationPath = latestResearchPackSummary?.artifactPaths?.f12NavigationPath || null;
+  const harCompletenessPath = latestResearchPackSummary?.artifactPaths?.harCompletenessPath || null;
   const firstF12RequestDetailArtifact = firstF12RequestDetailPath ? {
     path: firstF12RequestDetailPath,
     inspect: { tool: "devtools_artifact_inspect", input: { path: firstF12RequestDetailPath, maxBytes: 120000 } },
@@ -2486,6 +2487,11 @@ function buildProfessionalReadiness({
     path: f12NavigationPath,
     inspect: { tool: "devtools_artifact_inspect", input: { path: f12NavigationPath, maxBytes: 160000 } },
     read: { tool: "devtools_artifact_read", input: { path: f12NavigationPath, mode: "line", startLine: 1, lineCount: 160 } },
+  } : null;
+  const harCompletenessArtifact = harCompletenessPath ? {
+    path: harCompletenessPath,
+    inspect: { tool: "devtools_artifact_inspect", input: { path: harCompletenessPath, maxBytes: 160000 } },
+    read: { tool: "devtools_artifact_read", input: { path: harCompletenessPath, mode: "line", startLine: 1, lineCount: 160 } },
   } : null;
   const checks = [
     {
@@ -2589,6 +2595,18 @@ function buildProfessionalReadiness({
   }
   const actionKey = (entry) => `${entry.tool}:${entry.input?.path || ""}:${entry.input?.requestId || ""}:${entry.input?.tracePath || ""}:${entry.input?.query || ""}`;
   const seenNextActions = new Set(nextActions.map(actionKey));
+  if (harCompletenessArtifact) {
+    const entry = {
+      tool: harCompletenessArtifact.inspect.tool,
+      input: harCompletenessArtifact.inspect.input,
+      why: "Inspect the standalone HAR completeness report saved by the latest research pack.",
+    };
+    const key = actionKey(entry);
+    if (!seenNextActions.has(key)) {
+      nextActions.push(entry);
+      seenNextActions.add(key);
+    }
+  }
   if (f12NavigationArtifact) {
     const entry = {
       tool: f12NavigationArtifact.inspect.tool,
@@ -2660,6 +2678,7 @@ function buildProfessionalReadiness({
     firstStep: nextActions[0] ? { tool: nextActions[0].tool, input: nextActions[0].input || {} } : null,
     latestHandoffInspect: latestResearchPackHandoff?.inspect || null,
     latestHandoffRead: latestResearchPackHandoff?.read || null,
+    harCompletenessArtifact,
     f12NavigationArtifact,
     firstF12RequestDetailArtifact,
     firstF12RequestDetail: f12NavigationDrilldowns[0] ? {

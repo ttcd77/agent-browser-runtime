@@ -907,3 +907,12 @@
 - artifact index 会把该文件归类为 `har-completeness`，避免和原始 HAR 文件混在一起。
 - evidence manifest 会记录 HAR completeness 报告路径和哈希。
 - 该报告只描述 body、timing、redirect、security metadata 覆盖率，不判断漏洞。
+
+### 2026-05-19: Readiness HAR Completeness Artifact 路线完成
+
+已经完成:
+
+- `devtools_professional_readiness.routeSummary.harCompletenessArtifact` 会直接返回 HAR completeness artifact 的 inspect/read 路线。
+- `nextActions` 会包含该 artifact 的 `devtools_artifact_inspect` 下一步，Agent 不必先读完整 research pack 才能找到 Network 证据完整度报告。
+- Managed Browser / Personal Chrome smoke 都覆盖该路线。
+- 该路线只读取已保存 HAR 覆盖率证据，不判断风险。
