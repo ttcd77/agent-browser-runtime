@@ -574,6 +574,7 @@ function summarizeResearchPackHandoff(parsed) {
   if (!parsed || typeof parsed !== "object" || parsed.schema !== "agent-browser-runtime.security-research-pack-handoff.v1") return null;
   const summary = parsed.summary || {};
   const agentEntryPoints = parsed.agentEntryPoints || {};
+  const agentUsage = parsed.agentUsage || {};
   const artifactPaths = parsed.artifactPaths || {};
   const handoffCompleteness = parsed.handoffCompleteness || {};
   const artifactCoverage = parsed.artifactCoverage || {};
@@ -593,6 +594,8 @@ function summarizeResearchPackHandoff(parsed) {
     recommendedFirstCall: agentEntryPoints.recommendedFirstCall || null,
     professionalPath: agentEntryPoints.professionalPath || [],
     drilldownRule: agentEntryPoints.drilldownRule || null,
+    recommendedRoute: Array.isArray(agentUsage.recommendedRoute) ? agentUsage.recommendedRoute : (Array.isArray(agentUsage.defaultRoute) ? agentUsage.defaultRoute : []),
+    panelRoutes: agentUsage.panelRoutes || null,
     drilldownCount: parsed.drilldownPlan?.count ?? summary.drilldownCount ?? null,
     firstDrilldowns: (parsed.drilldownPlan?.drilldowns || []).slice(0, 5).map((entry) => ({
       label: entry.label,
@@ -10907,6 +10910,8 @@ function registerStandaloneBrowserTools(tools, cdpPort, profileRegistry, default
       const workflow = devtoolsWorkflowGuide("professional-appsec");
       const toolCatalogSnapshot = devtoolsToolCatalogFromEntries([...tools.values()], {});
       const agentEntryPoints = toolCatalogSnapshot.agentEntryPoints || null;
+      const capabilityMapSnapshot = devtoolsCapabilityMapFromEntries([...tools.values()], { backend: "managed-cdp" });
+      const agentUsage = capabilityMapSnapshot.agentUsage || null;
       const drilldownPlan = buildResearchPackDrilldowns(artifacts, { profile: profile.name, evidenceDir: profile.evidenceDir });
       artifacts.drilldownPlan = drilldownPlan;
       artifacts.manifest = await safeCall("devtools_evidence_manifest", {
@@ -10987,6 +10992,7 @@ function registerStandaloneBrowserTools(tools, cdpPort, profileRegistry, default
           drilldownPlanPath: summary.drilldownPlanPath,
         },
         agentEntryPoints,
+        agentUsage,
         toolCatalogSummary: {
           toolCount: toolCatalogSnapshot.toolCount,
           categories: toolCatalogSnapshot.categories,
@@ -11071,6 +11077,7 @@ function registerStandaloneBrowserTools(tools, cdpPort, profileRegistry, default
         handoffCompleteness,
         workflow,
         agentEntryPoints,
+        agentUsage,
         toolCatalogSummary: {
           toolCount: toolCatalogSnapshot.toolCount,
           categories: toolCatalogSnapshot.categories,

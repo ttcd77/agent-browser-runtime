@@ -234,6 +234,16 @@
 - Managed Professional smoke 和 Personal Chrome smoke 都已覆盖 readiness route。
 - 这只是路线暴露和机械检查，不读取证据、不判断漏洞。
 
+### 2026-05-18: Research Pack Agent Usage Snapshot
+
+已经完成:
+
+- `browser_security_pack` 生成的 research pack handoff 现在保存 `agentUsage`。
+- `devtools_artifact_inspect` / `personal_chrome_artifact_inspect` 读取 research pack handoff 时会返回 `recommendedRoute` 和 `panelRoutes` 摘要。
+- 这让 evidence pack 在跨 session / 跨 Agent 交接时自带后续路线，不依赖当前上下文记忆。
+- Managed Professional smoke 和 Personal Chrome smoke 都已覆盖 research pack 与 handoff inspect 的 route。
+- 这只是离线证据包的路线快照，不读取隐藏数据、不判断漏洞。
+
 ### 2026-05-18: Professional Readiness Tool
 
 已经完成:

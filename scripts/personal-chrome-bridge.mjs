@@ -701,6 +701,7 @@ function summarizeResearchPackHandoff(parsed) {
   if (!parsed || typeof parsed !== "object" || parsed.schema !== "agent-browser-runtime.security-research-pack-handoff.v1") return null;
   const summary = parsed.summary || {};
   const agentEntryPoints = parsed.agentEntryPoints || {};
+  const agentUsage = parsed.agentUsage || {};
   const artifactPaths = parsed.artifactPaths || {};
   const handoffCompleteness = parsed.handoffCompleteness || {};
   const artifactCoverage = parsed.artifactCoverage || {};
@@ -720,6 +721,8 @@ function summarizeResearchPackHandoff(parsed) {
     recommendedFirstCall: agentEntryPoints.recommendedFirstCall || null,
     professionalPath: agentEntryPoints.professionalPath || [],
     drilldownRule: agentEntryPoints.drilldownRule || null,
+    recommendedRoute: Array.isArray(agentUsage.recommendedRoute) ? agentUsage.recommendedRoute : (Array.isArray(agentUsage.defaultRoute) ? agentUsage.defaultRoute : []),
+    panelRoutes: agentUsage.panelRoutes || null,
     drilldownCount: parsed.drilldownPlan?.count ?? summary.drilldownCount ?? null,
     firstDrilldowns: (parsed.drilldownPlan?.drilldowns || []).slice(0, 5).map((entry) => ({
       label: entry.label,
@@ -3187,6 +3190,8 @@ async function securityResearchPack(params = {}) {
   const workflow = workflowGuide("professional-appsec");
   const toolCatalogSnapshot = toolCatalog({});
   const agentEntryPoints = toolCatalogSnapshot.agentEntryPoints || null;
+  const capabilityMapSnapshot = capabilityMap();
+  const agentUsage = capabilityMapSnapshot.agentUsage || null;
   const drilldownPlan = buildResearchPackDrilldowns(artifacts);
   artifacts.drilldownPlan = drilldownPlan;
   artifacts.manifest = await safeBridgeTool("devtools_evidence_manifest", {
@@ -3266,6 +3271,7 @@ async function securityResearchPack(params = {}) {
       drilldownPlanPath: summary.drilldownPlanPath,
     },
     agentEntryPoints,
+    agentUsage,
     toolCatalogSummary: {
       toolCount: toolCatalogSnapshot.toolCount,
       categories: toolCatalogSnapshot.categories,
@@ -3349,6 +3355,7 @@ async function securityResearchPack(params = {}) {
     handoffCompleteness,
     workflow,
     agentEntryPoints,
+    agentUsage,
     toolCatalogSummary: {
       toolCount: toolCatalogSnapshot.toolCount,
       categories: toolCatalogSnapshot.categories,

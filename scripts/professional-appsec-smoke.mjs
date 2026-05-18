@@ -246,6 +246,8 @@ try {
   assert(pack.artifacts?.researchPack?.sha256, "professional pack missing handoff hash");
   assert(pack.agentEntryPoints?.defaultMode === "facade-first", "professional pack missing agent entry points");
   assert(pack.agentEntryPoints?.professionalPath?.includes("browser_security_pack"), "professional pack missing professional agent route");
+  assert(pack.agentUsage?.defaultRoute?.some((step) => step.tool === "browser_security_pack"), "professional pack missing default agent usage route");
+  assert(pack.agentUsage?.panelRoutes?.network?.some((step) => step.tool === "devtools_request_detail"), "professional pack missing network panel usage route");
   assert(pack.toolCatalogSummary?.toolCount >= 1, "professional pack missing tool catalog summary");
   assert(pack.workflow?.defaultPath?.join(" -> ") === "browser_open -> browser_capture -> browser_inspect -> browser_security_pack -> drilldownPlan", "professional pack missing workflow snapshot");
   assert(pack.handoffDrilldowns?.some((entry) => entry.tool === "devtools_artifact_read" && entry.input?.path === pack.summary.researchPackPath), "professional pack missing handoff read drilldown");
@@ -307,6 +309,8 @@ try {
   assert(handoffInspect.researchPackHandoff?.ready === true, `professional handoff inspect missing readiness summary: ${JSON.stringify(handoffInspect.researchPackHandoff)}`);
   assert(handoffInspect.researchPackHandoff?.agentEntryMode === "facade-first", "professional handoff inspect missing agent route summary");
   assert(handoffInspect.researchPackHandoff?.professionalPath?.includes("browser_security_pack"), "professional handoff inspect missing professional facade path");
+  assert(handoffInspect.researchPackHandoff?.recommendedRoute?.some((step) => step.tool === "browser_security_pack"), "professional handoff inspect missing recommended agent route");
+  assert(handoffInspect.researchPackHandoff?.panelRoutes?.network?.some((step) => step.tool === "devtools_request_detail"), "professional handoff inspect missing network panel route");
   assert(handoffInspect.researchPackHandoff?.objectiveBoundary?.includes("does not judge vulnerabilities"), "professional handoff inspect crossed objective boundary");
 
   const parity = await callTool(baseUrl, "devtools_f12_parity_matrix", { profile: "professional" });
