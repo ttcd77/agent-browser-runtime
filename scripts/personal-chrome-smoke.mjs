@@ -483,6 +483,15 @@ assert(evidenceTimeline.backend === "personal-chrome", `Personal Chrome evidence
 assert(evidenceTimeline.eventCount >= 1, `Personal Chrome evidence timeline missing events: ${JSON.stringify(evidenceTimeline)}`);
 assert(evidenceTimeline.events?.some((event) => event.type === "network-request"), `Personal Chrome evidence timeline missing network event: ${JSON.stringify(evidenceTimeline.events)}`);
 assert(evidenceTimeline.events?.some((event) => event.type === "artifact"), `Personal Chrome evidence timeline missing artifact event: ${JSON.stringify(evidenceTimeline.events)}`);
+const artifactTimeline = await callTool("devtools_evidence_timeline", {
+  eventType: "artifact",
+  query: "har",
+  maxEvents: 20,
+  maxArtifacts: 50,
+});
+assert(artifactTimeline.filters?.eventType === "artifact", `Personal Chrome evidence timeline filter not applied: ${JSON.stringify(artifactTimeline.filters)}`);
+assert(artifactTimeline.eventCount >= 1, `Personal Chrome filtered artifact timeline missing events: ${JSON.stringify(artifactTimeline)}`);
+assert(artifactTimeline.events.every((event) => event.type === "artifact"), `Personal Chrome filtered artifact timeline returned non-artifact events: ${JSON.stringify(artifactTimeline.events)}`);
 
 const toolCatalog = await callTool("devtools_tool_catalog", { query: "auth" });
 assert(toolCatalog.toolCount >= 1, "Personal Chrome tool catalog did not return auth tools");
@@ -511,6 +520,7 @@ console.log(`- artifact index files/kinds: ${artifactIndex.totalFileCount}/${Obj
 console.log(`- artifact search matches/files: ${artifactSearch.totalMatches}/${artifactSearch.matchedFileCount}`);
 console.log(`- artifact read mode/lines: ${artifactRead.mode}/${artifactRead.returnedLineCount}`);
 console.log(`- evidence timeline events/types: ${evidenceTimeline.eventCount}/${Object.keys(evidenceTimeline.byType).length}`);
+console.log(`- evidence timeline filtered artifacts: ${artifactTimeline.eventCount}`);
 console.log(`- capability panels: ${capabilityMap.panelCount}`);
 console.log(`- realtime channels ws/sse: ${realtimeLog.websocketCount}/${realtimeLog.eventSourceMessageCount}`);
 

@@ -1076,6 +1076,16 @@ try {
   assert(evidenceTimeline.eventCount >= 1, `evidence timeline missing events: ${JSON.stringify(evidenceTimeline)}`);
   assert(evidenceTimeline.events?.some((event) => event.type === "network-request"), `evidence timeline missing network event: ${JSON.stringify(evidenceTimeline.events)}`);
   assert(evidenceTimeline.events?.some((event) => event.type === "artifact"), `evidence timeline missing artifact event: ${JSON.stringify(evidenceTimeline.events)}`);
+  const artifactTimeline = await callTool(baseUrl, "devtools_evidence_timeline", {
+    profile: "default",
+    eventType: "artifact",
+    query: "har",
+    maxEvents: 20,
+    maxArtifacts: 50,
+  });
+  assert(artifactTimeline.filters?.eventType === "artifact", `evidence timeline filter not applied: ${JSON.stringify(artifactTimeline.filters)}`);
+  assert(artifactTimeline.eventCount >= 1, `filtered artifact timeline missing events: ${JSON.stringify(artifactTimeline)}`);
+  assert(artifactTimeline.events.every((event) => event.type === "artifact"), `filtered artifact timeline returned non-artifact events: ${JSON.stringify(artifactTimeline.events)}`);
 
   const harWithBodies = await callTool(baseUrl, "devtools_export_har", {
     profile: "default",
@@ -1115,6 +1125,7 @@ try {
   console.log(`- artifact search matches/files: ${artifactSearch.totalMatches}/${artifactSearch.matchedFileCount}`);
   console.log(`- artifact read mode/lines: ${artifactRead.mode}/${artifactRead.returnedLineCount}`);
   console.log(`- evidence timeline events/types: ${evidenceTimeline.eventCount}/${Object.keys(evidenceTimeline.byType).length}`);
+  console.log(`- evidence timeline filtered artifacts: ${artifactTimeline.eventCount}`);
   console.log(`- request detail id: ${requestDetail.detail.requestId}`);
   console.log(`- DevTools issues: ${issuesLog.issueCount}`);
   console.log(`- accessibility nodes: ${accessibility.nodeCount}`);

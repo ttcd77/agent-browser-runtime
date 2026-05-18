@@ -994,6 +994,11 @@ function evidenceTimestamp(value) {
 
 function buildEvidenceTimeline({ requests = [], consoleLog = {}, issues = {}, realtime = {}, artifacts = [] }, params = {}) {
   const maxEvents = Math.max(1, Math.min(Number(params.maxEvents) || 200, 2000));
+  const eventType = String(params.eventType || "").trim().toLowerCase();
+  const sourceFilter = String(params.source || "").trim().toLowerCase();
+  const query = String(params.query || "").trim().toLowerCase();
+  const since = evidenceTimestamp(params.since);
+  const until = evidenceTimestamp(params.until);
   const events = [];
   for (const request of requests || []) {
     events.push({
@@ -1100,8 +1105,14 @@ function buildEvidenceTimeline({ requests = [], consoleLog = {}, issues = {}, re
       drilldownInput: { path: artifact.path },
     });
   }
-  const sorted = events
+  const filtered = events
     .filter((event) => event.timestamp || params.includeUndated)
+    .filter((event) => !eventType || String(event.type || "").toLowerCase() === eventType)
+    .filter((event) => !sourceFilter || String(event.source || "").toLowerCase() === sourceFilter)
+    .filter((event) => !query || `${event.type || ""} ${event.source || ""} ${event.label || ""} ${event.url || ""} ${event.path || ""}`.toLowerCase().includes(query))
+    .filter((event) => !since || !event.timestamp || String(event.timestamp) >= since)
+    .filter((event) => !until || !event.timestamp || String(event.timestamp) <= until);
+  const sorted = filtered
     .sort((a, b) => String(a.timestamp || "").localeCompare(String(b.timestamp || "")))
     .slice(-maxEvents);
   const byType = {};
@@ -1109,7 +1120,17 @@ function buildEvidenceTimeline({ requests = [], consoleLog = {}, issues = {}, re
   return {
     schema: "agent-browser-runtime.evidence-timeline.v1",
     generatedAt: new Date().toISOString(),
+    totalEventCount: events.length,
+    filteredEventCount: filtered.length,
     eventCount: sorted.length,
+    filters: {
+      eventType: eventType || null,
+      source: sourceFilter || null,
+      query: query || null,
+      since,
+      until,
+      maxEvents,
+    },
     byType,
     events: sorted,
     boundaries: [

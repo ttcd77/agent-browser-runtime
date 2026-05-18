@@ -145,6 +145,14 @@
 
 ## 执行记录
 
+### 2026-05-18: Evidence Timeline Filters
+
+已经完成:
+
+- `devtools_evidence_timeline` / `personal_chrome_evidence_timeline` 增加 `eventType`、`source`、`query`、`since`、`until` 过滤。
+- Agent 可以直接取“只看 artifact”“只看 Network”“只看包含某个 URL/path 的事件”等 bounded timeline。
+- 过滤仍然只是事件导航和证据定位，不判断因果或漏洞。
+
 ### 2026-05-18: Evidence Timeline
 
 已经完成:
