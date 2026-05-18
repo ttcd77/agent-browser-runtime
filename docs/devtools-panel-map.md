@@ -31,6 +31,7 @@ evidence.
 | Which tool should I use? | `devtools_tool_catalog` |
 | How do I call this specific tool? | `devtools_tool_help` |
 | What F12 capability area should I use? | `devtools_capability_map` |
+| How close is this backend to professional F12 evidence parity? | `devtools_f12_parity_matrix` |
 | What workflow should I follow for this task? | `devtools_workflow_guide` |
 | Which raw CDP methods/events can this browser expose? | `devtools_protocol_schema` |
 | What F12 signals should I inspect first? | `devtools_signal_summary` |

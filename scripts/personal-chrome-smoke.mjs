@@ -503,6 +503,11 @@ assert(capabilityMap.backend === "personal-chrome", `Personal Chrome capability 
 assert(capabilityMap.panels?.some((panel) => panel.category === "network"), "Personal Chrome capability map missing Network panel");
 assert(capabilityMap.panels?.some((panel) => panel.category === "sources-debugger"), "Personal Chrome capability map missing Sources panel");
 assert(capabilityMap.panels?.some((panel) => panel.category === "performance"), "Personal Chrome capability map missing Performance panel");
+const parityMatrix = await callTool("devtools_f12_parity_matrix", {});
+assert(parityMatrix.backend === "personal-chrome", `Personal Chrome F12 parity matrix wrong backend: ${JSON.stringify(parityMatrix)}`);
+assert(parityMatrix.rows?.some((row) => row.panel === "Network" && row.personal === "supported"), "Personal Chrome F12 parity matrix missing Network support");
+assert(parityMatrix.rows?.some((row) => row.panel === "Raw CDP / Escape Hatch" && row.personal === "partial"), "Personal Chrome F12 parity matrix missing raw CDP boundary");
+assert(parityMatrix.objectiveBoundaries?.some((entry) => String(entry).includes("does not classify vulnerabilities")), "Personal Chrome F12 parity matrix missing objective boundary");
 const workflowGuide = await callTool("devtools_workflow_guide", { task: "auth-boundary" });
 assert(workflowGuide.steps?.some((step) => step.tool === "devtools_auth_boundary_report"), "Personal Chrome workflow guide missing auth boundary step");
 
@@ -522,6 +527,7 @@ console.log(`- artifact read mode/lines: ${artifactRead.mode}/${artifactRead.ret
 console.log(`- evidence timeline events/types: ${evidenceTimeline.eventCount}/${Object.keys(evidenceTimeline.byType).length}`);
 console.log(`- evidence timeline filtered artifacts: ${artifactTimeline.eventCount}`);
 console.log(`- capability panels: ${capabilityMap.panelCount}`);
+console.log(`- F12 parity rows: ${parityMatrix.summary.panelCount}`);
 console.log(`- realtime channels ws/sse: ${realtimeLog.websocketCount}/${realtimeLog.eventSourceMessageCount}`);
 
 fixture.server.close();

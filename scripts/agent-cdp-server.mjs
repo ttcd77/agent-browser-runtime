@@ -2736,7 +2736,7 @@ function buildAgentInspectToolPlan(focus, options = {}) {
 }
 
 function devtoolsToolCategory(name) {
-  if (name === "agent_inspect" || /backend_capabilities|tool_catalog|tool_help|workflow_guide|capability_map|protocol_schema/.test(name)) return "orientation";
+  if (name === "agent_inspect" || /backend_capabilities|tool_catalog|tool_help|workflow_guide|capability_map|parity_matrix|protocol_schema/.test(name)) return "orientation";
   if (/tabs|snapshot|screenshot|click|type|scroll|eval|hard_reload/.test(name)) return "page-control";
   if (/network|request|har|capture_|realtime/.test(name)) return "network";
   if (/console|issues|security_summary|signal_summary|page_diagnostics/.test(name)) return "diagnostics";
@@ -2883,6 +2883,114 @@ function devtoolsCapabilityMapFromEntries(entries, options = {}) {
       "Capability map is navigation metadata; it does not execute tools or decide impact.",
       "Use browser_* facade tools first, then drill into devtools_* tools for exact F12 evidence.",
       "Use devtools_cdp_command only when the friendly wrapper does not expose the needed DevTools Protocol method.",
+    ],
+  };
+}
+
+function devtoolsF12ParityMatrix(backend = "managed-cdp") {
+  const personal = backend === "personal-chrome";
+  const rows = [
+    {
+      panel: "Network",
+      coverage: "strong",
+      managed: "supported",
+      personal: "supported",
+      tools: ["devtools_capture_start", "devtools_network_log", "devtools_network_summary", "devtools_network_timeline", "devtools_request_detail", "devtools_request_body", "devtools_request_payload", "devtools_realtime_log", "devtools_save_har", "devtools_har_completeness", "devtools_request_replay", "devtools_request_replay_batch"],
+      boundaries: ["Only activity observed after capture starts is complete.", "Replay uses browser fetch semantics, not raw socket/TLS/HTTP2 framing."],
+    },
+    {
+      panel: "Elements / Frames / Accessibility",
+      coverage: "strong-with-browser-boundaries",
+      managed: "supported",
+      personal: "supported",
+      tools: ["devtools_elements_snapshot", "devtools_dom_snapshot", "devtools_dom_search", "devtools_frame_tree", "devtools_accessibility_snapshot", "devtools_event_listeners", "devtools_css_styles", "devtools_dom_mutation_watch"],
+      boundaries: ["Closed shadow roots and cross-origin or sandboxed frame internals follow Chrome visibility boundaries."],
+    },
+    {
+      panel: "Application",
+      coverage: "strong",
+      managed: "supported",
+      personal: "supported",
+      tools: ["devtools_storage_snapshot", "devtools_storage_origin_summary", "devtools_cookie_summary", "devtools_service_worker_summary", "devtools_service_worker_detail", "devtools_application_export", "devtools_indexeddb_list", "devtools_indexeddb_read", "devtools_cache_storage_list", "devtools_cache_entry_get", "devtools_token_scan"],
+      boundaries: ["Storage and cache reads are scoped to the selected page/origin and browser permission model."],
+    },
+    {
+      panel: "Sources / Debugger",
+      coverage: "strong-with-tooling-boundaries",
+      managed: "supported",
+      personal: "supported",
+      tools: ["devtools_sources_list", "devtools_source_get", "devtools_source_pretty_print", "devtools_source_map_metadata", "devtools_source_map_sources", "devtools_source_map_source_get", "devtools_sources_search", "devtools_debugger_control", "devtools_console_source_context"],
+      boundaries: ["Pretty printing is heuristic.", "Source maps expose metadata and extractable sources rather than a full DevTools editor UI."],
+    },
+    {
+      panel: "Console / Issues / Security",
+      coverage: "strong",
+      managed: "supported",
+      personal: "supported",
+      tools: ["devtools_console_log", "devtools_issues_log", "devtools_security_summary", "devtools_page_diagnostics", "devtools_signal_summary"],
+      boundaries: ["Browser Issues and Security events are Chrome-reported evidence, not vulnerability classification."],
+    },
+    {
+      panel: "Performance / Memory",
+      coverage: personal ? "partial-in-personal" : "strong-with-boundaries",
+      managed: "supported",
+      personal: "partial",
+      tools: ["devtools_performance_trace", "devtools_performance_insights", "devtools_performance_observer", "devtools_chrome_trace", "devtools_trace_query", "devtools_trace_compare", "devtools_cpu_profile", "devtools_coverage_snapshot", "devtools_coverage_detail", "devtools_memory_snapshot", "devtools_heap_snapshot"],
+      boundaries: ["Managed CDP can capture heap snapshot artifacts.", "Personal Chrome chrome.debugger does not expose HeapProfiler heap snapshots and returns a structured notApplicable response."],
+    },
+    {
+      panel: "Recorder / Evidence Workflow",
+      coverage: "strong",
+      managed: "supported",
+      personal: "supported",
+      tools: ["devtools_security_research_pack", "devtools_evidence_bundle", "devtools_evidence_manifest", "devtools_artifact_index", "devtools_artifact_inspect", "devtools_artifact_search", "devtools_artifact_read", "devtools_evidence_timeline", "devtools_capture_diff", "devtools_request_correlation_graph", "devtools_auth_boundary_report", "devtools_worker_frame_deep_dive"],
+      boundaries: ["Evidence workflow tools organize and preserve evidence; they do not decide impact."],
+    },
+    {
+      panel: "Raw CDP / Escape Hatch",
+      coverage: personal ? "partial-in-personal" : "strong",
+      managed: "supported",
+      personal: "partial",
+      tools: ["devtools_protocol_schema", "devtools_cdp_command", "devtools_browser_cdp_command", "devtools_browser_version", "devtools_browser_targets", "devtools_system_info"],
+      boundaries: ["Managed Browser exposes page-target and browser-process CDP routes.", "Personal Chrome is limited to chrome.debugger page-target domains and structured no-op responses for browser-process/schema calls."],
+    },
+    {
+      panel: "DevTools UI Extras",
+      coverage: "intentional-gap",
+      managed: "not-first-class",
+      personal: "not-first-class",
+      tools: [],
+      boundaries: ["Lighthouse UI, Recorder UI, Sensors, Overrides, Animations, Rendering overlays, and visual editor affordances are not first-class wrappers yet.", "Use raw CDP where Chrome exposes the needed data, or add a focused wrapper when it becomes part of the agent security workflow."],
+    },
+  ];
+  const counts = rows.reduce((acc, row) => {
+    const status = personal ? row.personal : row.managed;
+    acc[status] = (acc[status] || 0) + 1;
+    return acc;
+  }, {});
+  return {
+    backend,
+    generatedAt: new Date().toISOString(),
+    contract: "Agent F12 parity matrix",
+    targetStandard: "ordinary web-page DevTools evidence for agentic AppSec research",
+    professionalToolPositioning: "objective F12 evidence runtime, not a vulnerability scanner and not a pixel clone of Chrome DevTools UI",
+    summary: {
+      panelCount: rows.length,
+      counts,
+      strongestBackend: "managed-cdp",
+      managedReadiness: "core F12 security-research evidence workflow is strong; remaining gaps are mostly UI extras and deeper wrappers.",
+      personalReadiness: "core workflow is usable; chrome.debugger transport has explicit boundary rows where Chrome does not expose full CDP.",
+    },
+    rows,
+    recommendedUse: [
+      "Use Managed Browser as the main professional AppSec backend.",
+      "Use Personal Chrome for user-authorized real-browser inspection when the chrome.debugger boundary is acceptable.",
+      "Start with devtools_capability_map or browser_inspect, then use this parity matrix when deciding whether a missing signal is a tool gap or a browser boundary.",
+    ],
+    objectiveBoundaries: [
+      "This matrix is capability evidence only; it does not classify vulnerabilities.",
+      "If a row says partial or intentional-gap, the tool should expose that boundary instead of pretending the data exists.",
+      "No capture means no complete historical network evidence, matching human F12 recording semantics.",
     ],
   };
 }
@@ -11500,6 +11608,18 @@ function registerStandaloneBrowserTools(tools, cdpPort, profileRegistry, default
     },
     async execute() {
       return toolResult(devtoolsCapabilityMapFromEntries([...tools.values()], { backend: "managed-cdp" }));
+    },
+  });
+
+  tools.set("devtools_f12_parity_matrix", {
+    name: "devtools_f12_parity_matrix",
+    description: "Agent usability: return an objective F12 parity matrix for professional AppSec work, including supported panels, partial coverage, tool routes, and browser boundaries.",
+    parameters: {
+      type: "object",
+      properties: {},
+    },
+    async execute() {
+      return toolResult(devtoolsF12ParityMatrix("managed-cdp"));
     },
   });
 

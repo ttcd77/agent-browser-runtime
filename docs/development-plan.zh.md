@@ -145,6 +145,15 @@
 
 ## 执行记录
 
+### 2026-05-18: F12 Parity Matrix
+
+已经完成:
+
+- 新增 `devtools_f12_parity_matrix` / `personal_chrome_f12_parity_matrix`。
+- 把专业 AppSec 工具的衡量标准落成机器可读矩阵: Network、Elements/Frames、Application、Sources/Debugger、Console/Issues/Security、Performance/Memory、Evidence Workflow、Raw CDP、DevTools UI Extras。
+- 每一行返回 Managed / Personal 支持状态、对应工具、浏览器边界和“不判断漏洞”的客观边界。
+- Managed Browser 被明确标记为主线后端；Personal Chrome 保持同合同，遇到 chrome.debugger 不支持的能力返回 partial / notApplicable 边界。
+
 ### 2026-05-18: Evidence Timeline Filters
 
 已经完成:

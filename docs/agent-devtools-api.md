@@ -112,6 +112,7 @@ Tool usability helpers:
 - `devtools_tool_catalog`: list tools by category, description, and parameter names.
 - `devtools_tool_help`: inspect one tool's description, schema, category, and hints.
 - `devtools_capability_map`: group the runtime by F12 panel, first-pass tools, drill-down tools, artifact tools, and raw escape hatches.
+- `devtools_f12_parity_matrix`: report objective F12 panel parity for professional AppSec work, including supported rows, partial backend rows, tool routes, and browser boundaries.
 - `devtools_workflow_guide`: return deterministic tool recipes for common tasks.
 
 ## Unified Tools
@@ -132,6 +133,7 @@ Agent usability:
 - `devtools_tool_catalog`
 - `devtools_tool_help`
 - `devtools_capability_map`
+- `devtools_f12_parity_matrix`
 - `devtools_workflow_guide`
 
 DevTools/F12 data layer:

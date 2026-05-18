@@ -681,6 +681,13 @@ try {
   assert(capabilityMap.panels?.some((panel) => panel.category === "network" && panel.firstPass.includes("devtools_network_summary")), "capability map missing Network first-pass tools");
   assert(capabilityMap.panels?.some((panel) => panel.category === "sources-debugger"), "capability map missing Sources panel");
   assert(capabilityMap.panels?.some((panel) => panel.category === "performance"), "capability map missing Performance panel");
+  const parityMatrix = await callTool(baseUrl, "devtools_f12_parity_matrix", {
+    profile: "default",
+  });
+  assert(parityMatrix.backend === "managed-cdp", `F12 parity matrix wrong backend: ${JSON.stringify(parityMatrix)}`);
+  assert(parityMatrix.rows?.some((row) => row.panel === "Network" && row.managed === "supported"), "F12 parity matrix missing supported Network row");
+  assert(parityMatrix.rows?.some((row) => row.panel === "Raw CDP / Escape Hatch" && row.managed === "supported"), "F12 parity matrix missing Managed raw CDP support");
+  assert(parityMatrix.objectiveBoundaries?.some((entry) => String(entry).includes("does not classify vulnerabilities")), "F12 parity matrix missing objective boundary");
   const workflowGuide = await callTool(baseUrl, "devtools_workflow_guide", {
     profile: "default",
     task: "auth-boundary",
