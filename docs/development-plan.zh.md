@@ -868,3 +868,13 @@
 - 摘要包含 requestId、status、可用 F12 detail sections、request/response header 数量、body readable 和 body bytes。
 - `smoke:cli` 已覆盖这些输出，确保 CLI 不会落后于 evidence pack schema。
 - 该能力只是让命令行入口更容易被 Agent 接手，不输出 header value，也不判断漏洞。
+
+### 2026-05-18: 首个 F12 Request Detail 独立证据文件完成
+
+已经完成:
+
+- Managed Browser / Personal Chrome 都会把 `firstF12RequestDetail` 额外写成独立 JSON artifact。
+- `summary.firstF12RequestDetailPath` 和 handoff `artifactPaths.firstF12RequestDetailPath` 会返回该文件路径。
+- artifact index 会把该文件归类为 `request-detail`，方便 Agent 用 `devtools_artifact_inspect` / `devtools_artifact_read` 直接读取。
+- evidence manifest 会记录该独立证据文件的路径和哈希。
+- 该文件仍然只保存客观 F12 request-detail 摘要，不判断风险、不输出漏洞结论。

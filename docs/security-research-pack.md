@@ -75,6 +75,9 @@ Typical output includes:
   request's F12 detail sections, including section availability, header names,
   payload/body availability, cookie counts, timing, initiator, redirects, and
   security metadata where Chrome exposed them,
+- `summary.firstF12RequestDetailPath`, a standalone JSON artifact for that
+  first request-detail summary, indexed as `request-detail` so an agent can
+  inspect it without loading the full research pack,
 - capture boundaries so the agent knows what time window was recorded.
 
 The saved paths are local files under the selected profile evidence directory.
@@ -128,8 +131,9 @@ Transport boundaries:
 2. Call `devtools_security_research_pack`.
 3. Read `summary` and `steps`.
 4. Open the saved evidence bundle and manifest.
-5. Use `f12Navigation` or readiness `routeSummary.firstF12RequestDetail` for
-   the first concrete request-detail drill-down.
+5. Use `summary.firstF12RequestDetailPath`, `f12Navigation`, or readiness
+   `routeSummary.firstF12RequestDetail` for the first concrete request-detail
+   drill-down.
 6. Use the correlation graph and auth boundary report to choose deeper
    drill-down.
 7. Drill down with `devtools_request_detail`, `devtools_request_payload`,

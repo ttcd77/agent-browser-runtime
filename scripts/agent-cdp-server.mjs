@@ -755,6 +755,7 @@ function inferArtifactKind(file) {
   if (value.includes("/diffs/") || value.includes("diff")) return "diff";
   if (value.includes("/auth/") || value.includes("auth-boundary")) return "auth-boundary";
   if (value.includes("/boundaries/") || value.includes("worker-frame")) return "boundary";
+  if (value.includes("/request-details/") || value.includes("request-detail")) return "request-detail";
   if (value.includes("/heap/") || ext === "heapsnapshot") return "heap";
   if (value.includes("/profiles/") || value.includes("cpu-profile")) return "cpu-profile";
   if (value.includes("/source-maps/") || value.includes("source-map")) return "source-map";
@@ -11451,6 +11452,18 @@ function registerStandaloneBrowserTools(tools, cdpPort, profileRegistry, default
       const firstF12RequestDetail = firstF12DetailRoute
         ? summarizeF12RequestDetail(await safeCall(firstF12DetailRoute.tool, firstF12DetailRoute.input), firstF12DetailRoute)
         : null;
+      let firstF12RequestDetailArtifact = null;
+      if (firstF12RequestDetail) {
+        const detailPath = join(profile.evidenceDir, "request-details", `${Date.now()}-first-f12-request-detail.json`);
+        mkdirSync(dirname(detailPath), { recursive: true });
+        writeFileSync(detailPath, `${JSON.stringify(firstF12RequestDetail, null, 2)}\n`, "utf8");
+        firstF12RequestDetailArtifact = {
+          path: detailPath,
+          bytes: statSync(detailPath).size,
+          sha256: fileSha256(detailPath),
+        };
+        artifacts.firstF12RequestDetail = firstF12RequestDetailArtifact;
+      }
       artifacts.manifest = await safeCall("devtools_evidence_manifest", {
         save: true,
         artifactPaths: [
@@ -11462,6 +11475,7 @@ function registerStandaloneBrowserTools(tools, cdpPort, profileRegistry, default
           artifacts.authBoundary?.reportPath,
           artifacts.workerFrame?.reportPath,
           artifacts.drilldownPlan?.planPath,
+          firstF12RequestDetailArtifact?.path,
         ].filter(Boolean),
       });
       const networkSummary = network?.evidence?.summary || {};
@@ -11484,6 +11498,7 @@ function registerStandaloneBrowserTools(tools, cdpPort, profileRegistry, default
         authBoundaryReportPath: artifacts.authBoundary?.reportPath || null,
         workerFrameReportPath: artifacts.workerFrame?.reportPath || null,
         drilldownPlanPath: drilldownPlan.planPath || null,
+        firstF12RequestDetailPath: firstF12RequestDetailArtifact?.path || null,
         artifactFileCount: artifacts.artifactIndex?.totalFileCount ?? null,
         evidenceTimelineEventCount: artifacts.evidenceTimeline?.eventCount ?? null,
         f12ParityPanelCount: parityMatrix?.summary?.panelCount ?? null,
@@ -11529,6 +11544,7 @@ function registerStandaloneBrowserTools(tools, cdpPort, profileRegistry, default
           authBoundaryReportPath: summary.authBoundaryReportPath,
           workerFrameReportPath: summary.workerFrameReportPath,
           drilldownPlanPath: summary.drilldownPlanPath,
+          firstF12RequestDetailPath: summary.firstF12RequestDetailPath,
         },
         agentEntryPoints,
         agentUsage,
@@ -11546,6 +11562,7 @@ function registerStandaloneBrowserTools(tools, cdpPort, profileRegistry, default
         paritySummary: parityMatrix?.summary || null,
         f12Navigation,
         firstF12RequestDetail,
+        firstF12RequestDetailArtifact,
         captureBoundaries,
         nextTools,
         handoffDrilldowns,
