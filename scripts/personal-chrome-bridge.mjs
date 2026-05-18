@@ -2040,6 +2040,27 @@ function buildAgentToolEntryPoints(available) {
     recommendedFirstCall: available.has("devtools_professional_readiness") ? "devtools_professional_readiness" : "devtools_capability_map",
     facadePath: pick(["browser_open", "browser_capture", "browser_inspect", "browser_security_pack", "browser_raw"]),
     professionalPath: pick(["browser_open", "browser_capture", "browser_inspect", "browser_security_pack"]),
+    professionalRouteSummary: {
+      firstStep: available.has("devtools_professional_readiness")
+        ? { tool: "devtools_professional_readiness", input: {} }
+        : { tool: "devtools_capability_map", input: {} },
+      standardWorkflow: pick(["browser_open", "browser_capture", "browser_inspect", "browser_security_pack"]),
+      evidencePack: available.has("browser_security_pack")
+        ? { tool: "browser_security_pack", input: { includeHar: true, includeTrace: true, includeApplicationExport: true } }
+        : null,
+      handoffInspectTemplate: available.has("devtools_artifact_inspect")
+        ? { tool: "devtools_artifact_inspect", input: { path: "<researchPackPath>" } }
+        : null,
+      handoffReadTemplate: available.has("devtools_artifact_read")
+        ? { tool: "devtools_artifact_read", input: { path: "<researchPackPath>", mode: "line", startLine: 1, maxLines: 120 } }
+        : null,
+      firstConcreteDrilldownSources: [
+        "devtools_professional_readiness.routeSummary.firstConcreteDrilldown",
+        "devtools_security_research_pack.drilldownPlan.drilldowns",
+        "devtools_artifact_index.recommendedDrilldowns",
+      ],
+      objectiveBoundary: "This catalog route is a stateless template; use readiness routeSummary for current evidence and do not treat the route as a vulnerability judgment.",
+    },
     drilldownRule: "Use low-level devtools_* tools only after a facade call returns concrete evidence, an artifact path, requestId, frameId, scriptId, or drilldownPlan entry.",
     compressedTools,
     objectiveBoundary: "This entry plan is routing metadata only; it does not judge vulnerabilities or security impact.",

@@ -418,6 +418,15 @@
 - 公开示例、CLI、readiness 三条路径现在都暴露同一套 Agent 接手路线。
 - 这只是示例输出路线，不读取证据正文、不判断漏洞。
 
+### 2026-05-18: Tool Catalog Professional Route Template
+
+已经完成:
+
+- `devtools_tool_catalog` / `personal_chrome_tool_catalog` 的 `agentEntryPoints` 现在返回 `professionalRouteSummary`。
+- 这是无状态模板，包含 firstStep、standardWorkflow、evidencePack、handoff inspect/read 模板和 firstConcreteDrilldownSources。
+- Managed Professional smoke 和 Personal Chrome smoke 都已覆盖 catalog route template。
+- 当前证据接手仍以 readiness `routeSummary` 为准；catalog route 只用于 Agent 首次定向，不读取证据正文、不判断漏洞。
+
 ### 2026-05-18: Professional Readiness Tool
 
 已经完成:

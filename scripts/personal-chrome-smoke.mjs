@@ -577,6 +577,10 @@ assert(toolCatalog.toolCount >= 1, "Personal Chrome tool catalog did not return 
 assert(toolCatalog.tools.some((tool) => tool.name === "devtools_auth_boundary_report"), "Personal Chrome tool catalog missing auth boundary report");
 assert(toolCatalog.agentEntryPoints?.defaultMode === "facade-first", "Personal Chrome tool catalog missing facade-first entry plan");
 assert(toolCatalog.agentEntryPoints?.professionalPath?.includes("browser_security_pack"), "Personal Chrome tool catalog missing professional facade path");
+assert(toolCatalog.agentEntryPoints?.professionalRouteSummary?.firstStep?.tool === "devtools_professional_readiness", "Personal Chrome tool catalog missing route summary first step");
+assert(toolCatalog.agentEntryPoints?.professionalRouteSummary?.evidencePack?.tool === "browser_security_pack", "Personal Chrome tool catalog missing route summary evidence pack");
+assert(toolCatalog.agentEntryPoints?.professionalRouteSummary?.handoffInspectTemplate?.tool === "devtools_artifact_inspect", "Personal Chrome tool catalog missing route summary handoff inspect template");
+assert(toolCatalog.agentEntryPoints?.professionalRouteSummary?.firstConcreteDrilldownSources?.some((entry) => entry.includes("routeSummary")), "Personal Chrome tool catalog missing route summary drilldown source");
 const toolHelp = await callTool("devtools_tool_help", { tool: "devtools_security_research_pack" });
 assert(toolHelp.description, "Personal Chrome tool help missing description");
 const capabilityMap = await callTool("devtools_capability_map", {});

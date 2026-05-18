@@ -180,6 +180,14 @@ try {
   assert(capabilityMap.panels?.some((panel) => panel.category === "network"), "professional capability map missing Network route");
   assert(capabilityMap.panels?.some((panel) => panel.category === "evidence-workflow"), "professional capability map missing Evidence route");
   assert(capabilityMap.panels?.some((panel) => panel.category === "sources-debugger"), "professional capability map missing Sources route");
+  const toolCatalog = await callTool(baseUrl, "devtools_tool_catalog", {
+    profile: "professional",
+    query: "auth",
+  });
+  assert(toolCatalog.agentEntryPoints?.professionalRouteSummary?.firstStep?.tool === "devtools_professional_readiness", "professional tool catalog missing route summary first step");
+  assert(toolCatalog.agentEntryPoints?.professionalRouteSummary?.evidencePack?.tool === "browser_security_pack", "professional tool catalog missing route summary evidence pack");
+  assert(toolCatalog.agentEntryPoints?.professionalRouteSummary?.handoffInspectTemplate?.tool === "devtools_artifact_inspect", "professional tool catalog missing route summary handoff inspect template");
+  assert(toolCatalog.agentEntryPoints?.professionalRouteSummary?.firstConcreteDrilldownSources?.some((entry) => entry.includes("routeSummary")), "professional tool catalog missing route summary drilldown source");
   const workflowGuide = await callTool(baseUrl, "devtools_workflow_guide", {
     profile: "professional",
     task: "professional-appsec",
