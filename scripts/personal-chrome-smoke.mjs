@@ -347,6 +347,9 @@ const performanceObserver = await callTool("devtools_performance_observer", {
 assert(performanceObserver.backend === "personal-chrome", `performance observer wrong backend: ${JSON.stringify(performanceObserver)}`);
 assert(Array.isArray(performanceObserver.snapshot?.supportedEntryTypes), "performance observer missing supported entry types");
 assert(typeof performanceObserver.summary?.entryCount === "number", "performance observer missing entry count");
+assert(Array.isArray(performanceObserver.summary?.entryTypeCoverage), "Personal Chrome performance observer missing entry type coverage");
+assert(performanceObserver.summary.entryTypeCoverage.some((row) => row.type === "navigation" && row.supported === true), "Personal Chrome performance observer missing navigation coverage row");
+assert(performanceObserver.summary.entryTypeCoverage.every((row) => typeof row.count === "number"), "Personal Chrome performance observer entry type coverage missing counts");
 assert(Array.isArray(performanceObserver.summary?.captureBoundaries), "performance observer missing capture boundaries");
 
 const realtimeLog = await callTool("devtools_realtime_log", {

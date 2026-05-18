@@ -766,3 +766,13 @@
 - `npm run smoke:f12`
 - `npm run smoke:personal`
 - `npm run check:release`
+
+### 2026-05-18: PerformanceObserver entry type 覆盖状态完成
+
+已经完成:
+
+- `devtools_performance_observer` / `personal_chrome_performance_observer` 的 summary 新增 `entryTypeCoverage`。
+- Agent 可以直接看到每个 requested entry type 是否 supported、observed、unsupported、observe error，以及实际 count。
+- 这能区分“浏览器不支持”和“支持但当前窗口没有观测到”，避免把缺失证据误读成页面没有对应行为。
+- Managed Browser 和 Personal Chrome smoke 都加入了 coverage row 断言。
+- 该能力只暴露 PerformanceObserver 的客观覆盖状态，不判断性能根因或漏洞。

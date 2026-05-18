@@ -331,6 +331,9 @@ try {
   assert(performanceObserver.backend === "managed-cdp", `performance observer wrong backend: ${JSON.stringify(performanceObserver)}`);
   assert(Array.isArray(performanceObserver.snapshot?.supportedEntryTypes), "performance observer missing supported entry types");
   assert(typeof performanceObserver.summary?.entryCount === "number", "performance observer missing entry count");
+  assert(Array.isArray(performanceObserver.summary?.entryTypeCoverage), "performance observer missing entry type coverage");
+  assert(performanceObserver.summary.entryTypeCoverage.some((row) => row.type === "navigation" && row.supported === true), "performance observer missing navigation coverage row");
+  assert(performanceObserver.summary.entryTypeCoverage.every((row) => typeof row.count === "number"), "performance observer entry type coverage missing counts");
   assert(Array.isArray(performanceObserver.summary?.captureBoundaries), "performance observer missing capture boundaries");
 
   const cpuProfile = await callTool(baseUrl, "devtools_cpu_profile", {

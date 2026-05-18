@@ -1808,6 +1808,25 @@ function summarizePerformanceObserverSnapshot(snapshot = {}, limit = 10) {
     const type = entry.entryType || "unknown";
     byTypeCount[type] = (byTypeCount[type] || 0) + 1;
   }
+  const supportedEntryTypes = Array.isArray(snapshot.supportedEntryTypes) ? snapshot.supportedEntryTypes : [];
+  const requestedEntryTypes = Array.isArray(snapshot.requestedEntryTypes) ? snapshot.requestedEntryTypes : [];
+  const unsupportedEntryTypes = Array.isArray(snapshot.unsupportedEntryTypes)
+    ? snapshot.unsupportedEntryTypes
+    : requestedEntryTypes.filter((type) => !supportedEntryTypes.includes(type));
+  const observeErrors = Array.isArray(snapshot.observeErrors) ? snapshot.observeErrors : [];
+  const observedEntryTypes = Object.keys(byTypeCount).sort();
+  const entryTypeCoverage = requestedEntryTypes.map((type) => {
+    const observeError = observeErrors.find((error) => error?.type === type)?.error || null;
+    return {
+      type,
+      requested: true,
+      supported: supportedEntryTypes.includes(type),
+      observed: Boolean(byTypeCount[type]),
+      count: byTypeCount[type] || 0,
+      unsupported: unsupportedEntryTypes.includes(type),
+      observeError,
+    };
+  });
   const byType = (type) => entries.filter((entry) => entry.entryType === type);
   const round = (value) => Math.round(Number(value || 0) * 100) / 100;
   const topByDuration = (type) => byType(type)
@@ -1841,11 +1860,12 @@ function summarizePerformanceObserverSnapshot(snapshot = {}, limit = 10) {
   return {
     generatedAt: new Date().toISOString(),
     source: "PerformanceObserver",
-    supportedEntryTypes: snapshot.supportedEntryTypes || [],
-    requestedEntryTypes: snapshot.requestedEntryTypes || [],
-    observedEntryTypes: Object.keys(byTypeCount).sort(),
-    unsupportedEntryTypes: snapshot.unsupportedEntryTypes || [],
-    observeErrors: snapshot.observeErrors || [],
+    supportedEntryTypes,
+    requestedEntryTypes,
+    observedEntryTypes,
+    unsupportedEntryTypes,
+    observeErrors,
+    entryTypeCoverage,
     entryCount: entries.length,
     byTypeCount,
     largestContentfulPaint: lcp ? {
@@ -1890,6 +1910,7 @@ function summarizePerformanceObserverSnapshot(snapshot = {}, limit = 10) {
     captureBoundaries: [
       "PerformanceObserver reports entries Chrome exposes to the current page context.",
       "Some entry types are browser-version dependent and appear in unsupportedEntryTypes when unavailable.",
+      "entryTypeCoverage distinguishes unsupported entry types from supported-but-not-observed entry types.",
       "Entries are complete only for buffered entries plus the explicit observation window.",
       "This is objective timing evidence, not a root-cause verdict.",
     ],
