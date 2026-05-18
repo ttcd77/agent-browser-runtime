@@ -123,6 +123,13 @@ export function printSummary(pack, output = console.log) {
   output(`- evidence timeline events: ${summary.evidenceTimelineEventCount ?? "(unknown)"}`);
   output(`- F12 parity panels: ${summary.f12ParityPanelCount ?? "(unknown)"}`);
   output(`- drilldowns: ${summary.drilldownCount ?? "(unknown)"}`);
+  if (summary.handoffReady !== undefined || pack.handoffCompleteness) {
+    const completeness = pack.handoffCompleteness || {};
+    output(`- handoff ready: ${summary.handoffReady ?? completeness.ready ?? "(unknown)"}`);
+    output(`  - present: ${summary.handoffPresentCount ?? completeness.presentCount ?? "(unknown)"}`);
+    const missing = summary.handoffMissing || completeness.missing || [];
+    output(`  - missing: ${Array.isArray(missing) && missing.length ? missing.join(", ") : "(none)"}`);
+  }
   if (workflow.task || Array.isArray(workflow.defaultPath)) {
     output(`- workflow: ${workflow.task || "(unknown)"}`);
     if (Array.isArray(workflow.defaultPath)) output(`  - path: ${workflow.defaultPath.join(" -> ")}`);
