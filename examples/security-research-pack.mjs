@@ -72,6 +72,14 @@ console.log(JSON.stringify({
     firstDetailRoute: pack.f12Navigation?.requests?.find((row) => row?.detail)?.detail || null,
     sectionRoutes: pack.f12Navigation?.sectionRoutes || null,
   },
+  firstF12RequestDetail: pack.firstF12RequestDetail ? {
+    requestId: pack.firstF12RequestDetail.requestId,
+    url: pack.firstF12RequestDetail.url,
+    status: pack.firstF12RequestDetail.status,
+    sectionAvailability: pack.firstF12RequestDetail.sectionAvailability,
+    headerSummary: pack.firstF12RequestDetail.sections?.headers || null,
+    objectiveBoundary: pack.firstF12RequestDetail.boundaries?.at(-1) || null,
+  } : null,
   handoff: {
     ready: pack.handoffCompleteness?.ready,
     missing: pack.handoffCompleteness?.missing,

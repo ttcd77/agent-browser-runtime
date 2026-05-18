@@ -706,6 +706,7 @@ function summarizeResearchPackHandoff(parsed) {
   const handoffCompleteness = parsed.handoffCompleteness || {};
   const artifactCoverage = parsed.artifactCoverage || {};
   const f12Navigation = parsed.f12Navigation || {};
+  const firstF12RequestDetail = parsed.firstF12RequestDetail || null;
   return {
     schema: parsed.schema,
     backend: parsed.backend || null,
@@ -751,6 +752,7 @@ function summarizeResearchPackHandoff(parsed) {
       sectionRoutes: f12Navigation.sectionRoutes || null,
       boundaries: f12Navigation.boundaries || [],
     } : null,
+    firstF12RequestDetail,
     drilldownCount: parsed.drilldownPlan?.count ?? summary.drilldownCount ?? null,
     firstDrilldowns: (parsed.drilldownPlan?.drilldowns || []).slice(0, 5).map((entry) => ({
       label: entry.label,
@@ -2818,6 +2820,83 @@ function buildResearchPackF12Navigation(artifacts = {}, options = {}) {
   };
 }
 
+function summarizeF12RequestDetail(result = {}, route = null) {
+  const detail = result?.detail || result?.evidence?.requestDetail?.detail || result?.requestDetail?.detail || null;
+  if (!detail) return null;
+  const sections = detail.f12Sections || {};
+  const requestHeaders = sections.headers?.request || detail.requestHeaders || {};
+  const responseHeaders = sections.headers?.response || detail.responseHeaders || {};
+  const sectionAvailability = {
+    overview: Boolean(sections.overview),
+    headers: Boolean(sections.headers),
+    payload: Boolean(sections.payload),
+    cookies: Boolean(sections.cookies),
+    timing: Boolean(sections.timing),
+    initiator: Boolean(sections.initiator),
+    redirects: Boolean(sections.redirects),
+    security: Boolean(sections.security),
+  };
+  return {
+    schema: "agent-browser-runtime.f12-request-detail-summary.v1",
+    requestId: detail.requestId || route?.input?.requestId || null,
+    url: detail.url || sections.headers?.general?.requestUrl || null,
+    method: detail.method || sections.headers?.general?.requestMethod || null,
+    status: detail.status ?? sections.headers?.general?.statusCode ?? null,
+    resourceType: detail.resourceType || sections.overview?.type || null,
+    route,
+    sectionAvailability,
+    sections: {
+      overview: sections.overview || null,
+      headers: {
+        general: sections.headers?.general || null,
+        requestHeaderCount: Object.keys(requestHeaders || {}).length,
+        responseHeaderCount: Object.keys(responseHeaders || {}).length,
+        requestHeaderNames: Object.keys(requestHeaders || {}).slice(0, 40),
+        responseHeaderNames: Object.keys(responseHeaders || {}).slice(0, 40),
+        hasRawRequestHeadersText: Boolean(sections.headers?.rawRequestHeadersText || detail.requestHeadersText),
+        hasRawResponseHeadersText: Boolean(sections.headers?.rawResponseHeadersText || detail.responseHeadersText),
+      },
+      payload: sections.payload || {
+        hasPostData: Boolean(detail.hasPostData),
+        postDataLength: detail.postDataLength ?? null,
+        bodyReadable: Boolean(detail.bodyReadable),
+        bodyBytes: detail.bodyBytes ?? null,
+        bodyPath: detail.bodyPath || null,
+      },
+      cookies: {
+        requestCookieHeaderPresent: Boolean(sections.cookies?.requestCookieHeaderPresent || detail.cookieHeader),
+        responseSetCookieHeaderPresent: Boolean(sections.cookies?.responseSetCookieHeaderPresent || detail.setCookieHeader),
+        requestCookieCount: Array.isArray(sections.cookies?.requestCookies || detail.requestCookies) ? (sections.cookies?.requestCookies || detail.requestCookies).length : 0,
+        associatedCookieCount: Array.isArray(sections.cookies?.associatedCookies || detail.associatedCookies) ? (sections.cookies?.associatedCookies || detail.associatedCookies).length : 0,
+        blockedRequestCookieCount: Array.isArray(sections.cookies?.blockedRequestCookies || detail.blockedRequestCookies) ? (sections.cookies?.blockedRequestCookies || detail.blockedRequestCookies).length : 0,
+        blockedResponseCookieCount: Array.isArray(sections.cookies?.blockedResponseCookies || detail.blockedResponseCookies) ? (sections.cookies?.blockedResponseCookies || detail.blockedResponseCookies).length : 0,
+        browserCookiesForUrlCount: sections.cookies?.browserCookiesForUrlCount ?? (Array.isArray(detail.browserCookiesForUrl) ? detail.browserCookiesForUrl.length : null),
+      },
+      timing: sections.timing || {
+        rawTimingPresent: Boolean(detail.timing),
+        phases: detail.timingPhases || null,
+      },
+      initiator: sections.initiator || {
+        type: detail.initiatorType || null,
+        summary: detail.initiatorSummary || null,
+      },
+      redirects: {
+        count: sections.redirects?.count ?? (Array.isArray(detail.redirectChain) ? detail.redirectChain.length : 0),
+        chain: sections.redirects?.chain || detail.redirectChain || [],
+      },
+      security: sections.security || {
+        protocol: detail.protocol || null,
+        securityDetails: detail.securityDetails || null,
+      },
+    },
+    boundaries: [
+      "This is a compact objective summary of one captured F12 request detail.",
+      "Header values are not duplicated here; call devtools_request_detail with requestId for exact values.",
+      "This summary does not classify request importance, exploitability, or vulnerability.",
+    ],
+  };
+}
+
 function workflowGuide(task = "first-pass") {
   const key = String(task || "first-pass").trim().toLowerCase().replace(/[\s_]+/g, "-");
   const recipes = {
@@ -3509,6 +3588,10 @@ async function securityResearchPack(params = {}) {
   const drilldownPlan = buildResearchPackDrilldowns(artifacts);
   artifacts.drilldownPlan = drilldownPlan;
   const f12Navigation = buildResearchPackF12Navigation(artifacts, { limit });
+  const firstF12DetailRoute = f12Navigation.requests.find((row) => row?.detail)?.detail || null;
+  const firstF12RequestDetail = firstF12DetailRoute
+    ? summarizeF12RequestDetail(await safeBridgeTool(firstF12DetailRoute.tool, firstF12DetailRoute.input), firstF12DetailRoute)
+    : null;
   artifacts.manifest = await safeBridgeTool("devtools_evidence_manifest", {
     save: true,
     artifactPaths: [
@@ -3547,6 +3630,7 @@ async function securityResearchPack(params = {}) {
     f12ParityPanelCount: parityMatrix?.summary?.panelCount ?? null,
     drilldownCount: drilldownPlan.count,
     f12NavigationRequestCount: f12Navigation.requestNodeCount,
+    firstF12RequestDetailSections: firstF12RequestDetail ? Object.entries(firstF12RequestDetail.sectionAvailability).filter(([, present]) => present).map(([name]) => name) : [],
     workflowTask: workflow.task || "professional-appsec",
   };
   const captureBoundaries = [
@@ -3601,6 +3685,7 @@ async function securityResearchPack(params = {}) {
     },
     paritySummary: parityMatrix?.summary || null,
     f12Navigation,
+    firstF12RequestDetail,
     captureBoundaries,
     nextTools,
     handoffDrilldowns,
@@ -3679,6 +3764,7 @@ async function securityResearchPack(params = {}) {
     },
     parityMatrix,
     f12Navigation,
+    firstF12RequestDetail,
     drilldownPlan,
     handoffDrilldowns,
     captureBoundaries,

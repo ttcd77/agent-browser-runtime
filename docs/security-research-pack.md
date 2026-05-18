@@ -71,6 +71,10 @@ Typical output includes:
   `present`, `skipped`, or `missing`,
 - `f12Navigation`, a deterministic index from captured request nodes to
   `devtools_request_detail` plus F12 request sections,
+- `firstF12RequestDetail`, a compact objective summary of the first captured
+  request's F12 detail sections, including section availability, header names,
+  payload/body availability, cookie counts, timing, initiator, redirects, and
+  security metadata where Chrome exposed them,
 - capture boundaries so the agent knows what time window was recorded.
 
 The saved paths are local files under the selected profile evidence directory.

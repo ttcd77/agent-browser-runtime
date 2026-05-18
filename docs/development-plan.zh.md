@@ -848,3 +848,14 @@
 - `examples/security-research-pack.mjs` 输出新增 `f12Navigation` 和 after-readiness 的首个 F12 request-detail 路线。
 - `smoke:cli` 与 `smoke:example` 已覆盖这些字段，确保命令行 / 示例路径和 tool 返回不漂移。
 - 这仍然只是 F12 证据导航展示，不判断请求是否异常或有漏洞。
+
+### 2026-05-18: Research Pack 首个 F12 Request Detail 摘要完成
+
+已经完成:
+
+- `devtools_security_research_pack` / `browser_security_pack` 会对 `f12Navigation` 的第一个 request-detail 路线做一次实际读取。
+- pack 和 handoff JSON 新增 `firstF12RequestDetail`，包含 section availability、header 名称/数量、payload/body 可读性、cookie 数量、timing、initiator、redirects、security 等客观摘要。
+- 摘要不复制 header value；需要精确值时继续调用 `devtools_request_detail requestId=<id>`。
+- `summary.firstF12RequestDetailSections` 暴露当前已拿到哪些 F12 detail sections。
+- Managed Browser、Personal Chrome、example smoke 都覆盖了该摘要。
+- 该能力只让 evidence pack 更自足，不判断首个请求是否重要或有漏洞。

@@ -135,6 +135,8 @@ try {
   assert(output.afterReadiness?.f12NavigationRequestCount >= 1, `example missing readiness F12 navigation count: ${JSON.stringify(output.afterReadiness)}`);
   assert(output.f12Navigation?.requestNodeCount >= 1, `example missing pack F12 navigation: ${JSON.stringify(output.f12Navigation)}`);
   assert(output.f12Navigation?.firstDetailRoute?.tool === "devtools_request_detail", `example missing pack F12 detail route: ${JSON.stringify(output.f12Navigation)}`);
+  assert(output.firstF12RequestDetail?.sectionAvailability?.headers === true, `example missing first F12 request detail summary: ${JSON.stringify(output.firstF12RequestDetail)}`);
+  assert(output.firstF12RequestDetail?.headerSummary?.requestHeaderCount >= 1, `example missing first F12 request header summary: ${JSON.stringify(output.firstF12RequestDetail)}`);
   assert(output.handoff?.ready === true, `handoff not ready: ${JSON.stringify(output.handoff)}`);
   assert(output.artifactCoverage?.ready === true, `artifact coverage not ready: ${JSON.stringify(output.artifactCoverage)}`);
   assert(output.artifactPaths?.researchPackPath, "example missing research pack path");
