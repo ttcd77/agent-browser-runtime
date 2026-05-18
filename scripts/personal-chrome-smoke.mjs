@@ -577,6 +577,9 @@ assert(capabilityMap.backend === "personal-chrome", `Personal Chrome capability 
 assert(capabilityMap.panels?.some((panel) => panel.category === "network"), "Personal Chrome capability map missing Network panel");
 assert(capabilityMap.panels?.some((panel) => panel.category === "sources-debugger"), "Personal Chrome capability map missing Sources panel");
 assert(capabilityMap.panels?.some((panel) => panel.category === "performance"), "Personal Chrome capability map missing Performance panel");
+assert(capabilityMap.agentUsage?.defaultRoute?.some((step) => step.tool === "browser_security_pack"), "Personal Chrome capability map missing agent default evidence-pack route");
+assert(capabilityMap.agentUsage?.panelRoutes?.network?.some((step) => step.tool === "devtools_request_detail" && step.input?.requestId), "Personal Chrome capability map missing request-detail panel route");
+assert(capabilityMap.agentUsage?.panelRoutes?.evidence?.some((step) => step.tool === "devtools_artifact_inspect" && step.input?.path), "Personal Chrome capability map missing artifact inspect panel route");
 const parityMatrix = await callTool("devtools_f12_parity_matrix", {});
 assert(parityMatrix.backend === "personal-chrome", `Personal Chrome F12 parity matrix wrong backend: ${JSON.stringify(parityMatrix)}`);
 assert(parityMatrix.rows?.some((row) => row.panel === "Network" && row.personal === "supported"), "Personal Chrome F12 parity matrix missing Network support");

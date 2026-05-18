@@ -3173,6 +3173,50 @@ function buildAgentToolEntryPoints(available) {
   };
 }
 
+function buildCapabilityAgentUsage(available, backend = "unknown") {
+  const includeProfile = backend === "managed-cdp";
+  const input = (value = {}) => includeProfile ? { profile: "researcher", ...value } : value;
+  const route = (steps) => steps.filter((step) => available.has(step.tool));
+  return {
+    defaultRoute: route([
+      { tool: "devtools_professional_readiness", input: input({}), why: "Check mechanical readiness, current capture status, and latest saved evidence." },
+      { tool: "browser_open", input: input({ url: "https://example.com", waitMs: 1000 }), why: "Bind a profile/tab to the target page." },
+      { tool: "browser_capture", input: input({ action: "start", label: "research-window" }), why: "Start the explicit F12 recording window before reproducing behaviour." },
+      { tool: "browser_inspect", input: input({ mode: "overview", limit: 10 }), why: "Read first-pass objective evidence before choosing a low-level panel." },
+      { tool: "browser_security_pack", input: input({ includeHar: true, includeTrace: true, includeApplicationExport: true }), why: "Save portable evidence artifacts and drilldown routes." },
+      { tool: "devtools_artifact_index", input: input({ maxFiles: 200 }), why: "Navigate saved artifacts through latestByKind and recommendedDrilldowns." },
+    ]),
+    panelRoutes: {
+      network: route([
+        { tool: "devtools_network_summary", input: input({}), needs: "Recorded requests exist." },
+        { tool: "devtools_request_detail", input: input({ requestId: "<requestId>" }), needs: "A concrete requestId from summary, timeline, HAR, or drilldownPlan." },
+        { tool: "devtools_har_completeness", input: input({}), needs: "HAR/body/timing completeness check." },
+      ]),
+      application: route([
+        { tool: "devtools_storage_origin_summary", input: input({}), needs: "Current page origin is loaded." },
+        { tool: "devtools_cookie_summary", input: input({}), needs: "Cookie metadata and visibility evidence." },
+        { tool: "devtools_application_export", input: input({ save: true }), needs: "Portable Application panel artifact." },
+      ]),
+      sources: route([
+        { tool: "devtools_sources_search", input: input({ query: "<literal>" }), needs: "A literal string, URL fragment, token name, or function name." },
+        { tool: "devtools_source_pretty_print", input: input({ scriptId: "<scriptId>" }), needs: "A concrete scriptId from sources list/search." },
+        { tool: "devtools_debugger_control", input: input({ action: "getPausedState" }), needs: "Debugger state inspection." },
+      ]),
+      performance: route([
+        { tool: "devtools_chrome_trace", input: input({ save: true }), needs: "Trace capture for Performance-like evidence." },
+        { tool: "devtools_trace_query", input: input({ category: "rendering", limit: 20 }), needs: "Saved or active trace events." },
+      ]),
+      evidence: route([
+        { tool: "devtools_evidence_timeline", input: input({ maxEvents: 80, maxArtifacts: 120 }), needs: "Existing captured events or saved artifacts." },
+        { tool: "devtools_artifact_index", input: input({ maxFiles: 200 }), needs: "Existing artifact directory." },
+        { tool: "devtools_artifact_inspect", input: { path: "<artifactPath>" }, needs: "A concrete path from latestByKind, recommendedDrilldowns, or research pack." },
+      ]),
+    },
+    drilldownRule: "Only use panel drilldowns after a first-pass route returns a concrete requestId, frameId, scriptId, trace path, artifact path, or recommendedDrilldowns entry.",
+    objectiveBoundary: "These are deterministic routing hints for agents; they do not read hidden data and do not judge vulnerabilities.",
+  };
+}
+
 function devtoolsToolCatalogFromEntries(entries, options = {}) {
   const query = String(options.query || "").trim().toLowerCase();
   const categoryFilter = String(options.category || "").trim().toLowerCase();
@@ -3302,6 +3346,7 @@ function devtoolsCapabilityMapFromEntries(entries, options = {}) {
       name: tool.name,
       description: tool.description,
     })),
+    agentUsage: buildCapabilityAgentUsage(available, backend),
     panelCount: panels.length,
     panels,
     recommendedStart: ["browser_open", "browser_capture", "browser_inspect", "browser_security_pack", "browser_raw"].filter((name) => available.has(name)),

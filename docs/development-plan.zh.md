@@ -214,6 +214,16 @@
 - Managed Browser 和 Personal Chrome smoke 都已覆盖 HAR 与 research-pack 推荐 drilldown。
 - 这只是确定性证据导航，不读取内容、不判断安全影响。
 
+### 2026-05-18: Capability Map Agent Routes
+
+已经完成:
+
+- `devtools_capability_map` / `personal_chrome_capability_map` 新增 `agentUsage`。
+- `agentUsage.defaultRoute` 给出专业 AppSec 首轮路线: readiness -> open -> capture -> inspect -> security pack -> artifact index。
+- `agentUsage.panelRoutes` 给出 Network、Application、Sources、Performance、Evidence 的面板级钻取路线。
+- 每个 route step 只提供 tool、input、why/needs，不读取证据、不替 Agent 判断漏洞。
+- Managed Browser 和 Personal Chrome smoke 都已覆盖默认路线、request-detail 路线和 artifact-inspect 路线。
+
 ### 2026-05-18: Professional Readiness Tool
 
 已经完成:

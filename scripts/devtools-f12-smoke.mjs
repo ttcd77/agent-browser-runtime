@@ -707,6 +707,9 @@ try {
   assert(capabilityMap.panels?.some((panel) => panel.category === "network" && panel.firstPass.includes("devtools_network_summary")), "capability map missing Network first-pass tools");
   assert(capabilityMap.panels?.some((panel) => panel.category === "sources-debugger"), "capability map missing Sources panel");
   assert(capabilityMap.panels?.some((panel) => panel.category === "performance"), "capability map missing Performance panel");
+  assert(capabilityMap.agentUsage?.defaultRoute?.some((step) => step.tool === "browser_security_pack"), "capability map missing agent default evidence-pack route");
+  assert(capabilityMap.agentUsage?.panelRoutes?.network?.some((step) => step.tool === "devtools_request_detail" && step.input?.requestId), "capability map missing request-detail panel route");
+  assert(capabilityMap.agentUsage?.panelRoutes?.evidence?.some((step) => step.tool === "devtools_artifact_inspect" && step.input?.path), "capability map missing artifact inspect panel route");
   const parityMatrix = await callTool(baseUrl, "devtools_f12_parity_matrix", {
     profile: "default",
   });
