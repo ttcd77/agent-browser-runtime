@@ -838,3 +838,13 @@
 - `nextActions` 会优先加入来自 `f12Navigation` 的 request-detail 路线，然后再补 research-pack drilldown 和 artifact drilldown。
 - Managed Browser 和 Personal Chrome smoke 都验证 readiness 能直接暴露 F12 request-detail 路线。
 - 该能力只是把最新证据包里的 F12 导航路线前置到 readiness，不判断请求是否重要或有漏洞。
+
+### 2026-05-18: CLI / Example F12 Navigation 展示完成
+
+已经完成:
+
+- `npm run research:pack` 摘要现在会打印 evidence pack 的 F12 navigation request 数量和首个 request-detail 路线。
+- CLI 摘要也会打印 readiness `routeSummary.firstF12RequestDetail` 和 `routeSummary.f12NavigationRequestCount`。
+- `examples/security-research-pack.mjs` 输出新增 `f12Navigation` 和 after-readiness 的首个 F12 request-detail 路线。
+- `smoke:cli` 与 `smoke:example` 已覆盖这些字段，确保命令行 / 示例路径和 tool 返回不漂移。
+- 这仍然只是 F12 证据导航展示，不判断请求是否异常或有漏洞。

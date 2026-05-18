@@ -45,6 +45,7 @@ printSummary({
     evidenceTimelineEventCount: 5,
     f12ParityPanelCount: 9,
     drilldownCount: 3,
+    f12NavigationRequestCount: 2,
     handoffReady: true,
     handoffPresentCount: 7,
     handoffMissing: [],
@@ -60,6 +61,15 @@ printSummary({
       stoppedAt: null,
       trafficCount: 2,
     },
+  },
+  f12Navigation: {
+    requestNodeCount: 2,
+    requests: [{
+      label: "GET /api/data",
+      requestId: "request-1",
+      f12Columns: { name: "data", status: 200, type: "fetch" },
+      detail: { tool: "devtools_request_detail", input: { requestId: "request-1" } },
+    }],
   },
   nextTools: ["devtools_request_detail"],
   handoffCompleteness: {
@@ -81,7 +91,9 @@ printSummary({
       firstStep: { tool: "devtools_artifact_inspect", input: { path: "tmp/security-research-pack.json" } },
       latestHandoffInspect: { tool: "devtools_artifact_inspect", input: { path: "tmp/security-research-pack.json" } },
       latestHandoffRead: { tool: "devtools_artifact_read", input: { path: "tmp/security-research-pack.json", mode: "line", startLine: 1, maxLines: 120 } },
+      firstF12RequestDetail: { label: "GET /api/data", tool: "devtools_request_detail", input: { requestId: "request-1" }, f12Columns: { name: "data" } },
       firstConcreteDrilldown: { label: "Request detail", tool: "devtools_request_detail", input: { requestId: "request-1" } },
+      f12NavigationRequestCount: 2,
       artifactEntrypointCount: 3,
     },
   },
@@ -104,7 +116,11 @@ assert(output.includes("route first step: devtools_artifact_inspect"), "summary 
 assert(output.includes("route handoff inspect: devtools_artifact_inspect path=tmp/security-research-pack.json"), "summary missing route handoff inspect");
 assert(output.includes("route handoff read: devtools_artifact_read path=tmp/security-research-pack.json"), "summary missing route handoff read");
 assert(output.includes("route first drilldown: Request detail: devtools_request_detail"), "summary missing route first drilldown");
+assert(output.includes("route first F12 request: data: devtools_request_detail requestId=request-1"), "summary missing route first F12 request");
+assert(output.includes("route F12 navigation requests: 2"), "summary missing route F12 navigation count");
 assert(output.includes("route evidence entrypoints: 3"), "summary missing route evidence entrypoint count");
+assert(output.includes("- F12 navigation requests: 2"), "summary missing F12 navigation request count");
+assert(output.includes("first request detail: data: devtools_request_detail requestId=request-1"), "summary missing F12 navigation request detail");
 assert(output.includes("browser_open -> browser_capture -> browser_inspect -> browser_security_pack -> drilldownPlan"), "summary missing workflow path");
 assert(output.includes("- agent entry mode: facade-first"), "summary missing agent entry mode");
 assert(output.includes("first call: devtools_professional_readiness"), "summary missing recommended first call");

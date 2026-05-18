@@ -130,7 +130,11 @@ try {
   assert(output.afterReadiness?.evidenceReady === true, `after readiness missing evidence: ${JSON.stringify(output.afterReadiness)}`);
   assert(output.afterReadiness?.routeSummary?.latestHandoffInspect?.tool === "devtools_artifact_inspect", `example missing routeSummary handoff inspect: ${JSON.stringify(output.afterReadiness?.routeSummary)}`);
   assert(output.afterReadiness?.routeSummary?.latestHandoffRead?.tool === "devtools_artifact_read", `example missing routeSummary handoff read: ${JSON.stringify(output.afterReadiness?.routeSummary)}`);
+  assert(output.afterReadiness?.routeSummary?.firstF12RequestDetail?.tool === "devtools_request_detail", `example missing routeSummary F12 request detail: ${JSON.stringify(output.afterReadiness?.routeSummary)}`);
   assert(output.afterReadiness?.routeSummary?.firstConcreteDrilldown?.tool === "devtools_request_detail", `example missing routeSummary concrete drilldown: ${JSON.stringify(output.afterReadiness?.routeSummary)}`);
+  assert(output.afterReadiness?.f12NavigationRequestCount >= 1, `example missing readiness F12 navigation count: ${JSON.stringify(output.afterReadiness)}`);
+  assert(output.f12Navigation?.requestNodeCount >= 1, `example missing pack F12 navigation: ${JSON.stringify(output.f12Navigation)}`);
+  assert(output.f12Navigation?.firstDetailRoute?.tool === "devtools_request_detail", `example missing pack F12 detail route: ${JSON.stringify(output.f12Navigation)}`);
   assert(output.handoff?.ready === true, `handoff not ready: ${JSON.stringify(output.handoff)}`);
   assert(output.artifactCoverage?.ready === true, `artifact coverage not ready: ${JSON.stringify(output.artifactCoverage)}`);
   assert(output.artifactPaths?.researchPackPath, "example missing research pack path");

@@ -265,8 +265,9 @@ npm run research:pack -- --url https://example.com --profile researcher
 
 The CLI prints key artifact paths plus the professional workflow, agent entry
 route, handoff readiness, artifact coverage, professional readiness, capture
-status, artifact kind counts, route summary, and handoff read/inspect commands.
-Use `--json` when an agent or script needs the full response.
+status, artifact kind counts, route summary, F12 request-detail navigation, and
+handoff read/inspect commands. Use `--json` when an agent or script needs the
+full response.
 
 Runnable example:
 
@@ -275,7 +276,7 @@ node examples/security-research-pack.mjs https://example.com
 ```
 
 The example prints pre/post professional readiness, handoff paths, artifact
-coverage, and first drill-down routes.
+coverage, F12 request-detail navigation, and first drill-down routes.
 
 Example smoke:
 

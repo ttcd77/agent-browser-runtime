@@ -123,6 +123,16 @@ export function printSummary(pack, output = console.log) {
   output(`- evidence timeline events: ${summary.evidenceTimelineEventCount ?? "(unknown)"}`);
   output(`- F12 parity panels: ${summary.f12ParityPanelCount ?? "(unknown)"}`);
   output(`- drilldowns: ${summary.drilldownCount ?? "(unknown)"}`);
+  if (summary.f12NavigationRequestCount !== undefined || pack.f12Navigation) {
+    const navigation = pack.f12Navigation || {};
+    const firstDetail = navigation.requests?.find((row) => row?.detail) || navigation.firstRequest || null;
+    output(`- F12 navigation requests: ${summary.f12NavigationRequestCount ?? navigation.requestNodeCount ?? "(unknown)"}`);
+    if (firstDetail?.detail?.tool) {
+      const requestId = firstDetail.detail.input?.requestId || firstDetail.requestId || "(unknown)";
+      const name = firstDetail.f12Columns?.name || firstDetail.label || firstDetail.url || "(unlabelled)";
+      output(`  - first request detail: ${name}: ${firstDetail.detail.tool} requestId=${requestId}`);
+    }
+  }
   if (summary.handoffReady !== undefined || pack.handoffCompleteness) {
     const completeness = pack.handoffCompleteness || {};
     output(`- handoff ready: ${summary.handoffReady ?? completeness.ready ?? "(unknown)"}`);
@@ -157,6 +167,14 @@ export function printSummary(pack, output = console.log) {
     }
     if (route.firstConcreteDrilldown?.tool) {
       output(`  - route first drilldown: ${route.firstConcreteDrilldown.label || "(unlabelled)"}: ${route.firstConcreteDrilldown.tool}`);
+    }
+    if (route.firstF12RequestDetail?.tool) {
+      const requestId = route.firstF12RequestDetail.input?.requestId || "(unknown)";
+      const name = route.firstF12RequestDetail.f12Columns?.name || route.firstF12RequestDetail.label || "(unlabelled)";
+      output(`  - route first F12 request: ${name}: ${route.firstF12RequestDetail.tool} requestId=${requestId}`);
+    }
+    if (typeof route.f12NavigationRequestCount === "number") {
+      output(`  - route F12 navigation requests: ${route.f12NavigationRequestCount}`);
     }
     if (typeof route.artifactEntrypointCount === "number") {
       output(`  - route evidence entrypoints: ${route.artifactEntrypointCount}`);

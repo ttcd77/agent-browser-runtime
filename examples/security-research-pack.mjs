@@ -62,7 +62,15 @@ console.log(JSON.stringify({
     artifactCount: afterReadiness.artifactCount,
     timelineEventCount: afterReadiness.timelineEventCount,
     routeSummary: afterReadiness.routeSummary,
+    f12NavigationRequestCount: afterReadiness.summary?.f12NavigationRequestCount ?? afterReadiness.f12Navigation?.requestNodeCount ?? null,
+    firstF12RequestDetail: afterReadiness.routeSummary?.firstF12RequestDetail || null,
     objectiveBoundary: afterReadiness.objectiveBoundary,
+  },
+  f12Navigation: {
+    requestNodeCount: pack.f12Navigation?.requestNodeCount ?? null,
+    firstRequest: pack.f12Navigation?.firstRequest || null,
+    firstDetailRoute: pack.f12Navigation?.requests?.find((row) => row?.detail)?.detail || null,
+    sectionRoutes: pack.f12Navigation?.sectionRoutes || null,
   },
   handoff: {
     ready: pack.handoffCompleteness?.ready,

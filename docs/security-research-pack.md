@@ -69,6 +69,8 @@ Typical output includes:
   artifact index, evidence timeline, capture status, and parity matrix,
 - artifact coverage rows showing whether each requested evidence file is
   `present`, `skipped`, or `missing`,
+- `f12Navigation`, a deterministic index from captured request nodes to
+  `devtools_request_detail` plus F12 request sections,
 - capture boundaries so the agent knows what time window was recorded.
 
 The saved paths are local files under the selected profile evidence directory.
@@ -77,8 +79,9 @@ machine-readable artifacts.
 
 The CLI shortcut also calls `devtools_professional_readiness` after the pack is
 created. This gives the agent a separate mechanical check for workflow,
-capture, artifact inventory, and evidence timeline readiness. It is still only
-an evidence-readiness check, not a vulnerability judgment.
+capture, artifact inventory, evidence timeline, and the first F12 request-detail
+route. It is still only an evidence-readiness check, not a vulnerability
+judgment.
 
 ## Why This Helps Security Research
 
@@ -119,8 +122,11 @@ Transport boundaries:
 2. Call `devtools_security_research_pack`.
 3. Read `summary` and `steps`.
 4. Open the saved evidence bundle and manifest.
-5. Use the correlation graph and auth boundary report to choose drill-down.
-6. Drill down with `devtools_request_detail`, `devtools_request_payload`,
+5. Use `f12Navigation` or readiness `routeSummary.firstF12RequestDetail` for
+   the first concrete request-detail drill-down.
+6. Use the correlation graph and auth boundary report to choose deeper
+   drill-down.
+7. Drill down with `devtools_request_detail`, `devtools_request_payload`,
    `devtools_capture_diff`, `devtools_token_scan`, `devtools_storage_snapshot`,
    `devtools_source_get`, or `devtools_trace_query` only when needed.
 
