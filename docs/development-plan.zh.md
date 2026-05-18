@@ -340,6 +340,17 @@
 - Managed Professional smoke 和 Personal Chrome smoke 都已覆盖 agentUsageRoute check 与 HAR artifact coverage row。
 - 这只是最新 handoff JSON 的结构化摘要，不读取证据正文、不判断漏洞。
 
+### 2026-05-18: Readiness Research Pack Drilldown Actions
+
+已经完成:
+
+- `devtools_professional_readiness` / `personal_chrome_professional_readiness` 现在返回 `researchPackDrilldowns`。
+- readiness 会把最新 research-pack handoff 的首批 drilldown 合并进 `nextActions`。
+- Agent 只读 readiness 就能直接进入 request detail、replay boundary、trace query、artifact preview 等具体证据路线。
+- readiness 新增 `researchPackDrilldownsReachable` 机械检查。
+- Managed Professional smoke 和 Personal Chrome smoke 都已覆盖 request-detail drilldown 与 next action。
+- 这只是确定性路线暴露，不读取证据正文、不判断漏洞。
+
 ### 2026-05-18: Professional Readiness Tool
 
 已经完成:

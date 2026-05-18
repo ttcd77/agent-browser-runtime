@@ -2393,6 +2393,7 @@ function buildProfessionalReadiness({
       };
     }
   }
+  const researchPackDrilldowns = Array.isArray(latestResearchPackSummary?.firstDrilldowns) ? latestResearchPackSummary.firstDrilldowns.slice(0, 6) : [];
   const latestResearchPackHandoff = latestResearchPack ? {
     path: latestResearchPack.path,
     bytes: latestResearchPack.bytes ?? null,
@@ -2442,6 +2443,11 @@ function buildProfessionalReadiness({
       evidence: latestResearchPackSummary?.ready ?? latestResearchPackSummary?.error ?? null,
     },
     {
+      name: "researchPackDrilldownsReachable",
+      present: !latestResearchPackSummary || Boolean(researchPackDrilldowns.length > 0),
+      evidence: researchPackDrilldowns.map((entry) => entry.tool),
+    },
+    {
       name: "artifactInventoryReachable",
       present: artifactIndex === null || Boolean(!artifactIndex.unavailable && !artifactIndex.error && artifactCount !== null),
       evidence: artifactCount,
@@ -2480,9 +2486,21 @@ function buildProfessionalReadiness({
       why: "Inspect the latest saved research-pack handoff and continue from its objective agent route.",
     });
   }
-  const seenNextActions = new Set(nextActions.map((entry) => `${entry.tool}:${entry.input?.path || ""}`));
+  const actionKey = (entry) => `${entry.tool}:${entry.input?.path || ""}:${entry.input?.requestId || ""}:${entry.input?.tracePath || ""}:${entry.input?.query || ""}`;
+  const seenNextActions = new Set(nextActions.map(actionKey));
+  for (const entry of researchPackDrilldowns) {
+    const key = actionKey(entry);
+    if (seenNextActions.has(key)) continue;
+    nextActions.push({
+      tool: entry.tool,
+      input: entry.input || {},
+      why: entry.label ? `Continue with research-pack drilldown: ${entry.label}.` : "Continue with a deterministic drilldown from the latest research pack.",
+    });
+    seenNextActions.add(key);
+    if (nextActions.length >= 10) break;
+  }
   for (const entry of artifactDrilldowns) {
-    const key = `${entry.tool}:${entry.input?.path || ""}`;
+    const key = actionKey(entry);
     if (seenNextActions.has(key)) continue;
     nextActions.push({
       tool: entry.tool,
@@ -2490,7 +2508,7 @@ function buildProfessionalReadiness({
       why: entry.label ? `Continue with artifact drilldown: ${entry.label}.` : "Continue with a deterministic artifact drilldown from the latest artifact index.",
     });
     seenNextActions.add(key);
-    if (nextActions.length >= 8) break;
+    if (nextActions.length >= 12) break;
   }
   nextActions.push({
     tool: "devtools_workflow_guide",
@@ -2515,6 +2533,7 @@ function buildProfessionalReadiness({
     f12Coverage,
     latestResearchPackHandoff,
     latestResearchPackSummary,
+    researchPackDrilldowns,
     recommendedRoute,
     panelRoutes: agentUsage?.panelRoutes || null,
     artifactDrilldowns,

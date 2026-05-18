@@ -278,10 +278,13 @@ try {
   assert(finalReadiness.latestResearchPackSummary?.handoffChecks?.some((check) => check.name === "agentUsageRoute" && check.present), `professional readiness missing latest research-pack handoff summary: ${JSON.stringify(finalReadiness.latestResearchPackSummary)}`);
   assert(finalReadiness.latestResearchPackSummary?.artifactCoverageRows?.some((row) => row.name === "har" && row.status === "present"), `professional readiness missing latest research-pack artifact coverage: ${JSON.stringify(finalReadiness.latestResearchPackSummary)}`);
   assert(finalReadiness.checks?.some((check) => check.name === "latestResearchPackSummaryReachable" && check.present), `professional readiness missing latest research-pack summary check: ${JSON.stringify(finalReadiness.checks)}`);
+  assert(finalReadiness.researchPackDrilldowns?.some((entry) => entry.tool === "devtools_request_detail" && entry.input?.requestId), `professional readiness missing research-pack request drilldown: ${JSON.stringify(finalReadiness.researchPackDrilldowns)}`);
+  assert(finalReadiness.checks?.some((check) => check.name === "researchPackDrilldownsReachable" && check.present), `professional readiness missing research-pack drilldown check: ${JSON.stringify(finalReadiness.checks)}`);
   assert(finalReadiness.checks?.some((check) => check.name === "artifactDrilldownsReachable" && check.present), `professional readiness missing artifact drilldown check: ${JSON.stringify(finalReadiness.checks)}`);
   assert(finalReadiness.recommendedRoute?.some((step) => step.tool === "devtools_artifact_index"), "professional readiness missing artifact index in recommended route");
   assert(finalReadiness.artifactDrilldowns?.some((entry) => entry.tool === "devtools_artifact_inspect" && entry.input?.path), "professional readiness missing artifact drilldown route");
   assert(finalReadiness.nextActions?.some((entry) => entry.tool === "devtools_artifact_inspect"), "professional readiness missing handoff inspect next action");
+  assert(finalReadiness.nextActions?.some((entry) => entry.tool === "devtools_request_detail" && entry.input?.requestId), "professional readiness missing research-pack request-detail next action");
   assert(finalReadiness.nextActions?.some((entry) => entry.tool === "devtools_artifact_read" && entry.input?.path), "professional readiness missing artifact-read next action");
   assert(pack.drilldownPlan?.drilldowns?.some((entry) => entry.tool === "devtools_request_detail"), "professional pack missing request-detail drilldown");
   assert(pack.drilldownPlan?.planPath === pack.summary.drilldownPlanPath, "professional pack drilldown path mismatch");
