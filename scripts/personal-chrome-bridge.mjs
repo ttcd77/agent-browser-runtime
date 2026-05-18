@@ -3076,6 +3076,18 @@ function buildAgentInspectToolPlan(focus, options = {}) {
   };
 }
 
+function professionalAppsecWorkflowSummary() {
+  return {
+    task: "professional-appsec",
+    defaultPath: ["browser_open", "browser_capture", "browser_inspect", "browser_security_pack", "drilldownPlan"],
+    guideTool: "devtools_workflow_guide",
+    guideInput: { task: "professional-appsec" },
+    firstInterface: "browser_* facade tools",
+    drilldownBoundary: "Use devtools_* or browser_raw only after the facade returns concrete evidence or a drilldown route.",
+    objectiveBoundary: "The workflow collects and routes F12 evidence; it does not classify vulnerabilities.",
+  };
+}
+
 async function runAgentInspect(params = {}) {
   const focus = String(params.focus || "overview");
   const limit = typeof params.limit === "number" ? params.limit : 20;
@@ -3092,6 +3104,7 @@ async function runAgentInspect(params = {}) {
     summary: "",
     evidence: {},
     nextTools: [],
+    professionalWorkflow: professionalAppsecWorkflowSummary(),
     toolPlan: buildAgentInspectToolPlan(focus, {
       requestId: Boolean(params.requestId),
       query: Boolean(params.query),

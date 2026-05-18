@@ -195,6 +195,8 @@ try {
   });
   assert(firstInspect.facade === "browser_inspect", "professional browser_inspect facade marker missing");
   assert(firstInspect.result?.toolPlan?.firstPass?.length >= 1, "professional browser_inspect missing first-pass tool plan");
+  assert(firstInspect.result?.professionalWorkflow?.defaultPath?.join(" -> ") === "browser_open -> browser_capture -> browser_inspect -> browser_security_pack -> drilldownPlan", "professional browser_inspect missing professional workflow summary");
+  assert(firstInspect.result?.professionalWorkflow?.objectiveBoundary?.includes("does not classify vulnerabilities"), "professional browser_inspect workflow summary crossed objective-tool boundary");
   const captureStatus = await callTool(baseUrl, "browser_capture", {
     profile: "professional",
     action: "status",

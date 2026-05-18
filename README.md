@@ -168,6 +168,10 @@ still available for drill-down and parity with DevTools panels, but they are not
 the first interface. Use `browser_raw` only when the facade cannot express the
 required F12 operation.
 
+`browser_inspect` / `agent_inspect` also return this professional workflow
+summary, so a first-screen agent call can route itself without scanning the full
+tool catalog.
+
 Example tool calls:
 
 ```bash

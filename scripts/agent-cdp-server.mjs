@@ -2847,6 +2847,18 @@ function buildAgentInspectToolPlan(focus, options = {}) {
   };
 }
 
+function professionalAppsecWorkflowSummary() {
+  return {
+    task: "professional-appsec",
+    defaultPath: ["browser_open", "browser_capture", "browser_inspect", "browser_security_pack", "drilldownPlan"],
+    guideTool: "devtools_workflow_guide",
+    guideInput: { task: "professional-appsec" },
+    firstInterface: "browser_* facade tools",
+    drilldownBoundary: "Use devtools_* or browser_raw only after the facade returns concrete evidence or a drilldown route.",
+    objectiveBoundary: "The workflow collects and routes F12 evidence; it does not classify vulnerabilities.",
+  };
+}
+
 function devtoolsToolCategory(name) {
   if (name === "agent_inspect" || /backend_capabilities|tool_catalog|tool_help|workflow_guide|capability_map|parity_matrix|protocol_schema/.test(name)) return "orientation";
   if (/tabs|snapshot|screenshot|click|type|scroll|eval|hard_reload/.test(name)) return "page-control";
@@ -9828,6 +9840,7 @@ function registerStandaloneBrowserTools(tools, cdpPort, profileRegistry, default
         summary: "",
         evidence: {},
         nextTools: [],
+        professionalWorkflow: professionalAppsecWorkflowSummary(),
         toolPlan: buildAgentInspectToolPlan(focus, {
           requestId: Boolean(params?.requestId),
           query: Boolean(params?.query),
