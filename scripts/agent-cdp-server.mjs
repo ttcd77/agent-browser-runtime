@@ -3081,6 +3081,17 @@ function buildProfessionalReadiness({
   const latestResearchPack = (artifactIndex?.artifacts || [])
     .filter((artifact) => artifact.kind === "research-pack" && artifact.path)
     .sort((a, b) => String(b.modifiedAt || "").localeCompare(String(a.modifiedAt || "")))[0] || null;
+  let latestResearchPackSummary = null;
+  if (latestResearchPack?.path) {
+    try {
+      latestResearchPackSummary = summarizeResearchPackHandoff(readJsonFile(latestResearchPack.path));
+    } catch (error) {
+      latestResearchPackSummary = {
+        path: latestResearchPack.path,
+        error: String(error?.message || error),
+      };
+    }
+  }
   const latestResearchPackHandoff = latestResearchPack ? {
     path: latestResearchPack.path,
     bytes: latestResearchPack.bytes ?? null,
@@ -3123,6 +3134,11 @@ function buildProfessionalReadiness({
       name: "harCompletenessReachable",
       present: harCompleteness === null || Boolean(!harCompleteness.unavailable && !harCompleteness.error && harCoverage),
       evidence: harCoverage,
+    },
+    {
+      name: "latestResearchPackSummaryReachable",
+      present: !latestResearchPack || Boolean(latestResearchPackSummary && !latestResearchPackSummary.error),
+      evidence: latestResearchPackSummary?.ready ?? latestResearchPackSummary?.error ?? null,
     },
     {
       name: "artifactInventoryReachable",
@@ -3198,6 +3214,7 @@ function buildProfessionalReadiness({
     timelineTypes,
     f12Coverage,
     latestResearchPackHandoff,
+    latestResearchPackSummary,
     recommendedRoute,
     panelRoutes: agentUsage?.panelRoutes || null,
     artifactDrilldowns,

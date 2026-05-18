@@ -330,6 +330,16 @@
 - Managed Professional smoke 和 Personal Chrome smoke 都已覆盖 HAR coverage summary。
 - 这只是 HAR 证据覆盖率，不读取正文、不判断漏洞。
 
+### 2026-05-18: Readiness Research Pack Summary
+
+已经完成:
+
+- `devtools_professional_readiness` / `personal_chrome_professional_readiness` 现在返回 `latestResearchPackSummary`。
+- Agent 可以从 readiness 直接看到最新 research-pack handoff 的 ready 状态、handoff checks、artifact coverage rows、首批 drilldown 和推荐路线。
+- readiness 新增 `latestResearchPackSummaryReachable` 机械检查。
+- Managed Professional smoke 和 Personal Chrome smoke 都已覆盖 agentUsageRoute check 与 HAR artifact coverage row。
+- 这只是最新 handoff JSON 的结构化摘要，不读取证据正文、不判断漏洞。
+
 ### 2026-05-18: Professional Readiness Tool
 
 已经完成:

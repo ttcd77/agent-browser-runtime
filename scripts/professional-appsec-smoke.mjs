@@ -275,6 +275,9 @@ try {
   assert(finalReadiness.checks?.some((check) => check.name === "harCompletenessReachable" && check.present), `professional readiness missing HAR completeness check: ${JSON.stringify(finalReadiness.checks)}`);
   assert(finalReadiness.latestResearchPackHandoff?.path, "professional readiness missing latest research pack handoff route");
   assert(finalReadiness.latestResearchPackHandoff?.inspect?.tool === "devtools_artifact_inspect", "professional readiness missing latest handoff inspect route");
+  assert(finalReadiness.latestResearchPackSummary?.handoffChecks?.some((check) => check.name === "agentUsageRoute" && check.present), `professional readiness missing latest research-pack handoff summary: ${JSON.stringify(finalReadiness.latestResearchPackSummary)}`);
+  assert(finalReadiness.latestResearchPackSummary?.artifactCoverageRows?.some((row) => row.name === "har" && row.status === "present"), `professional readiness missing latest research-pack artifact coverage: ${JSON.stringify(finalReadiness.latestResearchPackSummary)}`);
+  assert(finalReadiness.checks?.some((check) => check.name === "latestResearchPackSummaryReachable" && check.present), `professional readiness missing latest research-pack summary check: ${JSON.stringify(finalReadiness.checks)}`);
   assert(finalReadiness.checks?.some((check) => check.name === "artifactDrilldownsReachable" && check.present), `professional readiness missing artifact drilldown check: ${JSON.stringify(finalReadiness.checks)}`);
   assert(finalReadiness.recommendedRoute?.some((step) => step.tool === "devtools_artifact_index"), "professional readiness missing artifact index in recommended route");
   assert(finalReadiness.artifactDrilldowns?.some((entry) => entry.tool === "devtools_artifact_inspect" && entry.input?.path), "professional readiness missing artifact drilldown route");
