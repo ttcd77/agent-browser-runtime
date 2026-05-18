@@ -170,6 +170,15 @@
 - `summary` 增加 `artifactFileCount`、`evidenceTimelineEventCount`、`f12ParityPanelCount`，方便 Agent 先判断证据包是否完整，再选择下一步 drilldown。
 - Managed Browser 和 Personal Chrome 都保持同合同；Personal 不支持的底层能力仍然通过 parity / notApplicable 边界表达。
 
+### 2026-05-18: Research Pack Drilldown Plan
+
+已经完成:
+
+- `devtools_security_research_pack` / `browser_security_pack` 新增 `drilldownPlan`。
+- `drilldownPlan` 会从研究包里的 timeline、artifact index、requestId、HAR、trace、bundle 等客观证据生成下一步工具调用建议。
+- `nextTools` 现在来自 drilldown plan，而不是固定字符串列表；这让 Agent 能从一次研究包直接进入 request detail、replay boundary、artifact inspect、trace query、artifact search 等后续动作。
+- 这个 plan 只是确定性导航提示，不判断漏洞、不替代模型推理。
+
 ### 2026-05-18: Evidence Timeline Filters
 
 已经完成:

@@ -115,12 +115,19 @@ function printSummary(pack) {
   console.log(`- artifact files: ${summary.artifactFileCount ?? "(unknown)"}`);
   console.log(`- evidence timeline events: ${summary.evidenceTimelineEventCount ?? "(unknown)"}`);
   console.log(`- F12 parity panels: ${summary.f12ParityPanelCount ?? "(unknown)"}`);
+  console.log(`- drilldowns: ${summary.drilldownCount ?? "(unknown)"}`);
   console.log("- artifacts:");
   for (const [name, value] of Object.entries(artifacts)) {
     if (value) console.log(`  - ${name}: ${value}`);
   }
   if (Array.isArray(pack.nextTools) && pack.nextTools.length) {
     console.log(`- next tools: ${pack.nextTools.join(", ")}`);
+  }
+  if (Array.isArray(pack.drilldownPlan?.drilldowns) && pack.drilldownPlan.drilldowns.length) {
+    console.log("- first drilldowns:");
+    for (const step of pack.drilldownPlan.drilldowns.slice(0, 5)) {
+      console.log(`  - ${step.label}: ${step.tool}`);
+    }
   }
 }
 

@@ -2056,6 +2056,88 @@ function f12ParityMatrix() {
   };
 }
 
+function buildResearchPackDrilldowns(artifacts = {}) {
+  const artifactRows = Array.isArray(artifacts.artifactIndex?.artifacts) ? artifacts.artifactIndex.artifacts : [];
+  const timelineEvents = Array.isArray(artifacts.evidenceTimeline?.events) ? artifacts.evidenceTimeline.events : [];
+  const firstRequest = timelineEvents.find((event) => event.type === "network-request" && event.requestId);
+  const harArtifact = artifactRows.find((artifact) => artifact.kind === "har" || String(artifact.path || "").toLowerCase().endsWith(".har"));
+  const traceArtifact = artifactRows.find((artifact) => artifact.kind === "trace" || String(artifact.path || "").toLowerCase().includes("\\traces\\") || String(artifact.path || "").toLowerCase().includes("/traces/"));
+  const bundleArtifact = artifactRows.find((artifact) => artifact.kind === "bundle" || String(artifact.path || "").toLowerCase().includes("\\bundles\\") || String(artifact.path || "").toLowerCase().includes("/bundles/"));
+  const rows = [
+    {
+      label: "Chronological evidence orientation",
+      tool: "devtools_evidence_timeline",
+      input: { maxEvents: 80, maxArtifacts: 120 },
+      why: "Start from objective event order before selecting request, console, realtime, or artifact drilldowns.",
+    },
+    {
+      label: "Artifact inventory",
+      tool: "devtools_artifact_index",
+      input: { maxFiles: 200 },
+      why: "List saved HAR, trace, bundle, manifest, graph, and report files without loading large artifacts into context.",
+    },
+    {
+      label: "F12 backend boundary check",
+      tool: "devtools_f12_parity_matrix",
+      input: {},
+      why: "Decide whether a missing signal is a browser/backend boundary or a wrapper gap.",
+    },
+  ];
+  if (firstRequest) {
+    rows.push({
+      label: "First captured request detail",
+      tool: "devtools_request_detail",
+      input: { requestId: firstRequest.requestId },
+      why: "Inspect headers, cookies, timing, redirect chain, initiator, and body availability for a concrete observed request.",
+    });
+    rows.push({
+      label: "Browser-level replay boundary check",
+      tool: "devtools_request_replay_batch",
+      input: { requestId: firstRequest.requestId, variants: [{ label: "baseline" }] },
+      why: "Compare observed browser-fetch replay behavior while preserving replayBoundary limitations.",
+    });
+  }
+  if (harArtifact?.path) {
+    rows.push({
+      label: "HAR artifact shape",
+      tool: "devtools_artifact_inspect",
+      input: { path: harArtifact.path, maxBytes: 8000 },
+      why: "Inspect HAR entry/body/timing structure without reading the full file into context.",
+    });
+  }
+  if (traceArtifact?.path) {
+    rows.push({
+      label: "Trace event drilldown",
+      tool: "devtools_trace_query",
+      input: { tracePath: traceArtifact.path, minDurationMs: 5, limit: 20 },
+      why: "Query saved Chrome trace events by duration/name/category for performance or execution timing evidence.",
+    });
+  }
+  if (bundleArtifact?.path) {
+    rows.push({
+      label: "Evidence bundle preview",
+      tool: "devtools_artifact_read",
+      input: { path: bundleArtifact.path, mode: "line", startLine: 1, maxLines: 80 },
+      why: "Read a bounded slice of the compact evidence bundle for handoff context.",
+    });
+  }
+  rows.push({
+    label: "Literal evidence search",
+    tool: "devtools_artifact_search",
+    input: { query: "<literal-url-token-header-or-marker>", maxFiles: 200, maxMatches: 20 },
+    why: "Search saved evidence files for a concrete string chosen by the agent or human.",
+  });
+  return {
+    generatedAt: new Date().toISOString(),
+    count: rows.length,
+    drilldowns: rows,
+    boundaries: [
+      "Drilldowns are deterministic navigation hints, not vulnerability judgments.",
+      "Inputs with placeholder values must be filled by the agent or human from observed evidence.",
+    ],
+  };
+}
+
 function workflowGuide(task = "first-pass") {
   const key = String(task || "first-pass").trim().toLowerCase().replace(/[\s_]+/g, "-");
   const recipes = {
@@ -2698,6 +2780,7 @@ async function securityResearchPack(params = {}) {
   artifacts.artifactIndex = await safeBridgeTool("devtools_artifact_index", { maxFiles: 200 });
   artifacts.evidenceTimeline = await safeBridgeTool("devtools_evidence_timeline", { maxEvents: 80, maxArtifacts: 120 });
   const parityMatrix = await safeBridgeTool("devtools_f12_parity_matrix");
+  const drilldownPlan = buildResearchPackDrilldowns(artifacts);
   const networkSummary = network?.evidence?.summary || {};
   const page = overview?.evidence?.diagnostics?.page || overview?.evidence?.backendCapabilities?.activeTab || {};
   return {
@@ -2723,6 +2806,7 @@ async function securityResearchPack(params = {}) {
       artifactFileCount: artifacts.artifactIndex?.totalFileCount ?? null,
       evidenceTimelineEventCount: artifacts.evidenceTimeline?.eventCount ?? null,
       f12ParityPanelCount: parityMatrix?.summary?.panelCount ?? null,
+      drilldownCount: drilldownPlan.count,
     },
     steps,
     evidence: {
@@ -2735,12 +2819,13 @@ async function securityResearchPack(params = {}) {
     },
     artifacts,
     parityMatrix,
+    drilldownPlan,
     captureBoundaries: [
       "Personal Chrome mode runs against the user's active browser profile after local extension authorization.",
       "This workflow records only evidence observable after capture starts and during the reload/reproduction window.",
       "It organizes F12 evidence for security research but does not decide exploitability.",
     ],
-    nextTools: ["agent_inspect", "devtools_request_detail", "devtools_request_replay_batch", "devtools_capture_diff", "devtools_auth_boundary_report", "devtools_trace_query"],
+    nextTools: drilldownPlan.drilldowns.map((entry) => entry.tool),
   };
 }
 
