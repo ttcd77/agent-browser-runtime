@@ -2478,6 +2478,7 @@ function buildProfessionalReadiness({
   const firstF12RequestDetailPath = latestResearchPackSummary?.artifactPaths?.firstF12RequestDetailPath || null;
   const f12NavigationPath = latestResearchPackSummary?.artifactPaths?.f12NavigationPath || null;
   const harCompletenessPath = latestResearchPackSummary?.artifactPaths?.harCompletenessPath || null;
+  const tracePath = latestResearchPackSummary?.artifactPaths?.tracePath || null;
   const firstF12RequestDetailArtifact = firstF12RequestDetailPath ? {
     path: firstF12RequestDetailPath,
     inspect: { tool: "devtools_artifact_inspect", input: { path: firstF12RequestDetailPath, maxBytes: 120000 } },
@@ -2492,6 +2493,11 @@ function buildProfessionalReadiness({
     path: harCompletenessPath,
     inspect: { tool: "devtools_artifact_inspect", input: { path: harCompletenessPath, maxBytes: 160000 } },
     read: { tool: "devtools_artifact_read", input: { path: harCompletenessPath, mode: "line", startLine: 1, lineCount: 160 } },
+  } : null;
+  const traceArtifact = tracePath ? {
+    path: tracePath,
+    inspect: { tool: "devtools_artifact_inspect", input: { path: tracePath, maxBytes: 160000 } },
+    query: { tool: "devtools_trace_query", input: { tracePath, minDurationMs: 5, limit: 20 } },
   } : null;
   const checks = [
     {
@@ -2607,6 +2613,18 @@ function buildProfessionalReadiness({
       seenNextActions.add(key);
     }
   }
+  if (traceArtifact) {
+    const entry = {
+      tool: traceArtifact.query.tool,
+      input: traceArtifact.query.input,
+      why: "Query the saved Chrome trace artifact for long events and timeline evidence.",
+    };
+    const key = actionKey(entry);
+    if (!seenNextActions.has(key)) {
+      nextActions.push(entry);
+      seenNextActions.add(key);
+    }
+  }
   if (f12NavigationArtifact) {
     const entry = {
       tool: f12NavigationArtifact.inspect.tool,
@@ -2679,6 +2697,8 @@ function buildProfessionalReadiness({
     latestHandoffInspect: latestResearchPackHandoff?.inspect || null,
     latestHandoffRead: latestResearchPackHandoff?.read || null,
     harCompletenessArtifact,
+    traceArtifact,
+    traceQuery: traceArtifact?.query || null,
     f12NavigationArtifact,
     firstF12RequestDetailArtifact,
     firstF12RequestDetail: f12NavigationDrilldowns[0] ? {
@@ -3758,6 +3778,7 @@ async function securityResearchPack(params = {}) {
     artifactPaths: {
       harPath: summary.harPath,
       harCompletenessPath: summary.harCompletenessPath,
+      tracePath: summary.tracePath,
       applicationExportPath: summary.applicationExportPath,
       evidenceBundlePath: summary.evidenceBundlePath,
       evidenceManifestPath: summary.evidenceManifestPath,

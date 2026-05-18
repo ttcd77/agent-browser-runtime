@@ -916,3 +916,13 @@
 - `nextActions` 会包含该 artifact 的 `devtools_artifact_inspect` 下一步，Agent 不必先读完整 research pack 才能找到 Network 证据完整度报告。
 - Managed Browser / Personal Chrome smoke 都覆盖该路线。
 - 该路线只读取已保存 HAR 覆盖率证据，不判断风险。
+
+### 2026-05-19: Readiness Trace Artifact / Trace Query 路线完成
+
+已经完成:
+
+- research pack handoff 的 `artifactPaths.tracePath` 现在显式返回保存下来的 Chrome trace 文件路径。
+- `devtools_professional_readiness.routeSummary.traceArtifact` 会返回 trace artifact 的 inspect 路线。
+- `devtools_professional_readiness.routeSummary.traceQuery` 和 `nextActions` 会直接给出 `devtools_trace_query` 输入，Agent 可以从 readiness 进入 Performance/Timeline 证据钻取。
+- Managed Browser / Personal Chrome smoke 都覆盖该路线。
+- 该路线只查询已保存 trace 事件和时间线证据，不判断性能风险或漏洞。

@@ -409,12 +409,13 @@ assert(typeof traceCompare.deltas?.eventCount === "number", "Personal Chrome tra
 const researchPack = await callTool("devtools_security_research_pack", {
   limit: 5,
   waitMs: 500,
-  includeTrace: false,
+  includeTrace: true,
   includeHar: true,
   includeApplicationExport: true,
 });
 assert(researchPack.backend === "personal-chrome", `Personal Chrome security research pack wrong backend: ${JSON.stringify(researchPack)}`);
 assert(researchPack.summary?.harCompletenessPath, "Personal Chrome security research pack missing HAR completeness path");
+assert(researchPack.summary?.tracePath, "Personal Chrome security research pack missing trace path");
 assert(researchPack.artifacts?.harCompleteness?.entryCount >= 1, `Personal Chrome security research pack missing HAR completeness artifact: ${JSON.stringify(researchPack.artifacts?.harCompleteness)}`);
 assert(researchPack.summary?.evidenceBundlePath, "Personal Chrome security research pack missing bundle path");
 assert(researchPack.summary?.evidenceManifestPath, "Personal Chrome security research pack missing evidence manifest path");
@@ -491,7 +492,7 @@ assert(facadeRaw.result?.page?.url, "Personal Chrome browser_raw did not return 
 const facadePack = await callTool("browser_security_pack", {
   limit: 5,
   waitMs: 500,
-  includeTrace: false,
+  includeTrace: true,
   includeHar: true,
   includeApplicationExport: true,
 });
@@ -503,6 +504,7 @@ assert(facadePack.summary?.f12ParityPanelCount >= 1, "Personal Chrome browser_se
 assert(facadePack.summary?.drilldownCount >= 3, "Personal Chrome browser_security_pack missing drilldown count");
 assert(facadePack.summary?.drilldownPlanPath, "Personal Chrome browser_security_pack missing drilldown plan path");
 assert(facadePack.summary?.researchPackPath, "Personal Chrome browser_security_pack missing handoff path");
+assert(facadePack.summary?.tracePath, "Personal Chrome browser_security_pack missing trace path");
 assert(facadePack.parityMatrix?.backend === "personal-chrome", "Personal Chrome browser_security_pack missing parity snapshot");
 
 const captureBisect = await callTool("devtools_capture_bisect", {
@@ -660,6 +662,9 @@ assert(professionalReadiness.checks?.some((check) => check.name === "evidenceEnt
 assert(professionalReadiness.routeSummary?.latestHandoffInspect?.tool === "devtools_artifact_inspect", `Personal Chrome professional readiness missing route handoff inspect: ${JSON.stringify(professionalReadiness.routeSummary)}`);
 assert(professionalReadiness.routeSummary?.harCompletenessArtifact?.inspect?.tool === "devtools_artifact_inspect", `Personal Chrome professional readiness missing HAR completeness artifact inspect route: ${JSON.stringify(professionalReadiness.routeSummary)}`);
 assert(professionalReadiness.routeSummary?.harCompletenessArtifact?.path === professionalReadiness.latestResearchPackSummary?.artifactPaths?.harCompletenessPath, `Personal Chrome professional readiness HAR completeness artifact path mismatch: ${JSON.stringify(professionalReadiness.routeSummary)}`);
+assert(professionalReadiness.routeSummary?.traceArtifact?.inspect?.tool === "devtools_artifact_inspect", `Personal Chrome professional readiness missing trace artifact inspect route: ${JSON.stringify(professionalReadiness.routeSummary)}`);
+assert(professionalReadiness.routeSummary?.traceArtifact?.path === professionalReadiness.latestResearchPackSummary?.artifactPaths?.tracePath, `Personal Chrome professional readiness trace artifact path mismatch: ${JSON.stringify(professionalReadiness.routeSummary)}`);
+assert(professionalReadiness.routeSummary?.traceQuery?.tool === "devtools_trace_query", `Personal Chrome professional readiness missing trace query route: ${JSON.stringify(professionalReadiness.routeSummary)}`);
 assert(professionalReadiness.routeSummary?.f12NavigationArtifact?.inspect?.tool === "devtools_artifact_inspect", `Personal Chrome professional readiness missing F12 navigation artifact inspect route: ${JSON.stringify(professionalReadiness.routeSummary)}`);
 assert(professionalReadiness.routeSummary?.f12NavigationArtifact?.path === professionalReadiness.latestResearchPackSummary?.artifactPaths?.f12NavigationPath, `Personal Chrome professional readiness F12 navigation artifact path mismatch: ${JSON.stringify(professionalReadiness.routeSummary)}`);
 assert(professionalReadiness.routeSummary?.firstF12RequestDetailArtifact?.inspect?.tool === "devtools_artifact_inspect", `Personal Chrome professional readiness missing first F12 request-detail artifact inspect route: ${JSON.stringify(professionalReadiness.routeSummary)}`);
@@ -681,6 +686,7 @@ assert(professionalReadiness.recommendedRoute?.some((step) => step.tool === "bro
 assert(professionalReadiness.panelRoutes?.network?.some((step) => step.tool === "devtools_request_detail"), "Personal Chrome professional readiness missing network panel route");
 assert(professionalReadiness.artifactDrilldowns?.some((entry) => entry.tool === "devtools_artifact_inspect" && entry.input?.path), "Personal Chrome professional readiness missing artifact drilldown route");
 assert(professionalReadiness.nextActions?.some((entry) => entry.tool === "devtools_artifact_inspect" && entry.input?.path === professionalReadiness.routeSummary?.harCompletenessArtifact?.path), "Personal Chrome professional readiness missing HAR completeness artifact next action");
+assert(professionalReadiness.nextActions?.some((entry) => entry.tool === "devtools_trace_query" && entry.input?.tracePath === professionalReadiness.routeSummary?.traceArtifact?.path), "Personal Chrome professional readiness missing trace query next action");
 assert(professionalReadiness.nextActions?.some((entry) => entry.tool === "devtools_artifact_inspect" && entry.input?.path === professionalReadiness.routeSummary?.f12NavigationArtifact?.path), "Personal Chrome professional readiness missing F12 navigation artifact next action");
 assert(professionalReadiness.nextActions?.some((entry) => entry.tool === "devtools_artifact_inspect" && entry.input?.path === professionalReadiness.routeSummary?.firstF12RequestDetailArtifact?.path), "Personal Chrome professional readiness missing first F12 request-detail artifact next action");
 assert(professionalReadiness.nextActions?.some((entry) => entry.tool === "devtools_request_detail" && entry.input?.requestId), "Personal Chrome professional readiness missing research-pack request-detail next action");

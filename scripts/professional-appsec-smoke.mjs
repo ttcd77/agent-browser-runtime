@@ -241,6 +241,7 @@ try {
   assert(pack.backend === "managed-cdp", `professional pack wrong backend: ${JSON.stringify(pack)}`);
   assert(pack.summary?.harPath, "professional pack missing HAR path");
   assert(pack.summary?.harCompletenessPath, "professional pack missing HAR completeness path");
+  assert(pack.summary?.tracePath, "professional pack missing trace path");
   assert(pack.artifacts?.harCompleteness?.entryCount >= 1, `professional pack missing HAR completeness artifact: ${JSON.stringify(pack.artifacts?.harCompleteness)}`);
   assert(pack.summary?.applicationExportPath, "professional pack missing Application export path");
   assert(pack.summary?.evidenceBundlePath, "professional pack missing evidence bundle path");
@@ -307,6 +308,9 @@ try {
   assert(finalReadiness.routeSummary?.latestHandoffInspect?.tool === "devtools_artifact_inspect", `professional readiness missing route handoff inspect: ${JSON.stringify(finalReadiness.routeSummary)}`);
   assert(finalReadiness.routeSummary?.harCompletenessArtifact?.inspect?.tool === "devtools_artifact_inspect", `professional readiness missing HAR completeness artifact inspect route: ${JSON.stringify(finalReadiness.routeSummary)}`);
   assert(finalReadiness.routeSummary?.harCompletenessArtifact?.path === pack.summary.harCompletenessPath, `professional readiness HAR completeness artifact path mismatch: ${JSON.stringify(finalReadiness.routeSummary)}`);
+  assert(finalReadiness.routeSummary?.traceArtifact?.inspect?.tool === "devtools_artifact_inspect", `professional readiness missing trace artifact inspect route: ${JSON.stringify(finalReadiness.routeSummary)}`);
+  assert(finalReadiness.routeSummary?.traceArtifact?.path === pack.summary.tracePath, `professional readiness trace artifact path mismatch: ${JSON.stringify(finalReadiness.routeSummary)}`);
+  assert(finalReadiness.routeSummary?.traceQuery?.tool === "devtools_trace_query", `professional readiness missing trace query route: ${JSON.stringify(finalReadiness.routeSummary)}`);
   assert(finalReadiness.routeSummary?.f12NavigationArtifact?.inspect?.tool === "devtools_artifact_inspect", `professional readiness missing F12 navigation artifact inspect route: ${JSON.stringify(finalReadiness.routeSummary)}`);
   assert(finalReadiness.routeSummary?.f12NavigationArtifact?.path === pack.summary.f12NavigationPath, `professional readiness F12 navigation artifact path mismatch: ${JSON.stringify(finalReadiness.routeSummary)}`);
   assert(finalReadiness.routeSummary?.firstF12RequestDetailArtifact?.inspect?.tool === "devtools_artifact_inspect", `professional readiness missing first F12 request-detail artifact inspect route: ${JSON.stringify(finalReadiness.routeSummary)}`);
@@ -340,6 +344,7 @@ try {
   assert(finalReadiness.artifactDrilldowns?.some((entry) => entry.tool === "devtools_artifact_inspect" && entry.input?.path), "professional readiness missing artifact drilldown route");
   assert(finalReadiness.nextActions?.some((entry) => entry.tool === "devtools_artifact_inspect"), "professional readiness missing handoff inspect next action");
   assert(finalReadiness.nextActions?.some((entry) => entry.tool === "devtools_artifact_inspect" && entry.input?.path === pack.summary.harCompletenessPath), "professional readiness missing HAR completeness artifact next action");
+  assert(finalReadiness.nextActions?.some((entry) => entry.tool === "devtools_trace_query" && entry.input?.tracePath === pack.summary.tracePath), "professional readiness missing trace query next action");
   assert(finalReadiness.nextActions?.some((entry) => entry.tool === "devtools_artifact_inspect" && entry.input?.path === pack.summary.f12NavigationPath), "professional readiness missing F12 navigation artifact next action");
   assert(finalReadiness.nextActions?.some((entry) => entry.tool === "devtools_artifact_inspect" && entry.input?.path === pack.summary.firstF12RequestDetailPath), "professional readiness missing first F12 request-detail artifact next action");
   assert(finalReadiness.nextActions?.some((entry) => entry.tool === "devtools_request_detail" && entry.input?.requestId), "professional readiness missing research-pack request-detail next action");
@@ -392,6 +397,7 @@ try {
   assert(handoffInspect.researchPackHandoff?.recommendedRoute?.some((step) => step.tool === "browser_security_pack"), "professional handoff inspect missing recommended agent route");
   assert(handoffInspect.researchPackHandoff?.panelRoutes?.network?.some((step) => step.tool === "devtools_request_detail"), "professional handoff inspect missing network panel route");
   assert(handoffInspect.researchPackHandoff?.artifactPaths?.harCompletenessPath, "professional handoff inspect missing HAR completeness artifact path");
+  assert(handoffInspect.researchPackHandoff?.artifactPaths?.tracePath, "professional handoff inspect missing trace artifact path");
   assert(handoffInspect.researchPackHandoff?.f12Navigation?.requestNodeCount >= 1, "professional handoff inspect missing F12 navigation");
   assert(handoffInspect.researchPackHandoff?.artifactPaths?.f12NavigationPath, "professional handoff inspect missing F12 navigation artifact path");
   assert(handoffInspect.researchPackHandoff?.firstF12RequestDetail?.sectionAvailability?.headers === true, "professional handoff inspect missing first F12 request detail summary");
