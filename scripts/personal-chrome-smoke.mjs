@@ -228,6 +228,7 @@ const requestGraph = await callTool("devtools_request_correlation_graph", {
   limit: 200,
 });
 assert(requestGraph.edges?.some((edge) => edge.type === "redirects-to"), `Personal request correlation graph missing redirect edge: ${JSON.stringify(requestGraph.edges)}`);
+assert(requestGraph.nodes?.some((node) => node.type === "request" && node.f12Columns?.name), `Personal request correlation graph missing F12 request node summary: ${JSON.stringify(requestGraph.nodes)}`);
 assert(requestGraph.detailRequestsInspected >= 1, `Personal request correlation graph did not inspect request details: ${JSON.stringify(requestGraph)}`);
 const filteredRedirects = await callTool("devtools_network_log", {
   redirected: true,

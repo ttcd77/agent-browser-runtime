@@ -1845,7 +1845,17 @@ async function requestCorrelationGraph(params = {}) {
   for (const script of sources.scripts || []) addNode({ id: `script:${script.scriptId || script.url}`, type: "script", label: script.url || script.scriptId, url: script.url });
   for (const request of requestRows) {
     const id = `request:${request.requestId || request.url}`;
-    addNode({ id, type: "request", label: `${request.method || "GET"} ${urlPath(request.url)}`, requestId: request.requestId, method: request.method, url: request.url, status: request.status, resourceType: request.resourceType });
+    addNode({
+      id,
+      type: "request",
+      label: `${request.method || "GET"} ${urlPath(request.url)}`,
+      requestId: request.requestId,
+      method: request.method,
+      url: request.url,
+      status: request.status,
+      resourceType: request.resourceType,
+      f12Columns: request.f12Columns || null,
+    });
     if (request.frameId) addEdge({ from: `frame:${request.frameId}`, to: id, type: "frame-request" });
     for (const [index, redirect] of (request.redirectChain || []).entries()) {
       const redirectId = `redirect:${request.requestId || request.url}:${index}`;

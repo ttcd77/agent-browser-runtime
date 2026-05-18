@@ -809,3 +809,12 @@
 - 每个 section 只是重新组织已捕获的客观浏览器证据，不新增漏洞判断。
 - `f12Sections.boundaries` 明确说明缺失字段代表当前捕获中 Chrome 没有暴露，而不是工具编造结论。
 - Managed Browser 和 Personal Chrome smoke 都验证了 headers、timing / redirects 和 boundaries。
+
+### 2026-05-18: Request Correlation Graph F12 请求摘要完成
+
+已经完成:
+
+- `devtools_request_correlation_graph` / `personal_chrome_request_correlation_graph` 的 request 节点新增 `f12Columns`。
+- Agent 从图谱节点中即可看到请求的 F12 表格摘要，不必再回跳到 Network log 才能识别 name/status/type/initiator/size/time 等列。
+- redirect、initiator、frame、script 等图边仍保持客观元数据关系，不推断因果或漏洞。
+- Managed Browser 和 Personal Chrome smoke 都验证了 request 节点携带 `f12Columns.name`。

@@ -856,6 +856,7 @@ try {
     limit: 200,
   });
   assert(requestGraph.edges?.some((edge) => edge.type === "redirects-to"), `request correlation graph missing redirect edge: ${JSON.stringify(requestGraph.edges)}`);
+  assert(requestGraph.nodes?.some((node) => node.type === "request" && node.f12Columns?.name), `request correlation graph missing F12 request node summary: ${JSON.stringify(requestGraph.nodes)}`);
   const replayTraffic = await callTool(baseUrl, "devtools_network_log", {
     profile: "default",
     limit: 20,

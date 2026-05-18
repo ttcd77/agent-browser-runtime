@@ -1539,6 +1539,7 @@ function buildRequestCorrelationGraph({ requests = [], consoleEntries = [], scri
       url: request.url,
       status: request.status,
       resourceType: request.resourceType,
+      f12Columns: request.f12Columns || buildNetworkF12Columns(request),
     });
     if (request.frameId) addEdge({ from: `frame:${request.frameId}`, to: id, type: "frame-request" });
     for (const [index, redirect] of (request.redirectChain || []).entries()) {
