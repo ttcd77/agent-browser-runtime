@@ -60,6 +60,8 @@ Typical output includes:
 - saved worker/frame boundary report path,
 - workflow snapshot showing the professional `browser_*` facade path that
   produced the pack,
+- final capture status, including whether capture is still enabled, capture
+  label, timestamps, and observed traffic count when the backend exposes it,
 - capture boundaries so the agent knows what time window was recorded.
 
 The saved paths are local files under the selected profile evidence directory.

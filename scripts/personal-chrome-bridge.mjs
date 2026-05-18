@@ -2979,11 +2979,20 @@ async function securityResearchPack(params = {}) {
   artifacts.artifactIndex = await safeBridgeTool("devtools_artifact_index", { maxFiles: 200 });
   summary.artifactFileCount = artifacts.artifactIndex?.totalFileCount ?? summary.artifactFileCount;
   summary.artifactKinds = artifacts.artifactIndex?.kinds || null;
+  artifacts.captureStatus = await safeBridgeTool("devtools_capture_status");
+  summary.capture = {
+    enabled: artifacts.captureStatus?.capture?.enabled ?? null,
+    startedAt: artifacts.captureStatus?.capture?.startedAt || null,
+    stoppedAt: artifacts.captureStatus?.capture?.stoppedAt || null,
+    label: artifacts.captureStatus?.capture?.label || null,
+    trafficCount: artifacts.captureStatus?.trackedRequests ?? artifacts.captureStatus?.networkEvents ?? null,
+  };
   researchPackHandoff.summary = { ...summary, researchPackPath };
   researchPackHandoff.artifactIndexSummary = {
     totalFileCount: artifacts.artifactIndex?.totalFileCount ?? null,
     kinds: artifacts.artifactIndex?.kinds || null,
   };
+  researchPackHandoff.captureStatus = artifacts.captureStatus;
   writeFileSync(researchPackPath, `${JSON.stringify(researchPackHandoff, null, 2)}\n`, "utf8");
   artifacts.researchPack = {
     path: researchPackPath,

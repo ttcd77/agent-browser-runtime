@@ -673,6 +673,7 @@ try {
   assert(researchPack.summary?.evidenceTimelineEventCount >= 1, "security research pack missing evidence timeline count");
   assert(researchPack.summary?.f12ParityPanelCount >= 1, "security research pack missing F12 parity count");
   assert(researchPack.summary?.drilldownCount >= 3, "security research pack missing drilldown plan count");
+  assert(researchPack.summary?.capture?.enabled === true && typeof researchPack.summary?.capture?.trafficCount === "number", `security research pack missing capture summary: ${JSON.stringify(researchPack.summary?.capture)}`);
   assert(researchPack.summary?.drilldownPlanPath, "security research pack missing drilldown plan path");
   assert(researchPack.summary?.researchPackPath, "security research pack missing handoff path");
   assert(researchPack.artifacts?.researchPack?.sha256, "security research pack missing handoff hash");

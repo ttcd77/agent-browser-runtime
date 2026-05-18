@@ -222,6 +222,8 @@ try {
   assert(pack.summary?.f12ParityPanelCount >= 1, "professional pack missing F12 parity count");
   assert(pack.summary?.drilldownCount >= 3, "professional pack missing drilldown count");
   assert(pack.summary?.workflowTask === "professional-appsec", "professional pack missing workflow task summary");
+  assert(pack.summary?.capture?.enabled === true && typeof pack.summary?.capture?.trafficCount === "number", `professional pack missing capture summary: ${JSON.stringify(pack.summary?.capture)}`);
+  assert(pack.artifacts?.captureStatus?.capture?.enabled === true, "professional pack missing capture status artifact");
   assert(pack.summary?.drilldownPlanPath, "professional pack missing drilldown plan path");
   assert(pack.summary?.researchPackPath, "professional pack missing handoff path");
   assert(pack.artifacts?.researchPack?.sha256, "professional pack missing handoff hash");
@@ -253,7 +255,7 @@ try {
     path: pack.summary.researchPackPath,
     mode: "line",
     startLine: 1,
-    maxLines: 80,
+    maxLines: 200,
   });
   assert(handoffPreview.contentText?.includes("security-research-pack-handoff"), "professional handoff preview missing schema marker");
   assert(handoffPreview.contentText?.includes("professional-appsec"), "professional handoff preview missing workflow marker");
