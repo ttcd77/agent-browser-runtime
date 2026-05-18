@@ -10386,6 +10386,20 @@ function registerStandaloneBrowserTools(tools, cdpPort, profileRegistry, default
       ];
       const nextTools = drilldownPlan.drilldowns.map((entry) => entry.tool);
       const researchPackPath = join(profile.evidenceDir, "research-packs", `${Date.now()}-security-research-pack.json`);
+      const handoffDrilldowns = [
+        {
+          label: "Research pack handoff shape",
+          tool: "devtools_artifact_inspect",
+          input: { path: researchPackPath, maxBytes: 12000 },
+          why: "Inspect the saved handoff JSON structure without loading every underlying artifact.",
+        },
+        {
+          label: "Research pack handoff preview",
+          tool: "devtools_artifact_read",
+          input: { path: researchPackPath, mode: "line", startLine: 1, maxLines: 120 },
+          why: "Read a bounded handoff slice for cross-session or cross-agent context transfer.",
+        },
+      ];
       const researchPackHandoff = {
         schema: "agent-browser-runtime.security-research-pack-handoff.v1",
         backend: "managed-cdp",
@@ -10412,6 +10426,7 @@ function registerStandaloneBrowserTools(tools, cdpPort, profileRegistry, default
         paritySummary: parityMatrix?.summary || null,
         captureBoundaries,
         nextTools,
+        handoffDrilldowns,
       };
       mkdirSync(dirname(researchPackPath), { recursive: true });
       writeFileSync(researchPackPath, `${JSON.stringify(researchPackHandoff, null, 2)}\n`, "utf8");
@@ -10439,6 +10454,7 @@ function registerStandaloneBrowserTools(tools, cdpPort, profileRegistry, default
         artifacts,
         parityMatrix,
         drilldownPlan,
+        handoffDrilldowns,
         captureBoundaries,
         nextTools,
       });

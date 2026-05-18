@@ -196,6 +196,7 @@ try {
   assert(pack.summary?.drilldownPlanPath, "professional pack missing drilldown plan path");
   assert(pack.summary?.researchPackPath, "professional pack missing handoff path");
   assert(pack.artifacts?.researchPack?.sha256, "professional pack missing handoff hash");
+  assert(pack.handoffDrilldowns?.some((entry) => entry.tool === "devtools_artifact_read" && entry.input?.path === pack.summary.researchPackPath), "professional pack missing handoff read drilldown");
   assert(pack.parityMatrix?.summary?.strongestBackend === "managed-cdp", "professional pack missing Managed Browser parity snapshot");
   assert(pack.artifacts?.artifactIndex?.totalFileCount >= 1, "professional pack missing artifact index payload");
   assert(pack.artifacts?.evidenceTimeline?.eventCount >= 1, "professional pack missing evidence timeline payload");
