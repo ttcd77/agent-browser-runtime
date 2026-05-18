@@ -23,6 +23,7 @@ const requiredPackageScripts = [
   "contract:devtools",
   "smoke:f12",
   "smoke:personal",
+  "smoke:cli",
   "check:devtools",
   "check:full",
   "research:pack",
@@ -67,6 +68,9 @@ if (pkg.private !== false) failures.push("package.json must set private=false fo
 if (!pkg.license) failures.push("package.json is missing license");
 if (!pkg.description || !/DevTools|browser|agent/i.test(pkg.description)) {
   failures.push("package.json description should explain the agent/browser runtime clearly");
+}
+if (!pkg.bin?.["agent-browser-research-pack"]) {
+  failures.push("package.json missing bin: agent-browser-research-pack");
 }
 for (const script of requiredPackageScripts) {
   if (!pkg.scripts?.[script]) failures.push(`package.json missing script: ${script}`);

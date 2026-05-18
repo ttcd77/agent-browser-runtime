@@ -1,12 +1,14 @@
 #!/usr/bin/env node
 
+import { pathToFileURL } from "node:url";
+
 const defaults = {
   managedServer: "http://127.0.0.1:17335",
   personalServer: "http://127.0.0.1:17337",
   profile: "researcher",
 };
 
-function usage() {
+export function usage() {
   return `Usage:
   node scripts/security-research-pack-cli.mjs --url https://example.com [options]
 
@@ -26,7 +28,7 @@ Options:
 `;
 }
 
-function parseArgs(argv) {
+export function parseArgs(argv) {
   const args = {
     url: null,
     profile: defaults.profile,
@@ -94,7 +96,7 @@ async function callTool(server, name, input = {}) {
   return body;
 }
 
-function printSummary(pack) {
+export function printSummary(pack, output = console.log) {
   const summary = pack.summary || {};
   const workflow = pack.workflow || {};
   const capture = summary.capture || {};
@@ -111,78 +113,84 @@ function printSummary(pack) {
     drilldowns: summary.drilldownPlanPath,
     researchPack: summary.researchPackPath,
   };
-  console.log("Security research pack complete");
-  console.log(`- backend: ${pack.backend || "(unknown)"}`);
-  console.log(`- url: ${summary.url || pack.page?.url || "(unknown)"}`);
-  console.log(`- requests: ${summary.requestCount ?? "(unknown)"}`);
-  console.log(`- failed requests: ${summary.failedRequestCount ?? "(unknown)"}`);
-  console.log(`- console entries: ${summary.consoleEntryCount ?? "(unknown)"}`);
-  console.log(`- artifact files: ${summary.artifactFileCount ?? "(unknown)"}`);
-  console.log(`- evidence timeline events: ${summary.evidenceTimelineEventCount ?? "(unknown)"}`);
-  console.log(`- F12 parity panels: ${summary.f12ParityPanelCount ?? "(unknown)"}`);
-  console.log(`- drilldowns: ${summary.drilldownCount ?? "(unknown)"}`);
+  output("Security research pack complete");
+  output(`- backend: ${pack.backend || "(unknown)"}`);
+  output(`- url: ${summary.url || pack.page?.url || "(unknown)"}`);
+  output(`- requests: ${summary.requestCount ?? "(unknown)"}`);
+  output(`- failed requests: ${summary.failedRequestCount ?? "(unknown)"}`);
+  output(`- console entries: ${summary.consoleEntryCount ?? "(unknown)"}`);
+  output(`- artifact files: ${summary.artifactFileCount ?? "(unknown)"}`);
+  output(`- evidence timeline events: ${summary.evidenceTimelineEventCount ?? "(unknown)"}`);
+  output(`- F12 parity panels: ${summary.f12ParityPanelCount ?? "(unknown)"}`);
+  output(`- drilldowns: ${summary.drilldownCount ?? "(unknown)"}`);
   if (workflow.task || Array.isArray(workflow.defaultPath)) {
-    console.log(`- workflow: ${workflow.task || "(unknown)"}`);
-    if (Array.isArray(workflow.defaultPath)) console.log(`  - path: ${workflow.defaultPath.join(" -> ")}`);
+    output(`- workflow: ${workflow.task || "(unknown)"}`);
+    if (Array.isArray(workflow.defaultPath)) output(`  - path: ${workflow.defaultPath.join(" -> ")}`);
   }
   if (summary.capture) {
-    console.log("- capture:");
-    console.log(`  - enabled: ${capture.enabled ?? "(unknown)"}`);
-    console.log(`  - label: ${capture.label || "(none)"}`);
-    console.log(`  - startedAt: ${capture.startedAt || "(unknown)"}`);
-    console.log(`  - stoppedAt: ${capture.stoppedAt || "(still active or unknown)"}`);
-    console.log(`  - trafficCount: ${capture.trafficCount ?? "(unknown)"}`);
+    output("- capture:");
+    output(`  - enabled: ${capture.enabled ?? "(unknown)"}`);
+    output(`  - label: ${capture.label || "(none)"}`);
+    output(`  - startedAt: ${capture.startedAt || "(unknown)"}`);
+    output(`  - stoppedAt: ${capture.stoppedAt || "(still active or unknown)"}`);
+    output(`  - trafficCount: ${capture.trafficCount ?? "(unknown)"}`);
   }
   if (Object.keys(artifactKinds).length) {
-    console.log(`- artifact kinds: ${Object.entries(artifactKinds).map(([kind, count]) => `${kind}=${count}`).join(", ")}`);
+    output(`- artifact kinds: ${Object.entries(artifactKinds).map(([kind, count]) => `${kind}=${count}`).join(", ")}`);
   }
-  console.log("- artifacts:");
+  output("- artifacts:");
   for (const [name, value] of Object.entries(artifacts)) {
-    if (value) console.log(`  - ${name}: ${value}`);
+    if (value) output(`  - ${name}: ${value}`);
   }
   if (summary.researchPackPath) {
-    console.log("- handoff:");
-    console.log(`  - inspect: devtools_artifact_inspect path=${summary.researchPackPath}`);
-    console.log(`  - read: devtools_artifact_read path=${summary.researchPackPath} mode=line startLine=1 maxLines=120`);
+    output("- handoff:");
+    output(`  - inspect: devtools_artifact_inspect path=${summary.researchPackPath}`);
+    output(`  - read: devtools_artifact_read path=${summary.researchPackPath} mode=line startLine=1 maxLines=120`);
   }
   if (Array.isArray(pack.nextTools) && pack.nextTools.length) {
-    console.log(`- next tools: ${pack.nextTools.join(", ")}`);
+    output(`- next tools: ${pack.nextTools.join(", ")}`);
   }
   if (Array.isArray(pack.drilldownPlan?.drilldowns) && pack.drilldownPlan.drilldowns.length) {
-    console.log("- first drilldowns:");
+    output("- first drilldowns:");
     for (const step of pack.drilldownPlan.drilldowns.slice(0, 5)) {
-      console.log(`  - ${step.label}: ${step.tool}`);
+      output(`  - ${step.label}: ${step.tool}`);
     }
   }
 }
 
-const args = parseArgs(process.argv.slice(2));
-if (args.help) {
-  console.log(usage());
-  process.exit(0);
-}
-if (!args.url) {
-  console.error(usage());
-  throw new Error("--url is required");
+async function main(argv = process.argv.slice(2)) {
+  const args = parseArgs(argv);
+  if (args.help) {
+    console.log(usage());
+    return;
+  }
+  if (!args.url) {
+    console.error(usage());
+    throw new Error("--url is required");
+  }
+
+  const server = args.server || (args.personal ? defaults.personalServer : defaults.managedServer);
+  if (!args.personal) {
+    await callTool(server, "profile_create", { profile: args.profile });
+  }
+  const pack = await callTool(server, "devtools_security_research_pack", {
+    profile: args.personal ? undefined : args.profile,
+    url: args.url,
+    limit: args.limit,
+    waitMs: args.waitMs,
+    includeHar: args.includeHar,
+    includeTrace: args.includeTrace,
+    includeApplicationExport: args.includeApplicationExport,
+    includeTokenScan: args.includeTokenScan,
+  });
+
+  if (args.json) {
+    console.log(JSON.stringify(pack, null, 2));
+  } else {
+    printSummary(pack);
+  }
 }
 
-const server = args.server || (args.personal ? defaults.personalServer : defaults.managedServer);
-if (!args.personal) {
-  await callTool(server, "profile_create", { profile: args.profile });
-}
-const pack = await callTool(server, "devtools_security_research_pack", {
-  profile: args.personal ? undefined : args.profile,
-  url: args.url,
-  limit: args.limit,
-  waitMs: args.waitMs,
-  includeHar: args.includeHar,
-  includeTrace: args.includeTrace,
-  includeApplicationExport: args.includeApplicationExport,
-  includeTokenScan: args.includeTokenScan,
-});
-
-if (args.json) {
-  console.log(JSON.stringify(pack, null, 2));
-} else {
-  printSummary(pack);
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  await main();
 }
