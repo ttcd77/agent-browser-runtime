@@ -818,3 +818,13 @@
 - Agent 从图谱节点中即可看到请求的 F12 表格摘要，不必再回跳到 Network log 才能识别 name/status/type/initiator/size/time 等列。
 - redirect、initiator、frame、script 等图边仍保持客观元数据关系，不推断因果或漏洞。
 - Managed Browser 和 Personal Chrome smoke 都验证了 request 节点携带 `f12Columns.name`。
+
+### 2026-05-18: Research Pack F12 Navigation 完成
+
+已经完成:
+
+- `devtools_security_research_pack` / `browser_security_pack` 返回 `f12Navigation`。
+- 保存的 research-pack handoff JSON 也包含 `f12Navigation`。
+- `f12Navigation` 从 correlation graph 的 request 节点提取 `f12Columns`，并给出 `devtools_request_detail` + `f12Sections` 的下一步读取路线。
+- `devtools_artifact_inspect` 读取 handoff JSON 时会返回压缩后的 `f12Navigation` 摘要，方便 Agent 从证据包继续钻取。
+- 该索引只是证据导航，不读取额外 artifact body，也不判断漏洞。

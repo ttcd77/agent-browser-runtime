@@ -423,6 +423,9 @@ assert(researchPack.summary?.artifactFileCount >= 1, "Personal Chrome security r
 assert(researchPack.summary?.evidenceTimelineEventCount >= 1, "Personal Chrome security research pack missing evidence timeline count");
 assert(researchPack.summary?.f12ParityPanelCount >= 1, "Personal Chrome security research pack missing F12 parity count");
 assert(researchPack.summary?.drilldownCount >= 3, "Personal Chrome security research pack missing drilldown count");
+assert(researchPack.summary?.f12NavigationRequestCount >= 1, "Personal Chrome security research pack summary missing F12 navigation count");
+assert(researchPack.f12Navigation?.requestNodeCount >= 1, `Personal Chrome security research pack missing F12 navigation: ${JSON.stringify(researchPack.f12Navigation)}`);
+assert(researchPack.f12Navigation?.requests?.some((row) => row.f12Columns?.name && row.detail?.tool === "devtools_request_detail"), "Personal Chrome security research pack missing F12 navigation request detail route");
 assert(researchPack.summary?.drilldownPlanPath, "Personal Chrome security research pack missing drilldown plan path");
 assert(researchPack.summary?.researchPackPath, "Personal Chrome security research pack missing handoff path");
 assert(researchPack.artifacts?.researchPack?.sha256, "Personal Chrome security research pack missing handoff hash");
@@ -448,6 +451,7 @@ assert(researchPackInspect.researchPackHandoff?.handoffChecks?.some((check) => c
 assert(researchPackInspect.researchPackHandoff?.artifactCoverageRows?.some((row) => row.name === "har" && row.status === "present"), "Personal Chrome handoff inspect missing artifact coverage rows");
 assert(researchPackInspect.researchPackHandoff?.recommendedRoute?.some((step) => step.tool === "browser_security_pack"), "Personal Chrome handoff inspect missing recommended agent route");
 assert(researchPackInspect.researchPackHandoff?.panelRoutes?.network?.some((step) => step.tool === "devtools_request_detail"), "Personal Chrome handoff inspect missing network panel route");
+assert(researchPackInspect.researchPackHandoff?.f12Navigation?.requestNodeCount >= 1, "Personal Chrome handoff inspect missing F12 navigation");
 
 const facadeInspect = await callTool("browser_inspect", {
   mode: "overview",

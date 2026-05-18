@@ -248,6 +248,9 @@ try {
   assert(pack.summary?.evidenceTimelineEventCount >= 1, "professional pack missing evidence timeline count");
   assert(pack.summary?.f12ParityPanelCount >= 1, "professional pack missing F12 parity count");
   assert(pack.summary?.drilldownCount >= 3, "professional pack missing drilldown count");
+  assert(pack.summary?.f12NavigationRequestCount >= 1, "professional pack summary missing F12 navigation count");
+  assert(pack.f12Navigation?.requestNodeCount >= 1, `professional pack missing F12 navigation: ${JSON.stringify(pack.f12Navigation)}`);
+  assert(pack.f12Navigation?.requests?.some((row) => row.f12Columns?.name && row.detail?.tool === "devtools_request_detail"), "professional pack missing F12 navigation request detail route");
   assert(pack.summary?.workflowTask === "professional-appsec", "professional pack missing workflow task summary");
   assert(pack.summary?.capture?.enabled === true && typeof pack.summary?.capture?.trafficCount === "number", `professional pack missing capture summary: ${JSON.stringify(pack.summary?.capture)}`);
   assert(pack.artifacts?.captureStatus?.capture?.enabled === true, "professional pack missing capture status artifact");
@@ -360,6 +363,7 @@ try {
   assert(handoffInspect.researchPackHandoff?.artifactCoverageRows?.some((row) => row.name === "har" && row.status === "present"), "professional handoff inspect missing artifact coverage rows");
   assert(handoffInspect.researchPackHandoff?.recommendedRoute?.some((step) => step.tool === "browser_security_pack"), "professional handoff inspect missing recommended agent route");
   assert(handoffInspect.researchPackHandoff?.panelRoutes?.network?.some((step) => step.tool === "devtools_request_detail"), "professional handoff inspect missing network panel route");
+  assert(handoffInspect.researchPackHandoff?.f12Navigation?.requestNodeCount >= 1, "professional handoff inspect missing F12 navigation");
   assert(handoffInspect.researchPackHandoff?.objectiveBoundary?.includes("does not judge vulnerabilities"), "professional handoff inspect crossed objective boundary");
 
   const parity = await callTool(baseUrl, "devtools_f12_parity_matrix", { profile: "professional" });

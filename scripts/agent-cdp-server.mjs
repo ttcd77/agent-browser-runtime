@@ -578,6 +578,7 @@ function summarizeResearchPackHandoff(parsed) {
   const artifactPaths = parsed.artifactPaths || {};
   const handoffCompleteness = parsed.handoffCompleteness || {};
   const artifactCoverage = parsed.artifactCoverage || {};
+  const f12Navigation = parsed.f12Navigation || {};
   return {
     schema: parsed.schema,
     backend: parsed.backend || null,
@@ -607,6 +608,15 @@ function summarizeResearchPackHandoff(parsed) {
     drilldownRule: agentEntryPoints.drilldownRule || null,
     recommendedRoute: Array.isArray(agentUsage.recommendedRoute) ? agentUsage.recommendedRoute : (Array.isArray(agentUsage.defaultRoute) ? agentUsage.defaultRoute : []),
     panelRoutes: agentUsage.panelRoutes || null,
+    f12Navigation: f12Navigation && typeof f12Navigation === "object" ? {
+      schema: f12Navigation.schema || null,
+      requestNodeCount: f12Navigation.requestNodeCount ?? null,
+      firstRequest: f12Navigation.firstRequest || null,
+      firstDetailRoute: Array.isArray(f12Navigation.requests) ? f12Navigation.requests.find((row) => row?.detail)?.detail || null : null,
+      artifacts: f12Navigation.artifacts || null,
+      sectionRoutes: f12Navigation.sectionRoutes || null,
+      boundaries: f12Navigation.boundaries || [],
+    } : null,
     drilldownCount: parsed.drilldownPlan?.count ?? summary.drilldownCount ?? null,
     firstDrilldowns: (parsed.drilldownPlan?.drilldowns || []).slice(0, 5).map((entry) => ({
       label: entry.label,
@@ -3913,6 +3923,59 @@ function buildResearchPackDrilldowns(artifacts = {}, options = {}) {
     return { ...plan, planPath };
   }
   return plan;
+}
+
+function buildResearchPackF12Navigation(artifacts = {}, options = {}) {
+  const profileInput = options.profile ? { profile: options.profile } : {};
+  const limit = Math.max(1, Math.min(Number(options.limit) || 10, 50));
+  const nodes = Array.isArray(artifacts.correlationGraph?.nodes) ? artifacts.correlationGraph.nodes : [];
+  const requestNodes = nodes.filter((node) => node?.type === "request").slice(0, limit);
+  const requests = requestNodes.map((node) => {
+    const f12Columns = node.f12Columns && typeof node.f12Columns === "object" ? node.f12Columns : {
+      name: networkDisplayName(node.url || ""),
+      url: node.url || null,
+      method: node.method || null,
+      status: node.status ?? null,
+      type: node.resourceType || null,
+      flags: {},
+    };
+    return {
+      requestId: node.requestId || null,
+      label: node.label || null,
+      url: node.url || f12Columns.url || null,
+      status: node.status ?? f12Columns.status ?? null,
+      resourceType: node.resourceType || f12Columns.type || null,
+      f12Columns,
+      detail: node.requestId ? {
+        tool: "devtools_request_detail",
+        input: { ...profileInput, requestId: node.requestId },
+        expectedSections: ["overview", "headers", "payload", "cookies", "timing", "initiator", "redirects", "security"],
+      } : null,
+    };
+  });
+  return {
+    schema: "agent-browser-runtime.f12-navigation.v1",
+    generatedAt: new Date().toISOString(),
+    requestNodeCount: requests.length,
+    firstRequest: requests[0] || null,
+    requests,
+    artifacts: {
+      correlationGraphPath: artifacts.correlationGraph?.graphPath || null,
+      harPath: artifacts.har?.harPath || null,
+      evidenceBundlePath: artifacts.bundle?.bundlePath || null,
+      drilldownPlanPath: artifacts.drilldownPlan?.planPath || null,
+    },
+    sectionRoutes: {
+      networkTable: "devtools_network_log.requests[].f12Columns",
+      requestDetail: "devtools_request_detail.detail.f12Sections",
+      correlationGraph: "devtools_request_correlation_graph.nodes[type=request].f12Columns",
+    },
+    boundaries: [
+      "f12Navigation is a deterministic route index over captured F12 evidence.",
+      "It does not inspect artifact bodies beyond already returned summaries.",
+      "It does not decide whether a request is vulnerable or important.",
+    ],
+  };
 }
 
 function devtoolsWorkflowGuide(task = "first-pass") {
@@ -11269,6 +11332,7 @@ function registerStandaloneBrowserTools(tools, cdpPort, profileRegistry, default
       const agentUsage = capabilityMapSnapshot.agentUsage || null;
       const drilldownPlan = buildResearchPackDrilldowns(artifacts, { profile: profile.name, evidenceDir: profile.evidenceDir });
       artifacts.drilldownPlan = drilldownPlan;
+      const f12Navigation = buildResearchPackF12Navigation(artifacts, { profile: profile.name, limit });
       artifacts.manifest = await safeCall("devtools_evidence_manifest", {
         save: true,
         artifactPaths: [
@@ -11306,6 +11370,7 @@ function registerStandaloneBrowserTools(tools, cdpPort, profileRegistry, default
         evidenceTimelineEventCount: artifacts.evidenceTimeline?.eventCount ?? null,
         f12ParityPanelCount: parityMatrix?.summary?.panelCount ?? null,
         drilldownCount: drilldownPlan.count,
+        f12NavigationRequestCount: f12Navigation.requestNodeCount,
         workflowTask: workflow.task || "professional-appsec",
       };
       const captureBoundaries = [
@@ -11360,6 +11425,7 @@ function registerStandaloneBrowserTools(tools, cdpPort, profileRegistry, default
           boundaries: drilldownPlan.boundaries,
         },
         paritySummary: parityMatrix?.summary || null,
+        f12Navigation,
         captureBoundaries,
         nextTools,
         handoffDrilldowns,
@@ -11438,6 +11504,7 @@ function registerStandaloneBrowserTools(tools, cdpPort, profileRegistry, default
           categories: toolCatalogSnapshot.categories,
         },
         parityMatrix,
+        f12Navigation,
         drilldownPlan,
         handoffDrilldowns,
         captureBoundaries,
