@@ -148,12 +148,21 @@ async function getTargetTab(params = {}) {
 }
 
 async function runInTab(tabId, func, args = []) {
-  const [result] = await chrome.scripting.executeScript({
+  const execute = () => chrome.scripting.executeScript({
     target: { tabId },
     func,
     args,
   });
-  return result?.result;
+  try {
+    const [result] = await execute();
+    return result?.result;
+  } catch (error) {
+    const message = String(error?.message || error);
+    if (!/Frame with ID 0 was removed|Cannot access contents of the page|No tab with id/i.test(message)) throw error;
+    await delay(200);
+    const [result] = await execute();
+    return result?.result;
+  }
 }
 
 async function executeCommand(command, params) {

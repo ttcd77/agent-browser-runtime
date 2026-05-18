@@ -666,6 +666,8 @@ try {
   assert(researchPack.summary?.f12ParityPanelCount >= 1, "security research pack missing F12 parity count");
   assert(researchPack.summary?.drilldownCount >= 3, "security research pack missing drilldown plan count");
   assert(researchPack.summary?.drilldownPlanPath, "security research pack missing drilldown plan path");
+  assert(researchPack.summary?.researchPackPath, "security research pack missing handoff path");
+  assert(researchPack.artifacts?.researchPack?.sha256, "security research pack missing handoff hash");
   assert(researchPack.parityMatrix?.summary?.strongestBackend === "managed-cdp", "security research pack missing Managed Browser parity snapshot");
   assert(researchPack.drilldownPlan?.drilldowns?.some((entry) => entry.tool === "devtools_evidence_timeline"), "security research pack missing evidence timeline drilldown");
   assert(researchPack.drilldownPlan?.planPath === researchPack.summary.drilldownPlanPath, "security research pack drilldown path mismatch");

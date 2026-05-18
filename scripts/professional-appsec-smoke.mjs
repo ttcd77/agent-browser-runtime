@@ -194,6 +194,8 @@ try {
   assert(pack.summary?.f12ParityPanelCount >= 1, "professional pack missing F12 parity count");
   assert(pack.summary?.drilldownCount >= 3, "professional pack missing drilldown count");
   assert(pack.summary?.drilldownPlanPath, "professional pack missing drilldown plan path");
+  assert(pack.summary?.researchPackPath, "professional pack missing handoff path");
+  assert(pack.artifacts?.researchPack?.sha256, "professional pack missing handoff hash");
   assert(pack.parityMatrix?.summary?.strongestBackend === "managed-cdp", "professional pack missing Managed Browser parity snapshot");
   assert(pack.artifacts?.artifactIndex?.totalFileCount >= 1, "professional pack missing artifact index payload");
   assert(pack.artifacts?.evidenceTimeline?.eventCount >= 1, "professional pack missing evidence timeline payload");
@@ -258,6 +260,7 @@ try {
   console.log(`- Pack artifact index/timeline/parity: ${pack.summary.artifactFileCount}/${pack.summary.evidenceTimelineEventCount}/${pack.summary.f12ParityPanelCount}`);
   console.log(`- Pack drilldowns: ${pack.summary.drilldownCount}`);
   console.log(`- Drilldown plan: ${pack.summary.drilldownPlanPath}`);
+  console.log(`- Research pack handoff: ${pack.summary.researchPackPath}`);
   console.log(`- F12 parity rows: ${parity.summary.panelCount}`);
   console.log(`- artifact files: ${artifactIndex.totalFileCount}`);
 } finally {

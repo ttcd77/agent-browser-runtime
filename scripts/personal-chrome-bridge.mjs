@@ -21,6 +21,7 @@ const diffDir = process.env.PERSONAL_CHROME_DIFF_DIR || join(process.cwd(), "tmp
 const authReportDir = process.env.PERSONAL_CHROME_AUTH_REPORT_DIR || join(process.cwd(), "tmp", "personal-chrome-auth");
 const boundaryReportDir = process.env.PERSONAL_CHROME_BOUNDARY_REPORT_DIR || join(process.cwd(), "tmp", "personal-chrome-boundaries");
 const drilldownPlanDir = process.env.PERSONAL_CHROME_DRILLDOWN_PLAN_DIR || join(process.cwd(), "tmp", "personal-chrome-drilldowns");
+const researchPackDir = process.env.PERSONAL_CHROME_RESEARCH_PACK_DIR || join(process.cwd(), "tmp", "personal-chrome-research-packs");
 
 const clients = new Map();
 const pending = new Map();
@@ -2790,32 +2791,75 @@ async function securityResearchPack(params = {}) {
   });
   const networkSummary = network?.evidence?.summary || {};
   const page = overview?.evidence?.diagnostics?.page || overview?.evidence?.backendCapabilities?.activeTab || {};
+  const generatedAt = new Date().toISOString();
+  const summary = {
+    url: page.url || params.url || null,
+    requestCount: networkSummary.requestCount || 0,
+    failedRequestCount: networkSummary.failedRequestCount || networkSummary.errorCount || 0,
+    consoleEntryCount: overview?.evidence?.console?.entryCount || overview?.evidence?.console?.entries?.length || 0,
+    cookieCount: storage?.evidence?.cookies?.cookieCount ?? null,
+    sourceCount: sources?.evidence?.sources?.count ?? null,
+    performanceObserverEntryCount: performance?.evidence?.observer?.summary?.entryCount ?? null,
+    tracePath: artifacts.trace?.tracePath || null,
+    harPath: artifacts.har?.harPath || null,
+    applicationExportPath: artifacts.application?.exportPath || null,
+    evidenceBundlePath: artifacts.bundle?.bundlePath || null,
+    evidenceManifestPath: artifacts.manifest?.manifestPath || null,
+    correlationGraphPath: artifacts.correlationGraph?.graphPath || null,
+    authBoundaryReportPath: artifacts.authBoundary?.reportPath || null,
+    workerFrameReportPath: artifacts.workerFrame?.reportPath || null,
+    drilldownPlanPath: drilldownPlan.planPath || null,
+    artifactFileCount: artifacts.artifactIndex?.totalFileCount ?? null,
+    evidenceTimelineEventCount: artifacts.evidenceTimeline?.eventCount ?? null,
+    f12ParityPanelCount: parityMatrix?.summary?.panelCount ?? null,
+    drilldownCount: drilldownPlan.count,
+  };
+  const captureBoundaries = [
+    "Personal Chrome mode runs against the user's active browser profile after local extension authorization.",
+    "This workflow records only evidence observable after capture starts and during the reload/reproduction window.",
+    "It organizes F12 evidence for security research but does not decide exploitability.",
+  ];
+  const nextTools = drilldownPlan.drilldowns.map((entry) => entry.tool);
+  const researchPackPath = join(researchPackDir, `${Date.now()}-security-research-pack.json`);
+  const researchPackHandoff = {
+    schema: "agent-browser-runtime.security-research-pack-handoff.v1",
+    backend: "personal-chrome",
+    generatedAt,
+    page,
+    summary: { ...summary, researchPackPath },
+    artifactPaths: {
+      harPath: summary.harPath,
+      applicationExportPath: summary.applicationExportPath,
+      evidenceBundlePath: summary.evidenceBundlePath,
+      evidenceManifestPath: summary.evidenceManifestPath,
+      correlationGraphPath: summary.correlationGraphPath,
+      authBoundaryReportPath: summary.authBoundaryReportPath,
+      workerFrameReportPath: summary.workerFrameReportPath,
+      drilldownPlanPath: summary.drilldownPlanPath,
+    },
+    drilldownPlan: {
+      planPath: drilldownPlan.planPath || null,
+      count: drilldownPlan.count,
+      drilldowns: drilldownPlan.drilldowns,
+      boundaries: drilldownPlan.boundaries,
+    },
+    paritySummary: parityMatrix?.summary || null,
+    captureBoundaries,
+    nextTools,
+  };
+  mkdirSync(dirname(researchPackPath), { recursive: true });
+  writeFileSync(researchPackPath, `${JSON.stringify(researchPackHandoff, null, 2)}\n`, "utf8");
+  summary.researchPackPath = researchPackPath;
+  artifacts.researchPack = {
+    path: researchPackPath,
+    bytes: statSync(researchPackPath).size,
+    sha256: sha256File(researchPackPath),
+  };
   return {
     backend: "personal-chrome",
-    generatedAt: new Date().toISOString(),
+    generatedAt,
     page,
-    summary: {
-      url: page.url || params.url || null,
-      requestCount: networkSummary.requestCount || 0,
-      failedRequestCount: networkSummary.failedRequestCount || networkSummary.errorCount || 0,
-      consoleEntryCount: overview?.evidence?.console?.entryCount || overview?.evidence?.console?.entries?.length || 0,
-      cookieCount: storage?.evidence?.cookies?.cookieCount ?? null,
-      sourceCount: sources?.evidence?.sources?.count ?? null,
-      performanceObserverEntryCount: performance?.evidence?.observer?.summary?.entryCount ?? null,
-      tracePath: artifacts.trace?.tracePath || null,
-      harPath: artifacts.har?.harPath || null,
-      applicationExportPath: artifacts.application?.exportPath || null,
-      evidenceBundlePath: artifacts.bundle?.bundlePath || null,
-      evidenceManifestPath: artifacts.manifest?.manifestPath || null,
-      correlationGraphPath: artifacts.correlationGraph?.graphPath || null,
-      authBoundaryReportPath: artifacts.authBoundary?.reportPath || null,
-      workerFrameReportPath: artifacts.workerFrame?.reportPath || null,
-      drilldownPlanPath: drilldownPlan.planPath || null,
-      artifactFileCount: artifacts.artifactIndex?.totalFileCount ?? null,
-      evidenceTimelineEventCount: artifacts.evidenceTimeline?.eventCount ?? null,
-      f12ParityPanelCount: parityMatrix?.summary?.panelCount ?? null,
-      drilldownCount: drilldownPlan.count,
-    },
+    summary,
     steps,
     evidence: {
       overview,
@@ -2828,12 +2872,8 @@ async function securityResearchPack(params = {}) {
     artifacts,
     parityMatrix,
     drilldownPlan,
-    captureBoundaries: [
-      "Personal Chrome mode runs against the user's active browser profile after local extension authorization.",
-      "This workflow records only evidence observable after capture starts and during the reload/reproduction window.",
-      "It organizes F12 evidence for security research but does not decide exploitability.",
-    ],
-    nextTools: drilldownPlan.drilldowns.map((entry) => entry.tool),
+    captureBoundaries,
+    nextTools,
   };
 }
 

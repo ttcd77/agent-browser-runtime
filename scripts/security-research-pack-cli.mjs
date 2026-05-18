@@ -106,6 +106,7 @@ function printSummary(pack) {
     auth: summary.authBoundaryReportPath,
     workerFrame: summary.workerFrameReportPath,
     drilldowns: summary.drilldownPlanPath,
+    researchPack: summary.researchPackPath,
   };
   console.log("Security research pack complete");
   console.log(`- backend: ${pack.backend || "(unknown)"}`);

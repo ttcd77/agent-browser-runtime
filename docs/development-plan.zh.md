@@ -169,6 +169,7 @@
 - `devtools_security_research_pack` / `browser_security_pack` 现在直接返回 artifact index、evidence timeline 和 F12 parity snapshot。
 - `summary` 增加 `artifactFileCount`、`evidenceTimelineEventCount`、`f12ParityPanelCount`，方便 Agent 先判断证据包是否完整，再选择下一步 drilldown。
 - Managed Browser 和 Personal Chrome 都保持同合同；Personal 不支持的底层能力仍然通过 parity / notApplicable 边界表达。
+- 研究包现在还会保存一个 `research-packs/*-security-research-pack.json` handoff 文件，汇总客观摘要、artifact 路径、drilldown plan 和边界说明，方便跨 session 或跨 Agent 交接。
 
 ### 2026-05-18: Research Pack Drilldown Plan
 

@@ -285,16 +285,25 @@ const indexedDbRead = await callTool("devtools_indexeddb_read", {
 });
 assert(indexedDbRead.page?.ok === true, `Personal IndexedDB read failed: ${JSON.stringify(indexedDbRead)}`);
 assert(indexedDbRead.page?.records?.some((record) => record.value?.value === "personal indexeddb smoke"), `Personal IndexedDB read missing smoke record: ${JSON.stringify(indexedDbRead)}`);
-const cacheStorageList = await callTool("devtools_cache_storage_list", {
-  maxCaches: 20,
-  maxEntries: 20,
-});
+const expectedCacheUrl = new URL("/personal-cached.txt", fixture.url).toString();
+let cacheStorageList = null;
+let personalSmokeCache = null;
+let personalSmokeCacheEntry = null;
+for (let attempt = 0; attempt < 12; attempt += 1) {
+  cacheStorageList = await callTool("devtools_cache_storage_list", {
+    maxCaches: 20,
+    maxEntries: 50,
+  });
+  personalSmokeCache = cacheStorageList.page?.caches?.find((cache) => cache.name === "agent-personal-smoke-cache");
+  personalSmokeCacheEntry = personalSmokeCache?.entries?.find((entry) => entry.url === expectedCacheUrl && entry.status === 200);
+  if (personalSmokeCacheEntry) break;
+  await new Promise((resolve) => setTimeout(resolve, 250));
+}
 assert(cacheStorageList.page?.ok === true, `Personal CacheStorage list failed: ${JSON.stringify(cacheStorageList)}`);
-const personalSmokeCache = cacheStorageList.page?.caches?.find((cache) => cache.name === "agent-personal-smoke-cache");
-assert(personalSmokeCache?.entries?.some((entry) => String(entry.url).endsWith("/personal-cached.txt") && entry.status === 200), `Personal CacheStorage list missing smoke entry: ${JSON.stringify(cacheStorageList.page)}`);
+assert(personalSmokeCacheEntry, `Personal CacheStorage list missing current smoke entry ${expectedCacheUrl}: ${JSON.stringify(cacheStorageList.page)}`);
 const cacheEntry = await callTool("devtools_cache_entry_get", {
   cacheName: "agent-personal-smoke-cache",
-  url: `${fixture.url}personal-cached.txt`,
+  url: expectedCacheUrl,
 });
 assert(cacheEntry.page?.ok === true, `Personal CacheStorage entry read failed: ${JSON.stringify(cacheEntry)}`);
 assert(String(cacheEntry.page?.bodyText || "").includes("personal cached smoke"), `Personal CacheStorage body missing smoke text: ${JSON.stringify(cacheEntry)}`);
@@ -388,6 +397,8 @@ assert(researchPack.summary?.evidenceTimelineEventCount >= 1, "Personal Chrome s
 assert(researchPack.summary?.f12ParityPanelCount >= 1, "Personal Chrome security research pack missing F12 parity count");
 assert(researchPack.summary?.drilldownCount >= 3, "Personal Chrome security research pack missing drilldown count");
 assert(researchPack.summary?.drilldownPlanPath, "Personal Chrome security research pack missing drilldown plan path");
+assert(researchPack.summary?.researchPackPath, "Personal Chrome security research pack missing handoff path");
+assert(researchPack.artifacts?.researchPack?.sha256, "Personal Chrome security research pack missing handoff hash");
 assert(researchPack.parityMatrix?.backend === "personal-chrome", "Personal Chrome security research pack missing parity snapshot");
 assert(researchPack.drilldownPlan?.drilldowns?.some((entry) => entry.tool === "devtools_evidence_timeline"), "Personal Chrome security research pack missing evidence timeline drilldown");
 assert(researchPack.drilldownPlan?.planPath === researchPack.summary.drilldownPlanPath, "Personal Chrome security research pack drilldown path mismatch");
@@ -423,6 +434,7 @@ assert(facadePack.summary?.evidenceTimelineEventCount >= 1, "Personal Chrome bro
 assert(facadePack.summary?.f12ParityPanelCount >= 1, "Personal Chrome browser_security_pack missing F12 parity count");
 assert(facadePack.summary?.drilldownCount >= 3, "Personal Chrome browser_security_pack missing drilldown count");
 assert(facadePack.summary?.drilldownPlanPath, "Personal Chrome browser_security_pack missing drilldown plan path");
+assert(facadePack.summary?.researchPackPath, "Personal Chrome browser_security_pack missing handoff path");
 assert(facadePack.parityMatrix?.backend === "personal-chrome", "Personal Chrome browser_security_pack missing parity snapshot");
 
 const captureBisect = await callTool("devtools_capture_bisect", {
