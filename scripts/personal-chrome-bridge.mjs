@@ -615,6 +615,8 @@ function personalArtifactRoots() {
     diffDir,
     authReportDir,
     boundaryReportDir,
+    drilldownPlanDir,
+    researchPackDir,
   ].filter(existsSync);
 }
 
@@ -745,6 +747,8 @@ function inferArtifactKind(file) {
   if (value.includes("trace")) return "trace";
   if (value.includes("screenshots") || ["png", "jpg", "jpeg", "webp"].includes(ext)) return "screenshot";
   if (value.includes("application")) return "application";
+  if (value.includes("drilldown")) return "drilldown-plan";
+  if (value.includes("research-pack")) return "research-pack";
   if (value.includes("capture") || value.includes("f12-evidence") || value.includes("bundle")) return "bundle";
   if (value.includes("manifest")) return "manifest";
   if (value.includes("graph")) return "graph";

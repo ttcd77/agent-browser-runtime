@@ -248,6 +248,8 @@ try {
     maxFiles: 100,
   });
   assert(artifactIndex.totalFileCount >= 1, "professional artifact index missing files");
+  assert(artifactIndex.kinds?.["research-pack"] >= 1, `professional artifact index missing research-pack kind: ${JSON.stringify(artifactIndex.kinds)}`);
+  assert(artifactIndex.kinds?.["drilldown-plan"] >= 1, `professional artifact index missing drilldown-plan kind: ${JSON.stringify(artifactIndex.kinds)}`);
 
   console.log("Professional AppSec F12 smoke passed:");
   console.log(`- fixture: ${fixture.url}`);

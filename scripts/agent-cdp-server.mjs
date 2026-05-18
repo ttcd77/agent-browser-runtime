@@ -665,6 +665,8 @@ function inferArtifactKind(file) {
   if (value.includes("/traces/") || value.includes("chrome-trace") || value.includes("trace")) return "trace";
   if (value.includes("/screenshots/") || ["png", "jpg", "jpeg", "webp"].includes(ext)) return "screenshot";
   if (value.includes("/application/") || value.includes("application-export")) return "application";
+  if (value.includes("/drilldowns/") || value.includes("research-pack-drilldowns")) return "drilldown-plan";
+  if (value.includes("/research-packs/") || value.includes("security-research-pack")) return "research-pack";
   if (value.includes("/bundles/") || value.includes("evidence-bundle") || value.includes("f12-evidence")) return "bundle";
   if (value.includes("/manifests/") || value.includes("manifest")) return "manifest";
   if (value.includes("/graphs/") || value.includes("graph")) return "graph";
