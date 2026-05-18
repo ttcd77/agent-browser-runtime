@@ -17,7 +17,8 @@
 
 - 每轮只做一个 bounded task。
 - 工作区不干净时，不自动覆盖已有改动。
-- 默认每轮必须跑 `npm run check:full`。
+- 默认每轮必须跑 `npm run check:professional`。
+- 如果改动触及 Personal Chrome 或发布前完整回归，再跑 `npm run check:full`。
 - 默认要求 agent 提交自己的改动。
 - 每轮结束后退出；如果是 loop 模式，则等待下一个 interval。
 - 不提交 `runtime/`、真实证据、私人 Chrome 数据。

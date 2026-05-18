@@ -28,7 +28,8 @@
    - 合同验证: `npm run contract:devtools`
    - F12 验证: `npm run smoke:f12`
    - Personal Chrome 验证: `npm run smoke:personal`
-   - 完整验证: `npm run check:full`
+   - 专业主线验证: `npm run check:professional`
+   - 全后端回归: `npm run check:full`
 
 5. 写记录
    - 修改对应 docs。
@@ -50,7 +51,13 @@ npm run check
 npm run contract:devtools
 ```
 
-完整验收:
+专业主线验收:
+
+```bash
+npm run check:professional
+```
+
+触及 Personal Chrome 或发布前完整回归:
 
 ```bash
 npm run check:full

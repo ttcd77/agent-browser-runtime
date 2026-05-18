@@ -65,7 +65,7 @@ ${task}
 3. 每轮只做一个 bounded engineering task。
 4. 工具层只返回客观证据，不做漏洞判断，不恢复 risk summary。
 5. Personal Chrome 和 Managed Browser 的 devtools_* 合同必须保持一致；如果一个后端不支持，返回结构化 notApplicable。
-6. 修改后运行 npm run check:full。
+6. 修改后运行 npm run check:professional；如果改动触及 Personal Chrome，再额外运行 npm run smoke:personal 或 npm run check:full。
 7. 如果验证通过，更新相关 docs 并 git commit。
 8. 如果验证失败，修复；如果无法修复，写清楚失败原因，不要强行提交。
 9. 不提交 runtime、logs、私人浏览器数据、真实目标证据。

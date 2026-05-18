@@ -33,7 +33,7 @@ const releaseChecklist = read(releasePath);
 const pkg = JSON.parse(read(packagePath) || "{}");
 
 const scripts = pkg.scripts || {};
-const requiredScripts = ["check", "contract:devtools", "smoke:f12", "smoke:personal", "check:full"];
+const requiredScripts = ["check", "contract:devtools", "smoke:f12", "smoke:professional", "check:professional", "check:full"];
 const missingScripts = requiredScripts.filter((name) => !scripts[name]);
 const currentPlan = section(plan, "分阶段计划");
 const executionRecord = section(plan, "执行记录");
@@ -56,7 +56,7 @@ console.log(JSON.stringify({
   scripts: {
     missing: missingScripts,
     recommendedQuick: ["npm run check", "npm run contract:devtools"],
-    recommendedFull: ["npm run check:full"],
+    recommendedFull: ["npm run check:professional"],
   },
   docs: {
     hasPlan: Boolean(plan),
@@ -67,4 +67,3 @@ console.log(JSON.stringify({
   },
   nextSuggestions,
 }, null, 2));
-

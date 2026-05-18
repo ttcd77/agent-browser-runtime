@@ -58,7 +58,7 @@
 4. 所有新增能力必须有 smoke 或 contract 验证。
 5. 文档必须能解释“Agent 应该怎么用”，而不是只列 API 名。
 
-连续开发入口见 `docs/continuous-development.zh.md`。每轮开工前先跑 `npm run dev:loop-check`，收工前优先跑 `npm run check:full`。
+连续开发入口见 `docs/continuous-development.zh.md`。每轮开工前先跑 `npm run dev:loop-check`，收工前优先跑 `npm run check:professional`；触及 Personal Chrome 或发布前再跑 `npm run check:full`。
 
 ## 分阶段计划
 
@@ -296,6 +296,7 @@
 - 新增 `docs/continuous-development.zh.md`，固定每轮开发循环。
 - 新增 `npm run dev:loop-check`，输出 repo 状态、计划状态、验证脚本状态和下一步建议。
 - 新增 `npm run check:devtools` 和 `npm run check:full`，把完整验收命令固定下来。
+- 后续新增 `npm run check:professional`，把 Managed/CDP 专业主线、F12 smoke、professional smoke 和 CLI handoff smoke 收束成默认专业门禁。
 
 ### 2026-05-17: 外部自动开发 Loop 建立
 
