@@ -174,6 +174,11 @@ still available for drill-down and parity with DevTools panels, but they are not
 the first interface. Use `browser_raw` only when the facade cannot express the
 required F12 operation.
 
+Use `devtools_professional_readiness` when an agent needs to check whether the
+workflow, F12 parity map, capture status, artifact inventory, and evidence
+timeline are mechanically ready before continuing. It returns next tool calls;
+it does not classify vulnerabilities.
+
 `browser_inspect` / `agent_inspect` also return this professional workflow
 summary, so a first-screen agent call can route itself without scanning the full
 tool catalog.
@@ -263,9 +268,11 @@ response.
 - `devtools_tool_catalog`
 - `devtools_tool_help`
 - `devtools_capability_map`
+- `devtools_f12_parity_matrix`
 - `devtools_workflow_guide`
+- `devtools_professional_readiness`
 
-The three `devtools_tool_*` / `devtools_workflow_guide` tools are for usability:
+The `devtools_tool_*`, capability, parity, workflow, and readiness tools are for usability:
 they help agents choose a tool, inspect one tool's parameters, and follow a
 deterministic workflow without guessing across the full tool list.
 
@@ -285,7 +292,9 @@ Chrome Extension Mode and Managed Browser Mode:
 - `devtools_tool_catalog`
 - `devtools_tool_help`
 - `devtools_capability_map`
+- `devtools_f12_parity_matrix`
 - `devtools_workflow_guide`
+- `devtools_professional_readiness`
 - `devtools_attach`
 - `devtools_detach`
 - `devtools_status`

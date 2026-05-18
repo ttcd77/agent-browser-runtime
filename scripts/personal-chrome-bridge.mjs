@@ -1885,7 +1885,7 @@ async function workerFrameDeepDive(params = {}) {
 }
 
 function devtoolsToolCategory(name) {
-  if (name === "agent_inspect" || /backend_capabilities|tool_catalog|tool_help|workflow_guide|capability_map|parity_matrix|protocol_schema/.test(name)) return "orientation";
+  if (name === "agent_inspect" || /backend_capabilities|tool_catalog|tool_help|workflow_guide|capability_map|parity_matrix|professional_readiness|protocol_schema/.test(name)) return "orientation";
   if (/tabs|snapshot|screenshot|click|type|scroll|eval|hard_reload/.test(name)) return "page-control";
   if (/network|request|har|capture_|realtime/.test(name)) return "network";
   if (/console|issues|security_summary|signal_summary|page_diagnostics/.test(name)) return "diagnostics";
@@ -1902,7 +1902,7 @@ const DEVTOOLS_CAPABILITY_META = {
   orientation: {
     panel: "Orientation",
     purpose: "Understand backend, available tools, workflows, and capture boundaries before drilling down.",
-    firstPass: ["devtools_backend_capabilities", "devtools_tool_catalog", "devtools_workflow_guide", "agent_inspect"],
+    firstPass: ["devtools_backend_capabilities", "devtools_professional_readiness", "devtools_tool_catalog", "devtools_workflow_guide", "agent_inspect"],
   },
   "page-control": {
     panel: "Page",
@@ -2135,6 +2135,89 @@ function f12ParityMatrix() {
       "If a row says partial or intentional-gap, the tool should expose that boundary instead of pretending the data exists.",
       "No capture means no complete historical network evidence, matching human F12 recording semantics.",
     ],
+  };
+}
+
+function buildProfessionalReadiness({
+  backend = "unknown",
+  workflow = {},
+  capabilityMap = {},
+  parityMatrix = {},
+  captureStatus = {},
+  artifactIndex = null,
+  evidenceTimeline = null,
+} = {}) {
+  const capture = captureStatus?.capture || captureStatus;
+  const artifactCount = artifactIndex?.totalFileCount ?? artifactIndex?.summary?.totalFileCount ?? null;
+  const timelineCount = evidenceTimeline?.eventCount ?? evidenceTimeline?.summary?.eventCount ?? null;
+  const checks = [
+    {
+      name: "professionalWorkflow",
+      present: workflow?.task === "professional-appsec" && Array.isArray(workflow.defaultPath) && workflow.defaultPath.includes("browser_security_pack"),
+      evidence: workflow?.defaultPath || null,
+    },
+    {
+      name: "facadeTools",
+      present: Array.isArray(capabilityMap?.recommendedStart) && capabilityMap.recommendedStart.includes("browser_security_pack"),
+      evidence: capabilityMap?.recommendedStart || null,
+    },
+    {
+      name: "f12ParityMatrix",
+      present: Boolean(parityMatrix?.summary?.panelCount >= 8 || parityMatrix?.panelCount >= 8),
+      evidence: parityMatrix?.summary?.panelCount ?? parityMatrix?.panelCount ?? null,
+    },
+    {
+      name: "captureStatusReachable",
+      present: Boolean(captureStatus && !captureStatus.unavailable && !captureStatus.error),
+      evidence: captureStatus?.unavailable ? captureStatus.error || "unavailable" : capture || null,
+    },
+    {
+      name: "artifactInventoryReachable",
+      present: artifactIndex === null || Boolean(!artifactIndex.unavailable && !artifactIndex.error && artifactCount !== null),
+      evidence: artifactCount,
+    },
+    {
+      name: "evidenceTimelineReachable",
+      present: evidenceTimeline === null || Boolean(!evidenceTimeline.unavailable && !evidenceTimeline.error && timelineCount !== null),
+      evidence: timelineCount,
+    },
+  ];
+  const missing = checks.filter((check) => !check.present).map((check) => check.name);
+  const captureEnabled = Boolean(capture?.enabled || capture?.recording || capture?.active);
+  const nextActions = [];
+  if (!captureEnabled) {
+    nextActions.push({
+      tool: "browser_capture",
+      input: { action: "start", clear: true, label: "professional-readiness" },
+      why: "Start the explicit F12 recording window before reproducing behavior.",
+    });
+  }
+  if (!artifactCount) {
+    nextActions.push({
+      tool: "browser_security_pack",
+      input: { includeHar: true, includeTrace: true, includeApplicationExport: true },
+      why: "Create the portable evidence pack, artifact index, timeline, and drilldown plan.",
+    });
+  }
+  nextActions.push({
+    tool: "devtools_workflow_guide",
+    input: { task: "professional-appsec" },
+    why: "Re-read the deterministic workflow if the agent needs the full route.",
+  });
+  return {
+    schema: "agent-browser-runtime.professional-readiness.v1",
+    backend,
+    generatedAt: new Date().toISOString(),
+    ready: missing.length === 0,
+    evidenceReady: Boolean(artifactCount && timelineCount),
+    checks,
+    missing,
+    capture: capture || null,
+    artifactCount,
+    timelineEventCount: timelineCount,
+    workflowPath: workflow?.defaultPath || null,
+    nextActions,
+    objectiveBoundary: "This readiness report checks tool workflow and evidence availability only; it does not judge vulnerabilities or security impact.",
   };
 }
 
@@ -2432,7 +2515,7 @@ async function browserReplayFacade(params = {}) {
 async function browserRawFacade(params = {}) {
   const toolName = String(params.tool || "").trim();
   if (!toolName.startsWith("devtools_")) throw new Error("browser_raw only allows devtools_* tools");
-  if (["devtools_tool_catalog", "devtools_tool_help", "devtools_capability_map", "devtools_f12_parity_matrix", "devtools_workflow_guide"].includes(toolName)) throw new Error("use tool usability helpers directly");
+  if (["devtools_tool_catalog", "devtools_tool_help", "devtools_capability_map", "devtools_f12_parity_matrix", "devtools_workflow_guide", "devtools_professional_readiness"].includes(toolName)) throw new Error("use tool usability helpers directly");
   const result = await callBridgeTool(toolName, params.input || {});
   return { backend: "personal-chrome", facade: "browser_raw", tool: toolName, result };
 }
@@ -2799,6 +2882,23 @@ async function callBridgeTool(toolName, params = {}) {
   }
   if (toolName === "devtools_f12_parity_matrix" || toolName === "personal_chrome_f12_parity_matrix") {
     return f12ParityMatrix();
+  }
+  if (toolName === "devtools_professional_readiness" || toolName === "personal_chrome_professional_readiness") {
+    const workflow = workflowGuide("professional-appsec");
+    const capabilityMapResult = capabilityMap();
+    const parityMatrix = f12ParityMatrix();
+    const captureStatus = await safeBridgeTool("devtools_capture_status", params || {});
+    const artifactIndex = params?.includeArtifacts === false ? null : await safeBridgeTool("devtools_artifact_index", { maxFiles: 200 });
+    const evidenceTimeline = params?.includeTimeline === false ? null : await safeBridgeTool("devtools_evidence_timeline", { maxEvents: 80, maxArtifacts: 120 });
+    return buildProfessionalReadiness({
+      backend: "personal-chrome",
+      workflow,
+      capabilityMap: capabilityMapResult,
+      parityMatrix,
+      captureStatus,
+      artifactIndex,
+      evidenceTimeline,
+    });
   }
   if (toolName === "devtools_heap_snapshot" || toolName === "personal_chrome_heap_snapshot") {
     return {
@@ -3442,6 +3542,7 @@ const tools = {
   personal_chrome_capability_map: "Agent usability: return the DevTools capability map grouped by F12 panel, first-pass tools, drill-down tools, artifacts, and raw CDP escape hatches.",
   personal_chrome_f12_parity_matrix: "Agent usability: return an objective F12 parity matrix for professional AppSec work, including supported panels, partial coverage, tool routes, and browser boundaries.",
   personal_chrome_workflow_guide: "Agent usability: return deterministic tool recipes for common browser-security research tasks.",
+  personal_chrome_professional_readiness: "Agent usability: report whether the professional F12 evidence workflow is mechanically ready and which objective tool to call next.",
   personal_chrome_sources_search: "Search parsed JavaScript sources captured through chrome.debugger.",
   personal_chrome_performance_trace: "Capture a short Performance panel-style snapshot from the user's real Chrome tab.",
   personal_chrome_performance_insights: "Summarize Performance panel timing, slow resources, long tasks, and optional Chrome trace evidence from the user's real Chrome tab.",
@@ -3541,6 +3642,7 @@ const tools = {
   devtools_capability_map: "Agent usability: return the DevTools capability map grouped by F12 panel, first-pass tools, drill-down tools, artifacts, and raw CDP escape hatches.",
   devtools_f12_parity_matrix: "Agent usability: return an objective F12 parity matrix for professional AppSec work, including supported panels, partial coverage, tool routes, and browser boundaries.",
   devtools_workflow_guide: "Agent usability: return deterministic tool recipes for common browser-security research tasks.",
+  devtools_professional_readiness: "Agent usability: report whether the professional F12 evidence workflow is mechanically ready and which objective tool to call next.",
   devtools_sources_search: "Unified Agent DevTools API: search parsed JavaScript sources by literal query.",
   devtools_performance_trace: "Unified Agent DevTools API: capture navigation/resource/paint/long-task performance data.",
   devtools_performance_insights: "Unified Agent DevTools API: summarize Performance panel timing, resources, long tasks, and optional trace evidence.",

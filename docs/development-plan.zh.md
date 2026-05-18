@@ -145,6 +145,16 @@
 
 ## 执行记录
 
+### 2026-05-18: Professional Readiness Tool
+
+已经完成:
+
+- 新增 `devtools_professional_readiness` / `personal_chrome_professional_readiness`。
+- Agent 可以一眼确认专业 F12 工作流、facade 工具、F12 parity matrix、capture status、artifact index、evidence timeline 是否机械可用。
+- 返回 `nextActions`，例如先开启 `browser_capture` 或生成 `browser_security_pack`。
+- readiness 只报告工作流和证据可用性，不判断漏洞或安全影响。
+- Managed Browser 和 Personal Chrome 合同保持一致，当前 `devtools_*` 合同为 100 / 100。
+
 ### 2026-05-18: F12 Parity Matrix
 
 已经完成:

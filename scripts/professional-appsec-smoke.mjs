@@ -188,6 +188,14 @@ try {
   assert(workflowGuide.defaultTools?.includes("browser_raw"), "professional workflow guide missing browser_raw escape hatch");
   assert(workflowGuide.steps?.some((step) => step.tool === "browser_security_pack"), "professional workflow guide missing browser_security_pack step");
   assert(workflowGuide.exitCriteria?.some((entry) => String(entry).includes("drilldown plan")), "professional workflow guide missing drilldown exit criteria");
+  const initialReadiness = await callTool(baseUrl, "devtools_professional_readiness", {
+    profile: "professional",
+  });
+  assert(initialReadiness.backend === "managed-cdp", `professional readiness wrong backend: ${JSON.stringify(initialReadiness)}`);
+  assert(initialReadiness.workflowPath?.join(" -> ") === "browser_open -> browser_capture -> browser_inspect -> browser_security_pack -> drilldownPlan", "professional readiness missing workflow path");
+  assert(initialReadiness.checks?.some((check) => check.name === "f12ParityMatrix" && check.present), `professional readiness missing parity check: ${JSON.stringify(initialReadiness.checks)}`);
+  assert(initialReadiness.nextActions?.some((entry) => entry.tool === "browser_security_pack"), `professional readiness missing evidence-pack next action: ${JSON.stringify(initialReadiness.nextActions)}`);
+  assert(initialReadiness.objectiveBoundary?.includes("does not judge vulnerabilities"), "professional readiness crossed objective boundary");
   const firstInspect = await callTool(baseUrl, "browser_inspect", {
     profile: "professional",
     mode: "overview",
@@ -237,6 +245,13 @@ try {
   assert(pack.artifacts?.artifactIndex?.totalFileCount >= 1, "professional pack missing artifact index payload");
   assert(pack.artifacts?.artifactIndex?.kinds?.["research-pack"] >= 1, `professional pack artifact index missing handoff kind: ${JSON.stringify(pack.artifacts?.artifactIndex?.kinds)}`);
   assert(pack.artifacts?.evidenceTimeline?.eventCount >= 1, "professional pack missing evidence timeline payload");
+  const finalReadiness = await callTool(baseUrl, "devtools_professional_readiness", {
+    profile: "professional",
+  });
+  assert(finalReadiness.ready === true, `professional readiness not mechanically ready after pack: ${JSON.stringify(finalReadiness.missing)}`);
+  assert(finalReadiness.evidenceReady === true, `professional readiness missing evidence after pack: ${JSON.stringify(finalReadiness)}`);
+  assert(finalReadiness.artifactCount >= 1, "professional readiness missing artifact count after pack");
+  assert(finalReadiness.timelineEventCount >= 1, "professional readiness missing timeline count after pack");
   assert(pack.drilldownPlan?.drilldowns?.some((entry) => entry.tool === "devtools_request_detail"), "professional pack missing request-detail drilldown");
   assert(pack.drilldownPlan?.planPath === pack.summary.drilldownPlanPath, "professional pack drilldown path mismatch");
   const requestDetailStep = pack.drilldownPlan.drilldowns.find((entry) => entry.tool === "devtools_request_detail");

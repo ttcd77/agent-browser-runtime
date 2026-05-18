@@ -114,6 +114,7 @@ Tool usability helpers:
 - `devtools_capability_map`: group the runtime by F12 panel, first-pass tools, drill-down tools, artifact tools, and raw escape hatches.
 - `devtools_f12_parity_matrix`: report objective F12 panel parity for professional AppSec work, including supported rows, partial backend rows, tool routes, and browser boundaries.
 - `devtools_workflow_guide`: return deterministic tool recipes for common tasks.
+- `devtools_professional_readiness`: report whether the professional evidence workflow is mechanically ready, which evidence pieces are present, and which objective tool to call next.
 
 ## Unified Tools
 
@@ -135,6 +136,7 @@ Agent usability:
 - `devtools_capability_map`
 - `devtools_f12_parity_matrix`
 - `devtools_workflow_guide`
+- `devtools_professional_readiness`
 
 DevTools/F12 data layer:
 

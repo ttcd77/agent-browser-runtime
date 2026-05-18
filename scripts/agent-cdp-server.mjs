@@ -2921,8 +2921,93 @@ function buildResearchPackArtifactCoverage(summary = {}, options = {}) {
   };
 }
 
+function buildProfessionalReadiness({
+  backend = "unknown",
+  profile = null,
+  workflow = {},
+  capabilityMap = {},
+  parityMatrix = {},
+  captureStatus = {},
+  artifactIndex = null,
+  evidenceTimeline = null,
+} = {}) {
+  const capture = captureStatus?.capture || captureStatus;
+  const artifactCount = artifactIndex?.totalFileCount ?? artifactIndex?.summary?.totalFileCount ?? null;
+  const timelineCount = evidenceTimeline?.eventCount ?? evidenceTimeline?.summary?.eventCount ?? null;
+  const checks = [
+    {
+      name: "professionalWorkflow",
+      present: workflow?.task === "professional-appsec" && Array.isArray(workflow.defaultPath) && workflow.defaultPath.includes("browser_security_pack"),
+      evidence: workflow?.defaultPath || null,
+    },
+    {
+      name: "facadeTools",
+      present: Array.isArray(capabilityMap?.recommendedStart) && capabilityMap.recommendedStart.includes("browser_security_pack"),
+      evidence: capabilityMap?.recommendedStart || null,
+    },
+    {
+      name: "f12ParityMatrix",
+      present: Boolean(parityMatrix?.summary?.panelCount >= 8 || parityMatrix?.panelCount >= 8),
+      evidence: parityMatrix?.summary?.panelCount ?? parityMatrix?.panelCount ?? null,
+    },
+    {
+      name: "captureStatusReachable",
+      present: Boolean(captureStatus && !captureStatus.unavailable && !captureStatus.error),
+      evidence: captureStatus?.unavailable ? captureStatus.error || "unavailable" : capture || null,
+    },
+    {
+      name: "artifactInventoryReachable",
+      present: artifactIndex === null || Boolean(!artifactIndex.unavailable && !artifactIndex.error && artifactCount !== null),
+      evidence: artifactCount,
+    },
+    {
+      name: "evidenceTimelineReachable",
+      present: evidenceTimeline === null || Boolean(!evidenceTimeline.unavailable && !evidenceTimeline.error && timelineCount !== null),
+      evidence: timelineCount,
+    },
+  ];
+  const missing = checks.filter((check) => !check.present).map((check) => check.name);
+  const captureEnabled = Boolean(capture?.enabled || capture?.recording || capture?.active);
+  const nextActions = [];
+  if (!captureEnabled) {
+    nextActions.push({
+      tool: "browser_capture",
+      input: profile ? { profile, action: "start", clear: true, label: "professional-readiness" } : { action: "start", clear: true, label: "professional-readiness" },
+      why: "Start the explicit F12 recording window before reproducing behavior.",
+    });
+  }
+  if (!artifactCount) {
+    nextActions.push({
+      tool: "browser_security_pack",
+      input: profile ? { profile, includeHar: true, includeTrace: true, includeApplicationExport: true } : { includeHar: true, includeTrace: true, includeApplicationExport: true },
+      why: "Create the portable evidence pack, artifact index, timeline, and drilldown plan.",
+    });
+  }
+  nextActions.push({
+    tool: "devtools_workflow_guide",
+    input: { task: "professional-appsec" },
+    why: "Re-read the deterministic workflow if the agent needs the full route.",
+  });
+  return {
+    schema: "agent-browser-runtime.professional-readiness.v1",
+    backend,
+    profile,
+    generatedAt: new Date().toISOString(),
+    ready: missing.length === 0,
+    evidenceReady: Boolean(artifactCount && timelineCount),
+    checks,
+    missing,
+    capture: capture || null,
+    artifactCount,
+    timelineEventCount: timelineCount,
+    workflowPath: workflow?.defaultPath || null,
+    nextActions,
+    objectiveBoundary: "This readiness report checks tool workflow and evidence availability only; it does not judge vulnerabilities or security impact.",
+  };
+}
+
 function devtoolsToolCategory(name) {
-  if (name === "agent_inspect" || /backend_capabilities|tool_catalog|tool_help|workflow_guide|capability_map|parity_matrix|protocol_schema/.test(name)) return "orientation";
+  if (name === "agent_inspect" || /backend_capabilities|tool_catalog|tool_help|workflow_guide|capability_map|parity_matrix|professional_readiness|protocol_schema/.test(name)) return "orientation";
   if (/tabs|snapshot|screenshot|click|type|scroll|eval|hard_reload/.test(name)) return "page-control";
   if (/network|request|har|capture_|realtime/.test(name)) return "network";
   if (/console|issues|security_summary|signal_summary|page_diagnostics/.test(name)) return "diagnostics";
@@ -2971,7 +3056,7 @@ const DEVTOOLS_CAPABILITY_META = {
   orientation: {
     panel: "Orientation",
     purpose: "Understand backend, available tools, workflows, and capture boundaries before drilling down.",
-    firstPass: ["devtools_backend_capabilities", "devtools_tool_catalog", "devtools_workflow_guide", "agent_inspect"],
+    firstPass: ["devtools_backend_capabilities", "devtools_professional_readiness", "devtools_tool_catalog", "devtools_workflow_guide", "agent_inspect"],
   },
   "page-control": {
     panel: "Page",
@@ -12122,6 +12207,46 @@ function registerStandaloneBrowserTools(tools, cdpPort, profileRegistry, default
     },
   });
 
+  tools.set("devtools_professional_readiness", {
+    name: "devtools_professional_readiness",
+    description: "Agent usability: report whether the professional F12 evidence workflow is mechanically ready, which evidence pieces are present, and which objective tool to call next.",
+    parameters: {
+      type: "object",
+      properties: {
+        profile: { type: "string" },
+        includeArtifacts: { type: "boolean" },
+        includeTimeline: { type: "boolean" },
+      },
+    },
+    async execute(id, params) {
+      const profileName = params?.profile || defaultProfileName;
+      const parseTool = async (name, input = {}) => {
+        try {
+          const result = await tools.get(name).execute(id, input);
+          return JSON.parse(result.content?.[0]?.text || "{}");
+        } catch (error) {
+          return { unavailable: true, tool: name, error: String(error?.message || error) };
+        }
+      };
+      const workflow = await parseTool("devtools_workflow_guide", { task: "professional-appsec" });
+      const capabilityMap = await parseTool("devtools_capability_map", {});
+      const parityMatrix = await parseTool("devtools_f12_parity_matrix", {});
+      const captureStatus = await parseTool("devtools_capture_status", { profile: profileName });
+      const artifactIndex = params?.includeArtifacts === false ? null : await parseTool("devtools_artifact_index", { profile: profileName, maxFiles: 200 });
+      const evidenceTimeline = params?.includeTimeline === false ? null : await parseTool("devtools_evidence_timeline", { profile: profileName, maxEvents: 80, maxArtifacts: 120 });
+      return toolResult(buildProfessionalReadiness({
+        backend: "managed-cdp",
+        profile: profileName,
+        workflow,
+        capabilityMap,
+        parityMatrix,
+        captureStatus,
+        artifactIndex,
+        evidenceTimeline,
+      }));
+    },
+  });
+
   tools.set("browser_open", {
     name: "browser_open",
     description: "Facade: open or switch a profile to a URL, then return page diagnostics. Use this instead of low-level navigation for ordinary agent work.",
@@ -12327,7 +12452,7 @@ function registerStandaloneBrowserTools(tools, cdpPort, profileRegistry, default
     async execute(id, params) {
       const toolName = String(params?.tool || "").trim();
       if (!toolName.startsWith("devtools_")) throw new Error("browser_raw only allows devtools_* tools");
-      if (["devtools_tool_catalog", "devtools_tool_help", "devtools_capability_map", "devtools_workflow_guide"].includes(toolName)) throw new Error("use tool usability helpers directly");
+      if (["devtools_tool_catalog", "devtools_tool_help", "devtools_capability_map", "devtools_f12_parity_matrix", "devtools_workflow_guide", "devtools_professional_readiness"].includes(toolName)) throw new Error("use tool usability helpers directly");
       const target = tools.get(toolName);
       if (!target) throw new Error(`unknown devtools tool: ${toolName}`);
       const result = JSON.parse((await target.execute(id, params?.input || {})).content?.[0]?.text || "{}");

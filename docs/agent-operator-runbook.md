@@ -32,6 +32,17 @@ curl -X POST http://127.0.0.1:17335/tool/devtools_backend_capabilities \
   -d "{\"profile\":\"default\"}"
 ```
 
+Optional readiness check:
+
+```bash
+curl -X POST http://127.0.0.1:17335/tool/devtools_professional_readiness \
+  -H "content-type: application/json" \
+  -d "{\"profile\":\"default\"}"
+```
+
+This reports mechanical workflow/evidence readiness and next tool calls. It is
+not a vulnerability or impact assessment.
+
 2. Open or attach to a page.
 
 ```bash

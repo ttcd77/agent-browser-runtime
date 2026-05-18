@@ -567,6 +567,11 @@ assert(parityMatrix.backend === "personal-chrome", `Personal Chrome F12 parity m
 assert(parityMatrix.rows?.some((row) => row.panel === "Network" && row.personal === "supported"), "Personal Chrome F12 parity matrix missing Network support");
 assert(parityMatrix.rows?.some((row) => row.panel === "Raw CDP / Escape Hatch" && row.personal === "partial"), "Personal Chrome F12 parity matrix missing raw CDP boundary");
 assert(parityMatrix.objectiveBoundaries?.some((entry) => String(entry).includes("does not classify vulnerabilities")), "Personal Chrome F12 parity matrix missing objective boundary");
+const professionalReadiness = await callTool("devtools_professional_readiness", {});
+assert(professionalReadiness.backend === "personal-chrome", `Personal Chrome professional readiness wrong backend: ${JSON.stringify(professionalReadiness)}`);
+assert(professionalReadiness.workflowPath?.includes("browser_security_pack"), `Personal Chrome professional readiness missing workflow path: ${JSON.stringify(professionalReadiness)}`);
+assert(professionalReadiness.checks?.some((check) => check.name === "f12ParityMatrix" && check.present), `Personal Chrome professional readiness missing parity check: ${JSON.stringify(professionalReadiness.checks)}`);
+assert(professionalReadiness.objectiveBoundary?.includes("does not judge vulnerabilities"), "Personal Chrome professional readiness crossed objective boundary");
 const workflowGuide = await callTool("devtools_workflow_guide", { task: "auth-boundary" });
 assert(workflowGuide.steps?.some((step) => step.tool === "devtools_auth_boundary_report"), "Personal Chrome workflow guide missing auth boundary step");
 
@@ -587,6 +592,7 @@ console.log(`- evidence timeline events/types: ${evidenceTimeline.eventCount}/${
 console.log(`- evidence timeline filtered artifacts: ${artifactTimeline.eventCount}`);
 console.log(`- capability panels: ${capabilityMap.panelCount}`);
 console.log(`- F12 parity rows: ${parityMatrix.summary.panelCount}`);
+console.log(`- professional readiness: ${professionalReadiness.ready}/${professionalReadiness.evidenceReady}`);
 console.log(`- realtime channels ws/sse: ${realtimeLog.websocketCount}/${realtimeLog.eventSourceMessageCount}`);
 
 fixture.server.close();
