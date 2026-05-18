@@ -320,6 +320,16 @@
 - Managed Professional smoke 和 Personal Chrome smoke 都已覆盖 capture bucket summary。
 - 这只是已录制证据的客观分桶，不读取正文、不判断漏洞。
 
+### 2026-05-18: Readiness HAR Coverage Summary
+
+已经完成:
+
+- `devtools_professional_readiness` / `personal_chrome_professional_readiness` 现在会调用 HAR completeness 并返回 `harCoverage`。
+- Agent 可以从 readiness 直接看到 HAR entry count、body、readable body、timing、redirect、securityDetails 覆盖度。
+- readiness 新增 `harCompletenessReachable` 机械检查。
+- Managed Professional smoke 和 Personal Chrome smoke 都已覆盖 HAR coverage summary。
+- 这只是 HAR 证据覆盖率，不读取正文、不判断漏洞。
+
 ### 2026-05-18: Professional Readiness Tool
 
 已经完成:

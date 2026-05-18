@@ -2338,6 +2338,7 @@ function buildProfessionalReadiness({
   parityMatrix = {},
   captureStatus = {},
   captureBisect = null,
+  harCompleteness = null,
   artifactIndex = null,
   evidenceTimeline = null,
 } = {}) {
@@ -2363,6 +2364,17 @@ function buildProfessionalReadiness({
     websocketCount: captureBisect.buckets.realtime?.websocketCount ?? 0,
     websocketFrameCount: captureBisect.buckets.realtime?.websocketFrameCount ?? 0,
     eventSourceMessageCount: captureBisect.buckets.realtime?.eventSourceMessageCount ?? 0,
+  } : null;
+  const harCoverage = harCompleteness && !harCompleteness.unavailable && !harCompleteness.error ? {
+    entryCount: harCompleteness.entryCount ?? 0,
+    bodiesIncluded: harCompleteness.coverage?.bodiesIncluded || null,
+    readableBodies: harCompleteness.coverage?.readableBodies || null,
+    totalTiming: harCompleteness.coverage?.totalTiming || null,
+    allTimingPhases: harCompleteness.coverage?.allTimingPhases || null,
+    securityDetails: harCompleteness.coverage?.securityDetails || null,
+    httpsSecurityDetails: harCompleteness.coverage?.httpsSecurityDetails || null,
+    redirects: harCompleteness.coverage?.redirects || null,
+    recommendedDrilldownCount: Array.isArray(harCompleteness.recommendedDrilldowns) ? harCompleteness.recommendedDrilldowns.length : 0,
   } : null;
   const agentUsage = capabilityMap?.agentUsage || null;
   const recommendedRoute = Array.isArray(agentUsage?.defaultRoute) ? agentUsage.defaultRoute : [];
@@ -2407,6 +2419,11 @@ function buildProfessionalReadiness({
       name: "captureBisectReachable",
       present: captureBisect === null || Boolean(!captureBisect.unavailable && !captureBisect.error && captureBuckets),
       evidence: captureBuckets,
+    },
+    {
+      name: "harCompletenessReachable",
+      present: harCompleteness === null || Boolean(!harCompleteness.unavailable && !harCompleteness.error && harCoverage),
+      evidence: harCoverage,
     },
     {
       name: "artifactInventoryReachable",
@@ -2474,6 +2491,7 @@ function buildProfessionalReadiness({
     missing,
     capture: capture || null,
     captureBuckets,
+    harCoverage,
     artifactCount,
     artifactKinds,
     timelineEventCount: timelineCount,
@@ -3159,6 +3177,7 @@ async function callBridgeTool(toolName, params = {}) {
     const parityMatrix = f12ParityMatrix();
     const captureStatus = await safeBridgeTool("devtools_capture_status", params || {});
     const captureBisect = params?.includeCaptureBisect === false ? null : await safeBridgeTool("devtools_capture_bisect", { ...(params || {}), save: false, limit: 80 });
+    const harCompleteness = params?.includeHarCompleteness === false ? null : await safeBridgeTool("devtools_har_completeness", { ...(params || {}), save: false, includeBodies: false, maxRows: 20 });
     const artifactIndex = params?.includeArtifacts === false ? null : await safeBridgeTool("devtools_artifact_index", { maxFiles: 200 });
     const evidenceTimeline = params?.includeTimeline === false ? null : await safeBridgeTool("devtools_evidence_timeline", { maxEvents: 80, maxArtifacts: 120 });
     return buildProfessionalReadiness({
@@ -3168,6 +3187,7 @@ async function callBridgeTool(toolName, params = {}) {
       parityMatrix,
       captureStatus,
       captureBisect,
+      harCompleteness,
       artifactIndex,
       evidenceTimeline,
     });
