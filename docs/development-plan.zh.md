@@ -273,6 +273,15 @@
 - Managed Professional smoke 和 Personal Chrome smoke 都已覆盖 `devtools_artifact_read` next action。
 - 这只是确定性路线合并，不读取证据正文、不判断漏洞。
 
+### 2026-05-18: Handoff Inspect Completeness Rows
+
+已经完成:
+
+- `devtools_artifact_inspect` / `personal_chrome_artifact_inspect` 读取 research pack handoff 时，现在返回 `handoffChecks` 和 `artifactCoverageRows`。
+- Agent 可以直接看到 handoff 机械完整性检查和 artifact coverage 每一行，而不只看到 ready/missing。
+- Managed Professional smoke 和 Personal Chrome smoke 都已覆盖 `agentUsageRoute` handoff check 和 HAR artifact coverage row。
+- 这只是 checklist 暴露，不读取隐藏数据、不判断漏洞。
+
 ### 2026-05-18: Professional Readiness Tool
 
 已经完成:

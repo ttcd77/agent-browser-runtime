@@ -313,6 +313,8 @@ try {
   assert(handoffInspect.researchPackHandoff?.ready === true, `professional handoff inspect missing readiness summary: ${JSON.stringify(handoffInspect.researchPackHandoff)}`);
   assert(handoffInspect.researchPackHandoff?.agentEntryMode === "facade-first", "professional handoff inspect missing agent route summary");
   assert(handoffInspect.researchPackHandoff?.professionalPath?.includes("browser_security_pack"), "professional handoff inspect missing professional facade path");
+  assert(handoffInspect.researchPackHandoff?.handoffChecks?.some((check) => check.name === "agentUsageRoute" && check.present), "professional handoff inspect missing handoff check rows");
+  assert(handoffInspect.researchPackHandoff?.artifactCoverageRows?.some((row) => row.name === "har" && row.status === "present"), "professional handoff inspect missing artifact coverage rows");
   assert(handoffInspect.researchPackHandoff?.recommendedRoute?.some((step) => step.tool === "browser_security_pack"), "professional handoff inspect missing recommended agent route");
   assert(handoffInspect.researchPackHandoff?.panelRoutes?.network?.some((step) => step.tool === "devtools_request_detail"), "professional handoff inspect missing network panel route");
   assert(handoffInspect.researchPackHandoff?.objectiveBoundary?.includes("does not judge vulnerabilities"), "professional handoff inspect crossed objective boundary");

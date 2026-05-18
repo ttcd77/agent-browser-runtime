@@ -434,6 +434,8 @@ const researchPackInspect = await callTool("devtools_artifact_inspect", {
 assert(researchPackInspect.researchPackHandoff?.ready === true, `Personal Chrome handoff inspect missing readiness summary: ${JSON.stringify(researchPackInspect.researchPackHandoff)}`);
 assert(researchPackInspect.researchPackHandoff?.agentEntryMode === "facade-first", "Personal Chrome handoff inspect missing agent route summary");
 assert(researchPackInspect.researchPackHandoff?.professionalPath?.includes("browser_security_pack"), "Personal Chrome handoff inspect missing professional facade path");
+assert(researchPackInspect.researchPackHandoff?.handoffChecks?.some((check) => check.name === "agentUsageRoute" && check.present), "Personal Chrome handoff inspect missing handoff check rows");
+assert(researchPackInspect.researchPackHandoff?.artifactCoverageRows?.some((row) => row.name === "har" && row.status === "present"), "Personal Chrome handoff inspect missing artifact coverage rows");
 assert(researchPackInspect.researchPackHandoff?.recommendedRoute?.some((step) => step.tool === "browser_security_pack"), "Personal Chrome handoff inspect missing recommended agent route");
 assert(researchPackInspect.researchPackHandoff?.panelRoutes?.network?.some((step) => step.tool === "devtools_request_detail"), "Personal Chrome handoff inspect missing network panel route");
 
