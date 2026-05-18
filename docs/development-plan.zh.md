@@ -291,6 +291,15 @@
 - Managed Professional smoke 和 Personal Chrome smoke 都已覆盖 `research-pack` kind。
 - 这只是 artifact inventory 的客观计数，不读取正文、不判断漏洞。
 
+### 2026-05-18: Readiness Timeline Type Distribution
+
+已经完成:
+
+- `devtools_professional_readiness` / `personal_chrome_professional_readiness` 现在返回 `timelineTypes`。
+- Agent 可以从 readiness 直接看到 evidence timeline 中 artifact、network-request、console、realtime 等事件类型分布。
+- Managed Professional smoke 和 Personal Chrome smoke 都已覆盖 timeline type 分布。
+- 这只是 evidence timeline 的客观计数，不读取正文、不判断漏洞。
+
 ### 2026-05-18: Professional Readiness Tool
 
 已经完成:

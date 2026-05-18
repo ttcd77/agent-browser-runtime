@@ -264,6 +264,7 @@ try {
   assert(finalReadiness.artifactCount >= 1, "professional readiness missing artifact count after pack");
   assert(finalReadiness.artifactKinds?.["research-pack"] >= 1, `professional readiness missing artifact kind distribution: ${JSON.stringify(finalReadiness.artifactKinds)}`);
   assert(finalReadiness.timelineEventCount >= 1, "professional readiness missing timeline count after pack");
+  assert(finalReadiness.timelineTypes?.artifact >= 1 || finalReadiness.timelineTypes?.["network-request"] >= 1, `professional readiness missing timeline type distribution: ${JSON.stringify(finalReadiness.timelineTypes)}`);
   assert(finalReadiness.latestResearchPackHandoff?.path, "professional readiness missing latest research pack handoff route");
   assert(finalReadiness.latestResearchPackHandoff?.inspect?.tool === "devtools_artifact_inspect", "professional readiness missing latest handoff inspect route");
   assert(finalReadiness.checks?.some((check) => check.name === "artifactDrilldownsReachable" && check.present), `professional readiness missing artifact drilldown check: ${JSON.stringify(finalReadiness.checks)}`);

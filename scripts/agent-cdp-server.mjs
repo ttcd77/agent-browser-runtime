@@ -3043,6 +3043,7 @@ function buildProfessionalReadiness({
   const artifactCount = artifactIndex?.totalFileCount ?? artifactIndex?.summary?.totalFileCount ?? null;
   const artifactKinds = artifactIndex?.kinds || artifactIndex?.summary?.kinds || null;
   const timelineCount = evidenceTimeline?.eventCount ?? evidenceTimeline?.summary?.eventCount ?? null;
+  const timelineTypes = evidenceTimeline?.byType || evidenceTimeline?.summary?.byType || null;
   const agentUsage = capabilityMap?.agentUsage || null;
   const recommendedRoute = Array.isArray(agentUsage?.defaultRoute) ? agentUsage.defaultRoute : [];
   const artifactDrilldowns = Array.isArray(artifactIndex?.recommendedDrilldowns) ? artifactIndex.recommendedDrilldowns.slice(0, 8) : [];
@@ -3151,6 +3152,7 @@ function buildProfessionalReadiness({
     artifactCount,
     artifactKinds,
     timelineEventCount: timelineCount,
+    timelineTypes,
     latestResearchPackHandoff,
     recommendedRoute,
     panelRoutes: agentUsage?.panelRoutes || null,
