@@ -253,6 +253,16 @@
 - Managed Professional smoke 和 Personal Chrome smoke 都已覆盖该检查。
 - 这只是机械完整性校验，不代表证据足够、不判断漏洞。
 
+### 2026-05-18: Readiness Artifact Drilldowns
+
+已经完成:
+
+- `devtools_professional_readiness` / `personal_chrome_professional_readiness` 现在返回 `artifactDrilldowns`。
+- `artifactDrilldowns` 来自 artifact index 的 `recommendedDrilldowns`，最多返回前 8 个确定性证据导航入口。
+- readiness 新增 `artifactDrilldownsReachable` 机械检查，确认已有 artifact 时能继续 inspect/read。
+- Managed Professional smoke 和 Personal Chrome smoke 都已覆盖该 route。
+- 这只是本地证据导航，不读取 artifact 正文、不判断漏洞。
+
 ### 2026-05-18: Professional Readiness Tool
 
 已经完成:

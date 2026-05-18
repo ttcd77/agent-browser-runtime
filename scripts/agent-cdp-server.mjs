@@ -3033,6 +3033,7 @@ function buildProfessionalReadiness({
   const timelineCount = evidenceTimeline?.eventCount ?? evidenceTimeline?.summary?.eventCount ?? null;
   const agentUsage = capabilityMap?.agentUsage || null;
   const recommendedRoute = Array.isArray(agentUsage?.defaultRoute) ? agentUsage.defaultRoute : [];
+  const artifactDrilldowns = Array.isArray(artifactIndex?.recommendedDrilldowns) ? artifactIndex.recommendedDrilldowns.slice(0, 8) : [];
   const latestResearchPack = (artifactIndex?.artifacts || [])
     .filter((artifact) => artifact.kind === "research-pack" && artifact.path)
     .sort((a, b) => String(b.modifiedAt || "").localeCompare(String(a.modifiedAt || "")))[0] || null;
@@ -3073,6 +3074,11 @@ function buildProfessionalReadiness({
       name: "artifactInventoryReachable",
       present: artifactIndex === null || Boolean(!artifactIndex.unavailable && !artifactIndex.error && artifactCount !== null),
       evidence: artifactCount,
+    },
+    {
+      name: "artifactDrilldownsReachable",
+      present: artifactIndex === null || artifactDrilldowns.length > 0,
+      evidence: artifactDrilldowns.map((entry) => entry.tool),
     },
     {
       name: "evidenceTimelineReachable",
@@ -3123,6 +3129,7 @@ function buildProfessionalReadiness({
     latestResearchPackHandoff,
     recommendedRoute,
     panelRoutes: agentUsage?.panelRoutes || null,
+    artifactDrilldowns,
     workflowPath: workflow?.defaultPath || null,
     nextActions,
     objectiveBoundary: "This readiness report checks tool workflow and evidence availability only; it does not judge vulnerabilities or security impact.",

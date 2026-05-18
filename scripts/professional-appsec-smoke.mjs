@@ -265,7 +265,9 @@ try {
   assert(finalReadiness.timelineEventCount >= 1, "professional readiness missing timeline count after pack");
   assert(finalReadiness.latestResearchPackHandoff?.path, "professional readiness missing latest research pack handoff route");
   assert(finalReadiness.latestResearchPackHandoff?.inspect?.tool === "devtools_artifact_inspect", "professional readiness missing latest handoff inspect route");
+  assert(finalReadiness.checks?.some((check) => check.name === "artifactDrilldownsReachable" && check.present), `professional readiness missing artifact drilldown check: ${JSON.stringify(finalReadiness.checks)}`);
   assert(finalReadiness.recommendedRoute?.some((step) => step.tool === "devtools_artifact_index"), "professional readiness missing artifact index in recommended route");
+  assert(finalReadiness.artifactDrilldowns?.some((entry) => entry.tool === "devtools_artifact_inspect" && entry.input?.path), "professional readiness missing artifact drilldown route");
   assert(finalReadiness.nextActions?.some((entry) => entry.tool === "devtools_artifact_inspect"), "professional readiness missing handoff inspect next action");
   assert(pack.drilldownPlan?.drilldowns?.some((entry) => entry.tool === "devtools_request_detail"), "professional pack missing request-detail drilldown");
   assert(pack.drilldownPlan?.planPath === pack.summary.drilldownPlanPath, "professional pack drilldown path mismatch");
