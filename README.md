@@ -296,6 +296,8 @@ workflow stays executable, not just documented.
 The `devtools_tool_*`, capability, parity, workflow, and readiness tools are for usability:
 they help agents choose a tool, inspect one tool's parameters, and follow a
 deterministic workflow without guessing across the full tool list.
+`devtools_tool_catalog` also returns `agentEntryPoints`, a compressed facade-first
+route for agents that should not scan the full `devtools_*` surface before acting.
 
 ### Unified Agent DevTools API
 

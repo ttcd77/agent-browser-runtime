@@ -693,6 +693,8 @@ try {
   });
   assert(toolCatalog.toolCount >= 1, "tool catalog did not return auth tools");
   assert(toolCatalog.tools.some((tool) => tool.name === "devtools_auth_boundary_report"), "tool catalog missing auth boundary report");
+  assert(toolCatalog.agentEntryPoints?.defaultMode === "facade-first", "tool catalog missing facade-first entry plan");
+  assert(toolCatalog.agentEntryPoints?.professionalPath?.includes("browser_security_pack"), "tool catalog missing professional facade path");
   const toolHelp = await callTool(baseUrl, "devtools_tool_help", {
     profile: "default",
     tool: "devtools_security_research_pack",

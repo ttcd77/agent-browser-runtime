@@ -145,6 +145,16 @@
 
 ## 执行记录
 
+### 2026-05-18: Tool Catalog Agent Entry Points
+
+已经完成:
+
+- `devtools_tool_catalog` / `personal_chrome_tool_catalog` 新增 `agentEntryPoints`。
+- Agent 现在不用先扫描 100 个工具；catalog 会直接给出 facade-first 入口、professional path、drilldown rule 和压缩后的 orient / operate / inspect / package / drilldown / escape-hatch 分组。
+- Managed Browser 和 Personal Chrome 返回同一结构；低层 `devtools_*` 仍保留为 drilldown 和 raw CDP escape hatch。
+- smoke 已验证 catalog 暴露 `facade-first` 和 `browser_security_pack` 专业路径。
+- 这仍然只是工具路由元数据，不判断漏洞或安全影响。
+
 ### 2026-05-18: Professional Readiness Tool
 
 已经完成:

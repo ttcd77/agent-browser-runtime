@@ -3022,10 +3022,56 @@ function devtoolsToolCategory(name) {
   return "other";
 }
 
+function buildAgentToolEntryPoints(available) {
+  const pick = (names) => names.filter((name) => available.has(name));
+  const compressedTools = [
+    {
+      label: "orient",
+      purpose: "Check backend, workflow readiness, and available capability areas before using low-level tools.",
+      tools: pick(["devtools_professional_readiness", "devtools_workflow_guide", "devtools_capability_map", "devtools_f12_parity_matrix"]),
+    },
+    {
+      label: "operate",
+      purpose: "Open pages and interact with the browser through the facade layer.",
+      tools: pick(["browser_open", "browser_act", "browser_capture"]),
+    },
+    {
+      label: "inspect",
+      purpose: "Get first-pass F12 evidence without choosing a specific low-level panel tool.",
+      tools: pick(["browser_inspect", "agent_inspect"]),
+    },
+    {
+      label: "package",
+      purpose: "Save a portable objective evidence pack with artifact paths and drilldown routes.",
+      tools: pick(["browser_security_pack", "devtools_security_research_pack"]),
+    },
+    {
+      label: "drilldown",
+      purpose: "Use the drilldownPlan, artifact index/search/read, request detail, trace query, and source tools after concrete evidence exists.",
+      tools: pick(["devtools_artifact_index", "devtools_evidence_timeline", "devtools_request_detail", "devtools_trace_query", "devtools_sources_search"]),
+    },
+    {
+      label: "escape-hatch",
+      purpose: "Call raw CDP only when the facade and friendly devtools_* tools cannot express the exact F12 operation.",
+      tools: pick(["browser_raw", "devtools_protocol_schema", "devtools_cdp_command"]),
+    },
+  ];
+  return {
+    defaultMode: "facade-first",
+    recommendedFirstCall: available.has("devtools_professional_readiness") ? "devtools_professional_readiness" : "devtools_capability_map",
+    facadePath: pick(["browser_open", "browser_capture", "browser_inspect", "browser_security_pack", "browser_raw"]),
+    professionalPath: pick(["browser_open", "browser_capture", "browser_inspect", "browser_security_pack"]),
+    drilldownRule: "Use low-level devtools_* tools only after a facade call returns concrete evidence, an artifact path, requestId, frameId, scriptId, or drilldownPlan entry.",
+    compressedTools,
+    objectiveBoundary: "This entry plan is routing metadata only; it does not judge vulnerabilities or security impact.",
+  };
+}
+
 function devtoolsToolCatalogFromEntries(entries, options = {}) {
   const query = String(options.query || "").trim().toLowerCase();
   const categoryFilter = String(options.category || "").trim().toLowerCase();
   const includeBackendSpecific = Boolean(options.includeBackendSpecific);
+  const available = new Set(entries.map((tool) => tool.name));
   const rows = entries
     .filter((tool) => includeBackendSpecific || tool.name === "agent_inspect" || tool.name.startsWith("devtools_"))
     .map((tool) => ({
@@ -3046,6 +3092,7 @@ function devtoolsToolCatalogFromEntries(entries, options = {}) {
     generatedAt: new Date().toISOString(),
     toolCount: rows.length,
     categories,
+    agentEntryPoints: buildAgentToolEntryPoints(available),
     tools: rows,
     boundaries: [
       "Tool catalog is a navigation aid; it does not choose or execute tools automatically.",
