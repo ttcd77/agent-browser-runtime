@@ -982,6 +982,144 @@ function readArtifactSlice(params = {}) {
   };
 }
 
+function evidenceTimestamp(value) {
+  if (!value) return null;
+  if (typeof value === "number" && Number.isFinite(value)) {
+    const ms = value > 10_000_000_000 ? value : value * 1000;
+    return new Date(ms).toISOString();
+  }
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? null : date.toISOString();
+}
+
+function buildEvidenceTimeline({ requests = [], consoleLog = {}, issues = {}, realtime = {}, artifacts = [] }, params = {}) {
+  const maxEvents = Math.max(1, Math.min(Number(params.maxEvents) || 200, 2000));
+  const events = [];
+  for (const request of requests || []) {
+    events.push({
+      timestamp: evidenceTimestamp(request.timestamp || request.startedAt || request.requestTime || request.wallTime || request.responseTimestamp || request.finishedAt),
+      type: "network-request",
+      source: "Network",
+      label: `${request.method || "GET"} ${request.status || "pending"} ${request.url || ""}`.trim(),
+      requestId: request.requestId || null,
+      url: request.url || "",
+      method: request.method || "",
+      status: request.status ?? null,
+      resourceType: request.resourceType || request.type || null,
+      nextTool: "devtools_request_detail",
+      drilldownInput: request.requestId ? { requestId: request.requestId } : null,
+    });
+  }
+  for (const entry of consoleLog.console || consoleLog.entries || []) {
+    events.push({
+      timestamp: evidenceTimestamp(entry.timestamp),
+      type: "console",
+      source: "Console",
+      label: `${entry.type || "console"} ${(entry.args || entry.text || []).toString().slice(0, 160)}`.trim(),
+      level: entry.type || entry.level || null,
+      nextTool: "devtools_console_log",
+      drilldownInput: { reload: false },
+    });
+  }
+  for (const entry of consoleLog.exceptions || []) {
+    events.push({
+      timestamp: evidenceTimestamp(entry.timestamp || entry.timestampRaw),
+      type: "exception",
+      source: "Console",
+      label: entry.details?.text || entry.details?.exception?.description || "Runtime exception",
+      exceptionId: entry.exceptionId || null,
+      nextTool: "devtools_console_source_context",
+      drilldownInput: { reload: false },
+    });
+  }
+  for (const entry of consoleLog.logs || []) {
+    events.push({
+      timestamp: evidenceTimestamp(entry.timestamp || entry.entry?.timestamp),
+      type: "log-entry",
+      source: "Log",
+      label: entry.entry?.text || entry.entry?.url || "Log entry",
+      level: entry.entry?.level || null,
+      nextTool: "devtools_console_log",
+      drilldownInput: { reload: false },
+    });
+  }
+  for (const issue of issues.issues || []) {
+    events.push({
+      timestamp: evidenceTimestamp(issue.timestamp),
+      type: "devtools-issue",
+      source: "Issues",
+      label: issue.issue?.code || issue.code || issue.error || "DevTools issue",
+      nextTool: "devtools_issues_log",
+      drilldownInput: { reload: false },
+    });
+  }
+  for (const socket of realtime.websockets || []) {
+    events.push({
+      timestamp: evidenceTimestamp(socket.createdAt || socket.updatedAt),
+      type: "websocket",
+      source: "Network",
+      label: `WebSocket ${socket.status || ""} ${socket.url || ""}`.trim(),
+      requestId: socket.requestId || null,
+      url: socket.url || "",
+      nextTool: "devtools_realtime_log",
+      drilldownInput: socket.requestId ? { requestId: socket.requestId } : {},
+    });
+    for (const frame of socket.frames || []) {
+      events.push({
+        timestamp: evidenceTimestamp(frame.timestamp || socket.updatedAt || socket.createdAt),
+        type: "websocket-frame",
+        source: "Network",
+        label: `WebSocket ${frame.direction || "frame"} ${String(frame.payloadData || "").slice(0, 120)}`.trim(),
+        requestId: socket.requestId || null,
+        nextTool: "devtools_realtime_log",
+        drilldownInput: socket.requestId ? { requestId: socket.requestId } : {},
+      });
+    }
+  }
+  for (const event of realtime.eventSources || []) {
+    events.push({
+      timestamp: evidenceTimestamp(event.timestamp || event.receivedAt),
+      type: "eventsource-message",
+      source: "Network",
+      label: `EventSource ${String(event.eventName || event.data || "").slice(0, 140)}`.trim(),
+      requestId: event.requestId || null,
+      nextTool: "devtools_realtime_log",
+      drilldownInput: event.requestId ? { requestId: event.requestId } : {},
+    });
+  }
+  for (const artifact of artifacts || []) {
+    events.push({
+      timestamp: evidenceTimestamp(artifact.modifiedAt),
+      type: "artifact",
+      source: "Evidence",
+      label: `${artifact.kind || inferArtifactKind(artifact.path)} ${artifact.relativePath || artifact.path || ""}`.trim(),
+      path: artifact.path,
+      kind: artifact.kind || inferArtifactKind(artifact.path),
+      bytes: artifact.bytes,
+      nextTool: "devtools_artifact_read",
+      drilldownInput: { path: artifact.path },
+    });
+  }
+  const sorted = events
+    .filter((event) => event.timestamp || params.includeUndated)
+    .sort((a, b) => String(a.timestamp || "").localeCompare(String(b.timestamp || "")))
+    .slice(-maxEvents);
+  const byType = {};
+  for (const event of sorted) byType[event.type] = (byType[event.type] || 0) + 1;
+  return {
+    schema: "agent-browser-runtime.evidence-timeline.v1",
+    generatedAt: new Date().toISOString(),
+    eventCount: sorted.length,
+    byType,
+    events: sorted,
+    boundaries: [
+      "Timeline order is built from timestamps exposed by captured F12 evidence and local artifact mtimes.",
+      "It is an objective navigation aid, not a vulnerability or causality judgement.",
+      "Missing events mean they were not captured or not timestamped in the current evidence set.",
+    ],
+  };
+}
+
 function urlOrigin(url) {
   try { return new URL(url).origin; }
   catch { return ""; }
@@ -1375,6 +1513,29 @@ function artifactSearch(params = {}) {
     backend: "personal-chrome",
     artifactRoots: roots,
     ...buildArtifactSearch(files, params),
+  };
+}
+
+async function evidenceTimeline(params = {}) {
+  const roots = personalArtifactRoots();
+  const files = params.includeArtifacts === false ? [] : roots.flatMap((dir) => listFiles(dir, Math.ceil(Math.max(Number(params.maxArtifacts) || 200, 200) / Math.max(1, roots.length))));
+  const artifactRows = params.includeArtifacts === false ? [] : buildArtifactIndex(files, {
+    maxFiles: typeof params.maxArtifacts === "number" ? params.maxArtifacts : 200,
+  }).artifacts;
+  const network = await safeBridgeTool("devtools_network_log", { limit: typeof params.maxNetworkRecords === "number" ? params.maxNetworkRecords : 500 });
+  const consoleLog = params.includeConsole === false ? {} : await safeBridgeTool("devtools_console_log", { reload: false, waitMs: 50, limit: 200 });
+  const issues = params.includeIssues === false ? {} : await safeBridgeTool("devtools_issues_log", { reload: false, waitMs: 50, limit: 100 });
+  const realtime = params.includeRealtime === false ? {} : await safeBridgeTool("devtools_realtime_log", { limit: 200 });
+  return {
+    backend: "personal-chrome",
+    artifactRoots: roots,
+    ...buildEvidenceTimeline({
+      requests: Array.isArray(network.requests) ? network.requests : [],
+      consoleLog,
+      issues,
+      realtime,
+      artifacts: artifactRows,
+    }, params),
   };
 }
 
@@ -2279,6 +2440,9 @@ async function callBridgeTool(toolName, params = {}) {
   if (toolName === "personal_chrome_evidence_manifest" || toolName === "devtools_evidence_manifest") {
     return await evidenceManifest(params);
   }
+  if (toolName === "personal_chrome_evidence_timeline" || toolName === "devtools_evidence_timeline") {
+    return await evidenceTimeline(params);
+  }
   if (toolName === "personal_chrome_request_correlation_graph" || toolName === "devtools_request_correlation_graph") {
     return await requestCorrelationGraph(params);
   }
@@ -2757,6 +2921,7 @@ const tools = {
   personal_chrome_artifact_index: "List saved local Personal Chrome evidence artifacts by type, size, mtime, and path.",
   personal_chrome_artifact_search: "Search saved local Personal Chrome evidence artifacts for a literal query.",
   personal_chrome_artifact_read: "Read a bounded byte or line slice from a saved local Personal Chrome evidence artifact.",
+  personal_chrome_evidence_timeline: "Build a chronological timeline across Personal Chrome Network, Console, Issues, realtime, and saved evidence artifacts.",
   personal_chrome_request_correlation_graph: "Build a frame/script/request/console correlation graph from Personal Chrome F12 evidence.",
   personal_chrome_capture_diff: "Compare before/after Personal Chrome evidence artifacts or current captured traffic.",
   personal_chrome_auth_boundary_report: "Collect objective Personal Chrome auth boundary evidence without deciding vulnerability impact.",
@@ -2854,6 +3019,7 @@ const tools = {
   devtools_artifact_index: "Unified Agent DevTools API: list saved evidence artifacts by type, size, mtime, and path.",
   devtools_artifact_search: "Unified Agent DevTools API: literal search across saved evidence artifacts.",
   devtools_artifact_read: "Unified Agent DevTools API: read a bounded byte or line slice from a saved evidence artifact.",
+  devtools_evidence_timeline: "Unified Agent DevTools API: build a chronological timeline across captured F12 evidence and saved artifacts.",
   devtools_request_correlation_graph: "Unified Agent DevTools API: build a frame/script/request/console correlation graph from F12 evidence.",
   devtools_capture_diff: "Unified Agent DevTools API: compare before/after evidence artifacts or current captured traffic.",
   devtools_auth_boundary_report: "Unified Agent DevTools API: collect objective auth boundary evidence without deciding vulnerability impact.",

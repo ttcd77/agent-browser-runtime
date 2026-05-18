@@ -1067,6 +1067,15 @@ try {
   assert(artifactRead.backend === "managed-cdp", `artifact read wrong backend: ${JSON.stringify(artifactRead)}`);
   assert(artifactRead.mode === "line" && artifactRead.returnedLineCount >= 1, `artifact read did not return line slice: ${JSON.stringify(artifactRead)}`);
   assert(artifactRead.contentText.includes("Agent Browser Runtime"), `artifact read slice missing expected content: ${artifactRead.contentText}`);
+  const evidenceTimeline = await callTool(baseUrl, "devtools_evidence_timeline", {
+    profile: "default",
+    maxEvents: 100,
+    maxArtifacts: 30,
+  });
+  assert(evidenceTimeline.backend === "managed-cdp", `evidence timeline wrong backend: ${JSON.stringify(evidenceTimeline)}`);
+  assert(evidenceTimeline.eventCount >= 1, `evidence timeline missing events: ${JSON.stringify(evidenceTimeline)}`);
+  assert(evidenceTimeline.events?.some((event) => event.type === "network-request"), `evidence timeline missing network event: ${JSON.stringify(evidenceTimeline.events)}`);
+  assert(evidenceTimeline.events?.some((event) => event.type === "artifact"), `evidence timeline missing artifact event: ${JSON.stringify(evidenceTimeline.events)}`);
 
   const harWithBodies = await callTool(baseUrl, "devtools_export_har", {
     profile: "default",
@@ -1105,6 +1114,7 @@ try {
   console.log(`- artifact index files/kinds: ${artifactIndex.totalFileCount}/${Object.keys(artifactIndex.kinds).length}`);
   console.log(`- artifact search matches/files: ${artifactSearch.totalMatches}/${artifactSearch.matchedFileCount}`);
   console.log(`- artifact read mode/lines: ${artifactRead.mode}/${artifactRead.returnedLineCount}`);
+  console.log(`- evidence timeline events/types: ${evidenceTimeline.eventCount}/${Object.keys(evidenceTimeline.byType).length}`);
   console.log(`- request detail id: ${requestDetail.detail.requestId}`);
   console.log(`- DevTools issues: ${issuesLog.issueCount}`);
   console.log(`- accessibility nodes: ${accessibility.nodeCount}`);

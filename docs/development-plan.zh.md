@@ -145,6 +145,15 @@
 
 ## 执行记录
 
+### 2026-05-18: Evidence Timeline
+
+已经完成:
+
+- 新增 `devtools_evidence_timeline` / `personal_chrome_evidence_timeline`。
+- Agent 可以把 Network request、Console/exception/log、Issues、WebSocket/SSE、以及本地 artifact mtime 统一排序成客观时间线。
+- 每条 timeline item 附带下一步 drilldown 工具和输入，例如 `devtools_request_detail`、`devtools_realtime_log`、`devtools_artifact_read`。
+- 这只是时间顺序导航，不判断因果、不判断漏洞。
+
 ### 2026-05-18: Artifact Read
 
 已经完成:

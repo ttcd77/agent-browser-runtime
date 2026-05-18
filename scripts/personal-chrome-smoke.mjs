@@ -475,6 +475,14 @@ const artifactRead = await callTool("devtools_artifact_read", {
 assert(artifactRead.backend === "personal-chrome", `Personal Chrome artifact read wrong backend: ${JSON.stringify(artifactRead)}`);
 assert(artifactRead.mode === "line" && artifactRead.returnedLineCount >= 1, `Personal Chrome artifact read did not return line slice: ${JSON.stringify(artifactRead)}`);
 assert(artifactRead.contentText.includes("Agent Browser Runtime"), `Personal Chrome artifact read slice missing expected content: ${artifactRead.contentText}`);
+const evidenceTimeline = await callTool("devtools_evidence_timeline", {
+  maxEvents: 100,
+  maxArtifacts: 30,
+});
+assert(evidenceTimeline.backend === "personal-chrome", `Personal Chrome evidence timeline wrong backend: ${JSON.stringify(evidenceTimeline)}`);
+assert(evidenceTimeline.eventCount >= 1, `Personal Chrome evidence timeline missing events: ${JSON.stringify(evidenceTimeline)}`);
+assert(evidenceTimeline.events?.some((event) => event.type === "network-request"), `Personal Chrome evidence timeline missing network event: ${JSON.stringify(evidenceTimeline.events)}`);
+assert(evidenceTimeline.events?.some((event) => event.type === "artifact"), `Personal Chrome evidence timeline missing artifact event: ${JSON.stringify(evidenceTimeline.events)}`);
 
 const toolCatalog = await callTool("devtools_tool_catalog", { query: "auth" });
 assert(toolCatalog.toolCount >= 1, "Personal Chrome tool catalog did not return auth tools");
@@ -502,6 +510,7 @@ console.log(`- HAR artifact inspect: ${harArtifact.json.harEntryCount} entries`)
 console.log(`- artifact index files/kinds: ${artifactIndex.totalFileCount}/${Object.keys(artifactIndex.kinds).length}`);
 console.log(`- artifact search matches/files: ${artifactSearch.totalMatches}/${artifactSearch.matchedFileCount}`);
 console.log(`- artifact read mode/lines: ${artifactRead.mode}/${artifactRead.returnedLineCount}`);
+console.log(`- evidence timeline events/types: ${evidenceTimeline.eventCount}/${Object.keys(evidenceTimeline.byType).length}`);
 console.log(`- capability panels: ${capabilityMap.panelCount}`);
 console.log(`- realtime channels ws/sse: ${realtimeLog.websocketCount}/${realtimeLog.eventSourceMessageCount}`);
 

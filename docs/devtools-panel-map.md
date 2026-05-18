@@ -137,6 +137,7 @@ facts instead of assuming the replay perfectly cloned the original request.
 | List saved artifacts by type, size, mtime, and path | `devtools_artifact_index` |
 | Search saved artifacts for literal matches | `devtools_artifact_search` |
 | Read a bounded byte or line slice from an artifact | `devtools_artifact_read` |
+| Build chronological evidence timeline | `devtools_evidence_timeline` |
 | Build request/script/frame/console correlation graph | `devtools_request_correlation_graph` |
 | Compare before/after captured evidence | `devtools_capture_diff` |
 | Collect auth boundary evidence | `devtools_auth_boundary_report` |
