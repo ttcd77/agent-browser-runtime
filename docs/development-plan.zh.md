@@ -391,6 +391,15 @@
 - Managed Professional smoke 和 Personal Chrome smoke 都已覆盖 latest handoff inspect、first concrete request drilldown 和 artifact entrypoint count。
 - 这只是路线摘要，不读取证据正文、不判断漏洞。
 
+### 2026-05-18: CLI Readiness Route Summary
+
+已经完成:
+
+- `npm run research:pack` 的摘要现在会打印 readiness `routeSummary`。
+- CLI 输出包含 route first step、route handoff inspect/read、route first drilldown 和 route evidence entrypoints。
+- `smoke:cli` 已覆盖这些输出，保证命令行交接不会丢失 Agent 接手路线。
+- 这只是命令行路线摘要，不读取证据正文、不判断漏洞。
+
 ### 2026-05-18: Professional Readiness Tool
 
 已经完成:

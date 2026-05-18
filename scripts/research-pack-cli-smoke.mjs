@@ -77,6 +77,13 @@ printSummary({
     evidenceReady: true,
     missing: [],
     nextActions: [{ tool: "devtools_workflow_guide" }],
+    routeSummary: {
+      firstStep: { tool: "devtools_artifact_inspect", input: { path: "tmp/security-research-pack.json" } },
+      latestHandoffInspect: { tool: "devtools_artifact_inspect", input: { path: "tmp/security-research-pack.json" } },
+      latestHandoffRead: { tool: "devtools_artifact_read", input: { path: "tmp/security-research-pack.json", mode: "line", startLine: 1, maxLines: 120 } },
+      firstConcreteDrilldown: { label: "Request detail", tool: "devtools_request_detail", input: { requestId: "request-1" } },
+      artifactEntrypointCount: 3,
+    },
   },
   drilldownPlan: {
     drilldowns: [{ label: "Request detail", tool: "devtools_request_detail" }],
@@ -93,6 +100,11 @@ assert(output.includes("skipped: trace"), "summary missing artifact coverage ski
 assert(output.includes("- professional readiness: true"), "summary missing professional readiness");
 assert(output.includes("evidence ready: true"), "summary missing professional evidence readiness");
 assert(output.includes("next action: devtools_workflow_guide"), "summary missing readiness next action");
+assert(output.includes("route first step: devtools_artifact_inspect"), "summary missing readiness route first step");
+assert(output.includes("route handoff inspect: devtools_artifact_inspect path=tmp/security-research-pack.json"), "summary missing route handoff inspect");
+assert(output.includes("route handoff read: devtools_artifact_read path=tmp/security-research-pack.json"), "summary missing route handoff read");
+assert(output.includes("route first drilldown: Request detail: devtools_request_detail"), "summary missing route first drilldown");
+assert(output.includes("route evidence entrypoints: 3"), "summary missing route evidence entrypoint count");
 assert(output.includes("browser_open -> browser_capture -> browser_inspect -> browser_security_pack -> drilldownPlan"), "summary missing workflow path");
 assert(output.includes("- agent entry mode: facade-first"), "summary missing agent entry mode");
 assert(output.includes("first call: devtools_professional_readiness"), "summary missing recommended first call");

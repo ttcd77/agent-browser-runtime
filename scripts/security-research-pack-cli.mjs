@@ -147,6 +147,20 @@ export function printSummary(pack, output = console.log) {
     if (Array.isArray(readiness.nextActions) && readiness.nextActions.length) {
       output(`  - next action: ${readiness.nextActions[0].tool}`);
     }
+    const route = readiness.routeSummary || {};
+    if (route.firstStep?.tool) output(`  - route first step: ${route.firstStep.tool}`);
+    if (route.latestHandoffInspect?.input?.path) {
+      output(`  - route handoff inspect: ${route.latestHandoffInspect.tool} path=${route.latestHandoffInspect.input.path}`);
+    }
+    if (route.latestHandoffRead?.input?.path) {
+      output(`  - route handoff read: ${route.latestHandoffRead.tool} path=${route.latestHandoffRead.input.path}`);
+    }
+    if (route.firstConcreteDrilldown?.tool) {
+      output(`  - route first drilldown: ${route.firstConcreteDrilldown.label || "(unlabelled)"}: ${route.firstConcreteDrilldown.tool}`);
+    }
+    if (typeof route.artifactEntrypointCount === "number") {
+      output(`  - route evidence entrypoints: ${route.artifactEntrypointCount}`);
+    }
   }
   if (workflow.task || Array.isArray(workflow.defaultPath)) {
     output(`- workflow: ${workflow.task || "(unknown)"}`);
