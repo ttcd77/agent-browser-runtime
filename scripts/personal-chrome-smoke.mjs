@@ -574,6 +574,8 @@ assert(professionalReadiness.checks?.some((check) => check.name === "f12ParityMa
 assert(professionalReadiness.objectiveBoundary?.includes("does not judge vulnerabilities"), "Personal Chrome professional readiness crossed objective boundary");
 const workflowGuide = await callTool("devtools_workflow_guide", { task: "auth-boundary" });
 assert(workflowGuide.steps?.some((step) => step.tool === "devtools_auth_boundary_report"), "Personal Chrome workflow guide missing auth boundary step");
+const professionalWorkflowGuide = await callTool("devtools_workflow_guide", { task: "professional-appsec" });
+assert(professionalWorkflowGuide.steps?.some((step) => step.tool === "devtools_professional_readiness"), "Personal Chrome professional workflow guide missing readiness step");
 
 console.log("Personal Chrome smoke passed:");
 console.log(`- bridge: ${baseUrl}`);

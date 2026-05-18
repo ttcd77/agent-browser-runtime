@@ -186,6 +186,7 @@ try {
   });
   assert(workflowGuide.defaultPath?.join(" -> ") === "browser_open -> browser_capture -> browser_inspect -> browser_security_pack -> drilldownPlan", `professional workflow guide default path is not fixed: ${JSON.stringify(workflowGuide.defaultPath)}`);
   assert(workflowGuide.defaultTools?.includes("browser_raw"), "professional workflow guide missing browser_raw escape hatch");
+  assert(workflowGuide.steps?.some((step) => step.tool === "devtools_professional_readiness"), "professional workflow guide missing readiness step");
   assert(workflowGuide.steps?.some((step) => step.tool === "browser_security_pack"), "professional workflow guide missing browser_security_pack step");
   assert(workflowGuide.exitCriteria?.some((entry) => String(entry).includes("drilldown plan")), "professional workflow guide missing drilldown exit criteria");
   const initialReadiness = await callTool(baseUrl, "devtools_professional_readiness", {
@@ -204,6 +205,7 @@ try {
   assert(firstInspect.facade === "browser_inspect", "professional browser_inspect facade marker missing");
   assert(firstInspect.result?.toolPlan?.firstPass?.length >= 1, "professional browser_inspect missing first-pass tool plan");
   assert(firstInspect.result?.professionalWorkflow?.defaultPath?.join(" -> ") === "browser_open -> browser_capture -> browser_inspect -> browser_security_pack -> drilldownPlan", "professional browser_inspect missing professional workflow summary");
+  assert(firstInspect.result?.professionalWorkflow?.readinessTool === "devtools_professional_readiness", "professional browser_inspect missing readiness tool route");
   assert(firstInspect.result?.professionalWorkflow?.objectiveBoundary?.includes("does not classify vulnerabilities"), "professional browser_inspect workflow summary crossed objective-tool boundary");
   const captureStatus = await callTool(baseUrl, "browser_capture", {
     profile: "professional",

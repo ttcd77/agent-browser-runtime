@@ -43,6 +43,10 @@ curl -X POST http://127.0.0.1:17335/tool/devtools_professional_readiness \
 This reports mechanical workflow/evidence readiness and next tool calls. It is
 not a vulnerability or impact assessment.
 
+The same readiness tool is also listed by `devtools_workflow_guide` for
+`task="professional-appsec"` and by the `professionalWorkflow` summary returned
+from `browser_inspect`.
+
 2. Open or attach to a page.
 
 ```bash
