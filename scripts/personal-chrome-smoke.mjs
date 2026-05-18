@@ -601,6 +601,7 @@ assert(professionalReadiness.latestResearchPackHandoff?.inspect?.tool === "devto
 assert(professionalReadiness.recommendedRoute?.some((step) => step.tool === "browser_security_pack"), "Personal Chrome professional readiness missing recommended route");
 assert(professionalReadiness.panelRoutes?.network?.some((step) => step.tool === "devtools_request_detail"), "Personal Chrome professional readiness missing network panel route");
 assert(professionalReadiness.artifactDrilldowns?.some((entry) => entry.tool === "devtools_artifact_inspect" && entry.input?.path), "Personal Chrome professional readiness missing artifact drilldown route");
+assert(professionalReadiness.nextActions?.some((entry) => entry.tool === "devtools_artifact_read" && entry.input?.path), "Personal Chrome professional readiness missing artifact-read next action");
 assert(professionalReadiness.objectiveBoundary?.includes("does not judge vulnerabilities"), "Personal Chrome professional readiness crossed objective boundary");
 const workflowGuide = await callTool("devtools_workflow_guide", { task: "auth-boundary" });
 assert(workflowGuide.steps?.some((step) => step.tool === "devtools_auth_boundary_report"), "Personal Chrome workflow guide missing auth boundary step");

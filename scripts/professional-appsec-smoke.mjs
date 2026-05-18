@@ -269,6 +269,7 @@ try {
   assert(finalReadiness.recommendedRoute?.some((step) => step.tool === "devtools_artifact_index"), "professional readiness missing artifact index in recommended route");
   assert(finalReadiness.artifactDrilldowns?.some((entry) => entry.tool === "devtools_artifact_inspect" && entry.input?.path), "professional readiness missing artifact drilldown route");
   assert(finalReadiness.nextActions?.some((entry) => entry.tool === "devtools_artifact_inspect"), "professional readiness missing handoff inspect next action");
+  assert(finalReadiness.nextActions?.some((entry) => entry.tool === "devtools_artifact_read" && entry.input?.path), "professional readiness missing artifact-read next action");
   assert(pack.drilldownPlan?.drilldowns?.some((entry) => entry.tool === "devtools_request_detail"), "professional pack missing request-detail drilldown");
   assert(pack.drilldownPlan?.planPath === pack.summary.drilldownPlanPath, "professional pack drilldown path mismatch");
   const requestDetailStep = pack.drilldownPlan.drilldowns.find((entry) => entry.tool === "devtools_request_detail");

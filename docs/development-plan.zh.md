@@ -263,6 +263,16 @@
 - Managed Professional smoke 和 Personal Chrome smoke 都已覆盖该 route。
 - 这只是本地证据导航，不读取 artifact 正文、不判断漏洞。
 
+### 2026-05-18: Readiness NextAction Artifact Drilldowns
+
+已经完成:
+
+- readiness 会把 artifact index 的推荐 drilldown 合并进 `nextActions`。
+- 合并时按 tool + path 去重，避免重复返回 latest research-pack inspect。
+- Agent 只读 `nextActions` 也能继续执行 handoff inspect、artifact read 等下一步。
+- Managed Professional smoke 和 Personal Chrome smoke 都已覆盖 `devtools_artifact_read` next action。
+- 这只是确定性路线合并，不读取证据正文、不判断漏洞。
+
 ### 2026-05-18: Professional Readiness Tool
 
 已经完成:

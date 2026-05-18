@@ -2410,6 +2410,18 @@ function buildProfessionalReadiness({
       why: "Inspect the latest saved research-pack handoff and continue from its objective agent route.",
     });
   }
+  const seenNextActions = new Set(nextActions.map((entry) => `${entry.tool}:${entry.input?.path || ""}`));
+  for (const entry of artifactDrilldowns) {
+    const key = `${entry.tool}:${entry.input?.path || ""}`;
+    if (seenNextActions.has(key)) continue;
+    nextActions.push({
+      tool: entry.tool,
+      input: entry.input || {},
+      why: entry.label ? `Continue with artifact drilldown: ${entry.label}.` : "Continue with a deterministic artifact drilldown from the latest artifact index.",
+    });
+    seenNextActions.add(key);
+    if (nextActions.length >= 8) break;
+  }
   nextActions.push({
     tool: "devtools_workflow_guide",
     input: { task: "professional-appsec" },
