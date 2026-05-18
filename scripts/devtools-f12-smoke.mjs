@@ -286,6 +286,10 @@ try {
   assert(traceQuery.totalEvents > 0, "trace query missing total event count");
   assert(Array.isArray(traceQuery.events), "trace query missing events array");
   assert(Array.isArray(traceQuery.contextWindows), "trace query missing context windows");
+  assert(traceQuery.recommendedDrilldowns?.some((entry) => entry.tool === "devtools_chrome_trace"), `trace query missing fresh trace drilldown: ${JSON.stringify(traceQuery.recommendedDrilldowns)}`);
+  if (traceQuery.events.length) {
+    assert(traceQuery.recommendedDrilldowns?.some((entry) => entry.tool === "devtools_trace_query" && entry.input?.tracePath === trace.tracePath), `trace query missing trace-query drilldown: ${JSON.stringify(traceQuery.recommendedDrilldowns)}`);
+  }
   assert(traceQuery.drilldown?.contextWindowBasis?.includes("same-thread"), `trace query missing drilldown context basis: ${JSON.stringify(traceQuery.drilldown)}`);
   assert(Array.isArray(traceQuery.captureBoundaries), "trace query missing capture boundaries");
 
@@ -1132,7 +1136,9 @@ try {
   assert(Array.isArray(harCompleteness.drilldownSamples?.bodyMissing), `HAR completeness missing body drilldown samples: ${JSON.stringify(harCompleteness.drilldownSamples)}`);
   assert(Array.isArray(harCompleteness.drilldownSamples?.timingMissing), `HAR completeness missing timing drilldown samples: ${JSON.stringify(harCompleteness.drilldownSamples)}`);
   assert(Array.isArray(harCompleteness.recommendedDrilldowns), `HAR completeness missing recommended drilldowns: ${JSON.stringify(harCompleteness)}`);
-  assert(harCompleteness.recommendedDrilldowns.some((entry) => entry.tool === "devtools_request_detail"), `HAR completeness missing request detail recommendation: ${JSON.stringify(harCompleteness.recommendedDrilldowns)}`);
+  if (harCompleteness.drilldownSamples.bodyMissing.length || harCompleteness.drilldownSamples.timingMissing.length || harCompleteness.drilldownSamples.redirects.length || harCompleteness.drilldownSamples.securityMissing.length) {
+    assert(harCompleteness.recommendedDrilldowns.some((entry) => entry.tool === "devtools_request_detail"), `HAR completeness missing request detail recommendation: ${JSON.stringify(harCompleteness.recommendedDrilldowns)}`);
+  }
   assert(harCompleteness.body?.includedCount >= 1, `HAR completeness missing included bodies: ${JSON.stringify(harCompleteness.body)}`);
   assert(harCompleteness.timing?.entriesWithTotalTime >= 1, `HAR completeness missing timing evidence: ${JSON.stringify(harCompleteness.timing)}`);
   assert(harCompleteness.reportPath, "HAR completeness did not save a report");

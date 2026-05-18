@@ -448,6 +448,50 @@ function summarizeTraceQuery(events = [], params = {}) {
   const contextWindows = contextEventCount > 0
     ? sorted.slice(0, contextWindowCount).map(sameThreadWindow)
     : [];
+  const tracePath = params.tracePath || "<trace-path>";
+  const firstReturned = returnedEvents[0] || null;
+  const recommendedDrilldowns = [];
+  if (firstReturned) {
+    recommendedDrilldowns.push({
+      label: "Query same trace thread",
+      tool: "devtools_trace_query",
+      input: {
+        tracePath,
+        processId: firstReturned.processId,
+        threadId: firstReturned.threadId,
+        sortBy: "timestamp",
+        limit,
+        contextEvents: contextEventCount,
+      },
+      why: "Stay on the same process/thread as the selected event and inspect neighboring trace events chronologically.",
+    });
+    recommendedDrilldowns.push({
+      label: "Query same trace event name",
+      tool: "devtools_trace_query",
+      input: { tracePath, name: firstReturned.name, limit },
+      why: "Find other occurrences of the same Chrome trace event name in this capture.",
+    });
+    if (typeof firstReturned.relativeStartMs === "number") {
+      recommendedDrilldowns.push({
+        label: "Query narrow time window around event",
+        tool: "devtools_trace_query",
+        input: {
+          tracePath,
+          startTimeMs: Math.max(0, firstReturned.relativeStartMs - 25),
+          endTimeMs: firstReturned.relativeStartMs + Math.max(25, firstReturned.durationMs || 0) + 25,
+          sortBy: "timestamp",
+          limit,
+        },
+        why: "Inspect all trace events near the selected event's timestamp without implying causality.",
+      });
+    }
+  }
+  recommendedDrilldowns.push({
+    label: "Capture fresh trace around smallest reproduction",
+    tool: "devtools_chrome_trace",
+    input: { durationMs: 1000, maxEvents: limit },
+    why: "If the saved trace window is incomplete, capture a new bounded trace around a smaller browser action.",
+  });
   return {
     totalEvents: events.length,
     matchedCount: matches.length,
@@ -473,6 +517,7 @@ function summarizeTraceQuery(events = [], params = {}) {
     threads: countMap(matches, (event) => `${event.pid}:${event.tid}`),
     events: returnedEvents,
     contextWindows,
+    recommendedDrilldowns,
     drilldown: {
       contextEventsPerSide: contextEventCount,
       contextWindowCount: contextWindows.length,

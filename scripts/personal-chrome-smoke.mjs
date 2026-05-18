@@ -365,6 +365,10 @@ assert(traceQuery.backend === "personal-chrome", `Personal Chrome trace query wr
 assert(traceQuery.totalEvents > 0, "Personal Chrome trace query missing total event count");
 assert(Array.isArray(traceQuery.events), "Personal Chrome trace query missing events array");
 assert(Array.isArray(traceQuery.contextWindows), "Personal Chrome trace query missing context windows");
+assert(traceQuery.recommendedDrilldowns?.some((entry) => entry.tool === "devtools_chrome_trace"), `Personal Chrome trace query missing fresh trace drilldown: ${JSON.stringify(traceQuery.recommendedDrilldowns)}`);
+if (traceQuery.events.length) {
+  assert(traceQuery.recommendedDrilldowns?.some((entry) => entry.tool === "devtools_trace_query" && entry.input?.tracePath === chromeTrace.tracePath), `Personal Chrome trace query missing trace-query drilldown: ${JSON.stringify(traceQuery.recommendedDrilldowns)}`);
+}
 assert(traceQuery.drilldown?.contextWindowBasis?.includes("same-thread"), `Personal Chrome trace query missing drilldown context basis: ${JSON.stringify(traceQuery.drilldown)}`);
 
 const secondChromeTrace = await callTool("devtools_chrome_trace", {
@@ -458,7 +462,14 @@ assert(harCompleteness.coverage?.totalTiming && typeof harCompleteness.coverage.
 assert(Array.isArray(harCompleteness.drilldownSamples?.bodyMissing), `Personal Chrome HAR completeness missing body drilldown samples: ${JSON.stringify(harCompleteness.drilldownSamples)}`);
 assert(Array.isArray(harCompleteness.drilldownSamples?.timingMissing), `Personal Chrome HAR completeness missing timing drilldown samples: ${JSON.stringify(harCompleteness.drilldownSamples)}`);
 assert(Array.isArray(harCompleteness.recommendedDrilldowns), `Personal Chrome HAR completeness missing recommended drilldowns: ${JSON.stringify(harCompleteness)}`);
-assert(harCompleteness.recommendedDrilldowns.some((entry) => entry.tool === "devtools_request_detail"), `Personal Chrome HAR completeness missing request detail recommendation: ${JSON.stringify(harCompleteness.recommendedDrilldowns)}`);
+if (
+  harCompleteness.drilldownSamples.bodyMissing.length ||
+  harCompleteness.drilldownSamples.timingMissing.length ||
+  harCompleteness.drilldownSamples.redirects.length ||
+  harCompleteness.drilldownSamples.securityMissing.length
+) {
+  assert(harCompleteness.recommendedDrilldowns.some((entry) => entry.tool === "devtools_request_detail"), `Personal Chrome HAR completeness missing request detail recommendation: ${JSON.stringify(harCompleteness.recommendedDrilldowns)}`);
+}
 assert(harCompleteness.body, "Personal Chrome HAR completeness missing body summary");
 assert(harCompleteness.timing, "Personal Chrome HAR completeness missing timing summary");
 const harWithBodies = await callTool("devtools_export_har", {
