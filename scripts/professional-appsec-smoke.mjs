@@ -298,6 +298,8 @@ try {
   assert(finalReadiness.evidenceEntrypoints?.workerFrameBoundary?.read?.tool === "devtools_artifact_read", `professional readiness missing worker/frame boundary entrypoint: ${JSON.stringify(finalReadiness.evidenceEntrypoints)}`);
   assert(finalReadiness.checks?.some((check) => check.name === "evidenceEntrypointsReachable" && check.present), `professional readiness missing evidence entrypoints check: ${JSON.stringify(finalReadiness.checks)}`);
   assert(finalReadiness.routeSummary?.latestHandoffInspect?.tool === "devtools_artifact_inspect", `professional readiness missing route handoff inspect: ${JSON.stringify(finalReadiness.routeSummary)}`);
+  assert(finalReadiness.routeSummary?.firstF12RequestDetailArtifact?.inspect?.tool === "devtools_artifact_inspect", `professional readiness missing first F12 request-detail artifact inspect route: ${JSON.stringify(finalReadiness.routeSummary)}`);
+  assert(finalReadiness.routeSummary?.firstF12RequestDetailArtifact?.path === pack.summary.firstF12RequestDetailPath, `professional readiness first F12 request-detail artifact path mismatch: ${JSON.stringify(finalReadiness.routeSummary)}`);
   assert(finalReadiness.routeSummary?.firstF12RequestDetail?.tool === "devtools_request_detail", `professional readiness missing F12 navigation request-detail route: ${JSON.stringify(finalReadiness.routeSummary)}`);
   assert(finalReadiness.routeSummary?.firstF12RequestDetail?.f12Columns?.name, `professional readiness missing F12 navigation columns: ${JSON.stringify(finalReadiness.routeSummary)}`);
   assert(finalReadiness.routeSummary?.firstConcreteDrilldown?.tool === "devtools_request_detail", `professional readiness missing route concrete request drilldown: ${JSON.stringify(finalReadiness.routeSummary)}`);
@@ -326,6 +328,7 @@ try {
   assert(finalReadiness.recommendedRoute?.some((step) => step.tool === "devtools_artifact_index"), "professional readiness missing artifact index in recommended route");
   assert(finalReadiness.artifactDrilldowns?.some((entry) => entry.tool === "devtools_artifact_inspect" && entry.input?.path), "professional readiness missing artifact drilldown route");
   assert(finalReadiness.nextActions?.some((entry) => entry.tool === "devtools_artifact_inspect"), "professional readiness missing handoff inspect next action");
+  assert(finalReadiness.nextActions?.some((entry) => entry.tool === "devtools_artifact_inspect" && entry.input?.path === pack.summary.firstF12RequestDetailPath), "professional readiness missing first F12 request-detail artifact next action");
   assert(finalReadiness.nextActions?.some((entry) => entry.tool === "devtools_request_detail" && entry.input?.requestId), "professional readiness missing research-pack request-detail next action");
   assert(finalReadiness.nextActions?.some((entry) => entry.tool === "devtools_artifact_read" && entry.input?.path), "professional readiness missing artifact-read next action");
   assert(pack.drilldownPlan?.drilldowns?.some((entry) => entry.tool === "devtools_request_detail"), "professional pack missing request-detail drilldown");

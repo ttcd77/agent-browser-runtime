@@ -878,3 +878,12 @@
 - artifact index 会把该文件归类为 `request-detail`，方便 Agent 用 `devtools_artifact_inspect` / `devtools_artifact_read` 直接读取。
 - evidence manifest 会记录该独立证据文件的路径和哈希。
 - 该文件仍然只保存客观 F12 request-detail 摘要，不判断风险、不输出漏洞结论。
+
+### 2026-05-18: Readiness 首个 Request Detail Artifact 路线完成
+
+已经完成:
+
+- `devtools_professional_readiness.routeSummary.firstF12RequestDetailArtifact` 会直接返回首个 request-detail artifact 的 inspect/read 路线。
+- `nextActions` 会包含该 artifact 的 `devtools_artifact_inspect` 下一步，Agent 不必先读完整 research pack 才能找到首个 F12 detail 摘要。
+- Managed Browser / Personal Chrome smoke 都覆盖该路线。
+- 该路线只是读取已保存证据文件，不重新判断请求是否异常。

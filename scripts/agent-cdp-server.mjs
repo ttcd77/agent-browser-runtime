@@ -3285,6 +3285,12 @@ function buildProfessionalReadiness({
     inspect: { tool: "devtools_artifact_inspect", input: { path: latestResearchPack.path, maxBytes: 300000 } },
     read: { tool: "devtools_artifact_read", input: { path: latestResearchPack.path, mode: "line", startLine: 1, lineCount: 160 } },
   } : null;
+  const firstF12RequestDetailPath = latestResearchPackSummary?.artifactPaths?.firstF12RequestDetailPath || null;
+  const firstF12RequestDetailArtifact = firstF12RequestDetailPath ? {
+    path: firstF12RequestDetailPath,
+    inspect: { tool: "devtools_artifact_inspect", input: { path: firstF12RequestDetailPath, maxBytes: 120000 } },
+    read: { tool: "devtools_artifact_read", input: { path: firstF12RequestDetailPath, mode: "line", startLine: 1, lineCount: 120 } },
+  } : null;
   const checks = [
     {
       name: "professionalWorkflow",
@@ -3387,6 +3393,18 @@ function buildProfessionalReadiness({
   }
   const actionKey = (entry) => `${entry.tool}:${entry.input?.path || ""}:${entry.input?.requestId || ""}:${entry.input?.tracePath || ""}:${entry.input?.query || ""}`;
   const seenNextActions = new Set(nextActions.map(actionKey));
+  if (firstF12RequestDetailArtifact) {
+    const entry = {
+      tool: firstF12RequestDetailArtifact.inspect.tool,
+      input: firstF12RequestDetailArtifact.inspect.input,
+      why: "Inspect the standalone first F12 request-detail summary saved by the latest research pack.",
+    };
+    const key = actionKey(entry);
+    if (!seenNextActions.has(key)) {
+      nextActions.push(entry);
+      seenNextActions.add(key);
+    }
+  }
   for (const entry of f12NavigationDrilldowns) {
     const key = actionKey(entry);
     if (seenNextActions.has(key)) continue;
@@ -3434,6 +3452,7 @@ function buildProfessionalReadiness({
     firstStep: nextActions[0] ? { tool: nextActions[0].tool, input: nextActions[0].input || {} } : null,
     latestHandoffInspect: latestResearchPackHandoff?.inspect || null,
     latestHandoffRead: latestResearchPackHandoff?.read || null,
+    firstF12RequestDetailArtifact,
     firstF12RequestDetail: f12NavigationDrilldowns[0] ? {
       label: f12NavigationDrilldowns[0].label || null,
       tool: f12NavigationDrilldowns[0].tool,
