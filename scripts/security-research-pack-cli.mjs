@@ -152,6 +152,15 @@ export function printSummary(pack, output = console.log) {
     output(`- workflow: ${workflow.task || "(unknown)"}`);
     if (Array.isArray(workflow.defaultPath)) output(`  - path: ${workflow.defaultPath.join(" -> ")}`);
   }
+  if (pack.agentEntryPoints) {
+    const entry = pack.agentEntryPoints;
+    output(`- agent entry mode: ${entry.defaultMode || "(unknown)"}`);
+    if (entry.recommendedFirstCall) output(`  - first call: ${entry.recommendedFirstCall}`);
+    if (Array.isArray(entry.professionalPath) && entry.professionalPath.length) {
+      output(`  - professional path: ${entry.professionalPath.join(" -> ")}`);
+    }
+    if (entry.drilldownRule) output(`  - drilldown rule: ${entry.drilldownRule}`);
+  }
   if (summary.capture) {
     output("- capture:");
     output(`  - enabled: ${capture.enabled ?? "(unknown)"}`);

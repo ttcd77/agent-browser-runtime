@@ -29,6 +29,12 @@ printSummary({
     task: "professional-appsec",
     defaultPath: ["browser_open", "browser_capture", "browser_inspect", "browser_security_pack", "drilldownPlan"],
   },
+  agentEntryPoints: {
+    defaultMode: "facade-first",
+    recommendedFirstCall: "devtools_professional_readiness",
+    professionalPath: ["browser_open", "browser_capture", "browser_inspect", "browser_security_pack"],
+    drilldownRule: "Use low-level devtools_* tools only after concrete evidence exists.",
+  },
   summary: {
     url: "https://example.com",
     requestCount: 2,
@@ -88,6 +94,9 @@ assert(output.includes("- professional readiness: true"), "summary missing profe
 assert(output.includes("evidence ready: true"), "summary missing professional evidence readiness");
 assert(output.includes("next action: devtools_workflow_guide"), "summary missing readiness next action");
 assert(output.includes("browser_open -> browser_capture -> browser_inspect -> browser_security_pack -> drilldownPlan"), "summary missing workflow path");
+assert(output.includes("- agent entry mode: facade-first"), "summary missing agent entry mode");
+assert(output.includes("first call: devtools_professional_readiness"), "summary missing recommended first call");
+assert(output.includes("professional path: browser_open -> browser_capture -> browser_inspect -> browser_security_pack"), "summary missing agent professional path");
 assert(output.includes("- capture:"), "summary missing capture section");
 assert(output.includes("trafficCount: 2"), "summary missing capture traffic count");
 assert(output.includes("research-pack=1"), "summary missing artifact kind counts");

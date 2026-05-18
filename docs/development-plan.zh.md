@@ -165,6 +165,15 @@
 - smoke 已验证 pack 和 handoff 文件包含 agent entry points。
 - 这只是交接路线和工具可用性快照，不判断漏洞或安全影响。
 
+### 2026-05-18: CLI Agent Entry Route
+
+已经完成:
+
+- `npm run research:pack` 的人类/Agent 可读摘要现在会打印 `agent entry mode`、推荐 first call、professional facade path 和 drilldown rule。
+- `smoke:cli` 已覆盖这段输出，保证 CLI 不会只生成 JSON 而丢失可执行交接路线。
+- README 已同步说明 CLI 会展示 agent entry route。
+- 这仍然只是工具路线展示，不解释证据含义。
+
 ### 2026-05-18: Professional Readiness Tool
 
 已经完成:
