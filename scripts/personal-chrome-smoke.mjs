@@ -456,6 +456,8 @@ assert(harCompleteness.coverage?.bodiesIncluded && typeof harCompleteness.covera
 assert(harCompleteness.coverage?.totalTiming && typeof harCompleteness.coverage.totalTiming.present === "number", `Personal Chrome HAR completeness missing timing coverage: ${JSON.stringify(harCompleteness.coverage)}`);
 assert(Array.isArray(harCompleteness.drilldownSamples?.bodyMissing), `Personal Chrome HAR completeness missing body drilldown samples: ${JSON.stringify(harCompleteness.drilldownSamples)}`);
 assert(Array.isArray(harCompleteness.drilldownSamples?.timingMissing), `Personal Chrome HAR completeness missing timing drilldown samples: ${JSON.stringify(harCompleteness.drilldownSamples)}`);
+assert(Array.isArray(harCompleteness.recommendedDrilldowns), `Personal Chrome HAR completeness missing recommended drilldowns: ${JSON.stringify(harCompleteness)}`);
+assert(harCompleteness.recommendedDrilldowns.some((entry) => entry.tool === "devtools_request_detail"), `Personal Chrome HAR completeness missing request detail recommendation: ${JSON.stringify(harCompleteness.recommendedDrilldowns)}`);
 assert(harCompleteness.body, "Personal Chrome HAR completeness missing body summary");
 assert(harCompleteness.timing, "Personal Chrome HAR completeness missing timing summary");
 const harWithBodies = await callTool("devtools_export_har", {

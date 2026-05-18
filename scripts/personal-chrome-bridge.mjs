@@ -1401,6 +1401,36 @@ function analyzeHarCompleteness(har = {}, options = {}) {
     })
     .map((entry) => sampleEntry(entry, { evidence: "https-without-security-details" }))
     .slice(0, maxRows);
+  const recommendedDrilldowns = [];
+  const pushRequestDrilldown = (sample, label, why, extraInput = {}) => {
+    if (!sample?.requestId) return;
+    recommendedDrilldowns.push({
+      label,
+      tool: "devtools_request_detail",
+      input: { requestId: sample.requestId, ...extraInput },
+      why,
+    });
+  };
+  pushRequestDrilldown(bodyMissingSamples[0], "Inspect request with missing HAR body", "Open request detail to see body availability, capture timing, mime type, and body retrieval boundary.");
+  if (bodyMissingSamples[0]?.requestId) {
+    recommendedDrilldowns.push({
+      label: "Try response body fetch for missing HAR body",
+      tool: "devtools_request_body",
+      input: { requestId: bodyMissingSamples[0].requestId, maxBytes: options.maxBodyBytes || 2000 },
+      why: "Ask Chrome for the concrete response body for this observed request; failure is returned as browser evidence.",
+    });
+  }
+  pushRequestDrilldown(timingMissingSamples[0], "Inspect request with incomplete timing phases", "Open request detail to compare raw timing, derived phases, redirect chain, and capture boundary.");
+  pushRequestDrilldown(redirectRows[0], "Inspect redirected request chain", "Open request detail for the concrete redirect chain represented in HAR.");
+  pushRequestDrilldown(securityMissingSamples[0], "Inspect HTTPS request without HAR security details", "Open request detail and Security panel summary to verify what Chrome exposed for TLS metadata.");
+  if (securityMissingSamples[0]) {
+    recommendedDrilldowns.push({
+      label: "Refresh Security panel evidence",
+      tool: "devtools_security_summary",
+      input: {},
+      why: "Collect current Security panel metadata for comparison with HAR securityDetails coverage.",
+    });
+  }
   return {
     generatedAt: new Date().toISOString(),
     entryCount: total,
@@ -1421,6 +1451,7 @@ function analyzeHarCompleteness(har = {}, options = {}) {
       securityMissing: securityMissingSamples,
       redirects: redirectRows.slice(0, maxRows),
     },
+    recommendedDrilldowns,
     body: {
       readableCount: bodyRows.filter((row) => row.bodyReadable).length,
       includedCount: bodyRows.filter((row) => row.bodyIncluded).length,
