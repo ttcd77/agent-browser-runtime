@@ -25,6 +25,10 @@ async function callTool(name, input = {}) {
 
 await callTool("profile_create", { profile });
 
+const beforeReadiness = await callTool("devtools_professional_readiness", {
+  profile,
+});
+
 const pack = await callTool("devtools_security_research_pack", {
   profile,
   url,
@@ -35,21 +39,54 @@ const pack = await callTool("devtools_security_research_pack", {
   includeApplicationExport: true,
 });
 
+const afterReadiness = await callTool("devtools_professional_readiness", {
+  profile,
+});
+
 console.log(JSON.stringify({
   backend: pack.backend,
   profile: pack.profile,
   url: pack.url,
   summary: pack.summary,
+  beforeReadiness: {
+    ready: beforeReadiness.ready,
+    evidenceReady: beforeReadiness.evidenceReady,
+    missing: beforeReadiness.missing,
+    nextActions: beforeReadiness.nextActions,
+    objectiveBoundary: beforeReadiness.objectiveBoundary,
+  },
+  afterReadiness: {
+    ready: afterReadiness.ready,
+    evidenceReady: afterReadiness.evidenceReady,
+    missing: afterReadiness.missing,
+    artifactCount: afterReadiness.artifactCount,
+    timelineEventCount: afterReadiness.timelineEventCount,
+    objectiveBoundary: afterReadiness.objectiveBoundary,
+  },
+  handoff: {
+    ready: pack.handoffCompleteness?.ready,
+    missing: pack.handoffCompleteness?.missing,
+    researchPackPath: pack.summary?.researchPackPath,
+    drilldownPlanPath: pack.summary?.drilldownPlanPath,
+  },
+  artifactCoverage: {
+    ready: pack.artifactCoverage?.ready,
+    missing: pack.artifactCoverage?.missing,
+    skipped: pack.artifactCoverage?.skipped,
+  },
   captureBoundaries: pack.captureBoundaries,
   artifactPaths: {
     harPath: pack.summary?.harPath,
     applicationExportPath: pack.summary?.applicationExportPath,
-    chromeTracePath: pack.summary?.chromeTracePath,
+    tracePath: pack.summary?.tracePath,
     evidenceBundlePath: pack.summary?.evidenceBundlePath,
     evidenceManifestPath: pack.summary?.evidenceManifestPath,
     correlationGraphPath: pack.summary?.correlationGraphPath,
     authBoundaryReportPath: pack.summary?.authBoundaryReportPath,
     workerFrameReportPath: pack.summary?.workerFrameReportPath,
+    researchPackPath: pack.summary?.researchPackPath,
+    drilldownPlanPath: pack.summary?.drilldownPlanPath,
   },
-  nextTools: pack.nextTools,
+  firstDrilldowns: pack.drilldownPlan?.drilldowns?.slice(0, 5),
+  objectiveBoundary: "This example prints evidence workflow readiness and artifact paths only; it does not judge vulnerabilities.",
 }, null, 2));

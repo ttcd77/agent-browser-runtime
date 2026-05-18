@@ -260,6 +260,15 @@ readiness, artifact coverage, professional readiness, capture status, artifact
 kind counts, and handoff read/inspect commands. Use `--json` when an agent or
 script needs the full response.
 
+Runnable example:
+
+```bash
+node examples/security-research-pack.mjs https://example.com
+```
+
+The example prints pre/post professional readiness, handoff paths, artifact
+coverage, and first drill-down routes.
+
 ## Tools
 
 ### Agent Router

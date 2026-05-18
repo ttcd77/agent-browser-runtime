@@ -156,6 +156,7 @@
 - Managed Browser 和 Personal Chrome 合同保持一致，当前 `devtools_*` 合同为 100 / 100。
 - `npm run research:pack` CLI 已接入 readiness，生成证据包后会额外打印 professional readiness、evidence readiness、missing 和下一步工具。
 - `devtools_workflow_guide task=professional-appsec` 和 `browser_inspect` 返回的 `professionalWorkflow` 现在都会显式暴露 `devtools_professional_readiness`，让 Agent 可以在开始和生成证据包后都做机械 readiness 检查。
+- `examples/security-research-pack.mjs` 已升级为专业示例，输出前后 readiness、handoff、artifact coverage 和首批 drilldown routes。
 
 ### 2026-05-18: F12 Parity Matrix
 

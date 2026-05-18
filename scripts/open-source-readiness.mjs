@@ -13,6 +13,7 @@ const requiredFiles = [
   "docs/open-source-release-checklist.md",
   "examples/agent-devtools-workflows.md",
   "examples/mcp-adapter-sketch.mjs",
+  "examples/security-research-pack.mjs",
   "extension/manifest.json",
 ];
 
@@ -115,6 +116,13 @@ if (existsSync("docs/devtools-panel-map.md")) {
   const panelMap = readText("docs/devtools-panel-map.md");
   if (!panelMap.includes("devtools_professional_readiness")) {
     failures.push("devtools-panel-map.md must include devtools_professional_readiness in the first-screen/orientation map");
+  }
+}
+
+if (existsSync("examples/security-research-pack.mjs")) {
+  const example = readText("examples/security-research-pack.mjs");
+  for (const phrase of ["devtools_professional_readiness", "handoff", "artifactCoverage", "objectiveBoundary"]) {
+    if (!example.includes(phrase)) failures.push(`security-research-pack example missing professional field: ${phrase}`);
   }
 }
 
