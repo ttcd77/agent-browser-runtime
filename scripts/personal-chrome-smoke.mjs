@@ -522,11 +522,13 @@ const artifactIndex = await callTool("devtools_artifact_index", {
 assert(artifactIndex.backend === "personal-chrome", `Personal Chrome artifact index wrong backend: ${JSON.stringify(artifactIndex)}`);
 assert(artifactIndex.totalFileCount >= 1, `Personal Chrome artifact index missing files: ${JSON.stringify(artifactIndex)}`);
 assert(artifactIndex.artifacts?.some((artifact) => artifact.kind === "har" && artifact.path === savedHar.harPath), `Personal Chrome artifact index missing saved HAR: ${JSON.stringify(artifactIndex.artifacts)}`);
+assert(artifactIndex.latestByKind?.har?.inspectInput?.path, `Personal Chrome artifact index missing latest HAR inspect pointer: ${JSON.stringify(artifactIndex.latestByKind)}`);
 const handoffArtifactIndex = await callTool("devtools_artifact_index", {
   maxFiles: 200,
 });
 assert(handoffArtifactIndex.kinds?.["research-pack"] >= 1, `Personal Chrome artifact index missing research-pack kind: ${JSON.stringify(handoffArtifactIndex.kinds)}`);
 assert(handoffArtifactIndex.kinds?.["drilldown-plan"] >= 1, `Personal Chrome artifact index missing drilldown-plan kind: ${JSON.stringify(handoffArtifactIndex.kinds)}`);
+assert(handoffArtifactIndex.latestByKind?.["research-pack"]?.inspectInput?.path, `Personal Chrome artifact index missing latest research-pack pointer: ${JSON.stringify(handoffArtifactIndex.latestByKind)}`);
 const artifactSearch = await callTool("devtools_artifact_search", {
   query: "Agent Browser Runtime",
   kind: "har",

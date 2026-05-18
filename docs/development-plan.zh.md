@@ -194,6 +194,16 @@
 - Managed Browser 和 Personal Chrome smoke 都已覆盖。
 - 这只是机械 readiness 和交接路线，不判断证据含义。
 
+### 2026-05-18: Artifact Index Latest-By-Kind
+
+已经完成:
+
+- `devtools_artifact_index` / `personal_chrome_artifact_index` 新增 `latestByKind`。
+- 每个 artifact kind 现在直接给出最新文件的 path、mtime、bytes、hash、`inspectInput` 和 `readInput`。
+- Agent 不需要自己排序 artifact 列表即可找到最新 HAR、research-pack、drilldown-plan 等证据入口。
+- Managed Browser 和 Personal Chrome smoke 都已覆盖 HAR 与 research-pack 最新指针。
+- 这只是本地证据导航，不读取内容、不判断安全影响。
+
 ### 2026-05-18: Professional Readiness Tool
 
 已经完成:

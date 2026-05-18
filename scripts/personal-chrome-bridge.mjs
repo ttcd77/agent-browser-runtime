@@ -874,10 +874,24 @@ function buildArtifactIndex(files = [], params = {}) {
     .filter((file) => maxBytes == null || Number(file.bytes || 0) <= maxBytes)
     .sort((a, b) => String(b.modifiedAt || "").localeCompare(String(a.modifiedAt || "")));
   const kinds = {};
+  const latestByKind = {};
   let totalBytes = 0;
   for (const file of rows) {
     kinds[file.kind] = (kinds[file.kind] || 0) + 1;
     totalBytes += Number(file.bytes || 0);
+    const current = latestByKind[file.kind];
+    if (!current || String(file.modifiedAt || "").localeCompare(String(current.modifiedAt || "")) > 0) {
+      latestByKind[file.kind] = {
+        path: file.path,
+        relativePath: file.relativePath,
+        kind: file.kind,
+        bytes: file.bytes,
+        modifiedAt: file.modifiedAt,
+        sha256: file.sha256 || null,
+        inspectInput: { path: file.path },
+        readInput: { path: file.path, mode: "line", startLine: 1, lineCount: 120 },
+      };
+    }
   }
   return {
     schema: "agent-browser-runtime.artifact-index.v1",
@@ -886,6 +900,7 @@ function buildArtifactIndex(files = [], params = {}) {
     returnedFileCount: Math.min(filtered.length, maxFiles),
     totalBytes,
     kinds,
+    latestByKind,
     filters: {
       query: query || null,
       kind: kindFilter || null,
@@ -907,6 +922,7 @@ function buildArtifactIndex(files = [], params = {}) {
     boundaries: [
       "This index lists local evidence artifacts that already exist on disk.",
       "It does not read every artifact body and does not decide vulnerability impact.",
+      "latestByKind is a convenience pointer for navigation only; use inspect/read tools for bounded content access.",
       "Use devtools_artifact_inspect for bounded structure, preview, and literal match drill-down.",
     ],
   };
