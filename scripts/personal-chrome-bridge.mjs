@@ -874,6 +874,7 @@ function inspectArtifactFile(params = {}) {
 function inferArtifactKind(file) {
   const value = String(file || "").replace(/\\/g, "/").toLowerCase();
   const ext = value.split(".").pop() || "";
+  if (value.includes("har-completeness")) return "har-completeness";
   if (ext === "har" || value.includes("har")) return "har";
   if (value.includes("trace")) return "trace";
   if (value.includes("screenshots") || ["png", "jpg", "jpeg", "webp"].includes(ext)) return "screenshot";
@@ -3598,6 +3599,11 @@ async function securityResearchPack(params = {}) {
   const artifacts = {};
   if (params.includeHar !== false) {
     artifacts.har = await safeBridgeTool("devtools_save_har", { limit: 500, includeBodies: false });
+    artifacts.harCompleteness = await safeBridgeTool("devtools_har_completeness", {
+      includeBodies: false,
+      maxRows: 50,
+      save: true,
+    });
   }
   if (params.includeApplicationExport !== false) {
     artifacts.application = await safeBridgeTool("devtools_application_export", {
@@ -3660,6 +3666,7 @@ async function securityResearchPack(params = {}) {
     save: true,
     artifactPaths: [
       artifacts.har?.harPath,
+      artifacts.harCompleteness?.reportPath,
       artifacts.application?.exportPath,
       artifacts.trace?.tracePath,
       artifacts.bundle?.bundlePath,
@@ -3684,6 +3691,7 @@ async function securityResearchPack(params = {}) {
     performanceObserverEntryCount: performance?.evidence?.observer?.summary?.entryCount ?? null,
     tracePath: artifacts.trace?.tracePath || null,
     harPath: artifacts.har?.harPath || null,
+    harCompletenessPath: artifacts.harCompleteness?.reportPath || null,
     applicationExportPath: artifacts.application?.exportPath || null,
     evidenceBundlePath: artifacts.bundle?.bundlePath || null,
     evidenceManifestPath: artifacts.manifest?.manifestPath || null,
@@ -3730,6 +3738,7 @@ async function securityResearchPack(params = {}) {
     summary: { ...summary, researchPackPath },
     artifactPaths: {
       harPath: summary.harPath,
+      harCompletenessPath: summary.harCompletenessPath,
       applicationExportPath: summary.applicationExportPath,
       evidenceBundlePath: summary.evidenceBundlePath,
       evidenceManifestPath: summary.evidenceManifestPath,
@@ -3970,6 +3979,7 @@ function buildResearchPackHandoffCompleteness(summary = {}, artifacts = {}, work
 function buildResearchPackArtifactCoverage(summary = {}, options = {}) {
   const requested = {
     har: options.includeHar !== false,
+    harCompleteness: options.includeHar !== false,
     application: options.includeApplicationExport !== false,
     trace: options.includeTrace !== false,
     bundle: true,
@@ -3978,10 +3988,13 @@ function buildResearchPackArtifactCoverage(summary = {}, options = {}) {
     authBoundary: true,
     workerFrame: true,
     drilldownPlan: true,
+    f12Navigation: true,
+    firstF12RequestDetail: true,
     researchPack: true,
   };
   const paths = {
     har: summary.harPath,
+    harCompleteness: summary.harCompletenessPath,
     application: summary.applicationExportPath,
     trace: summary.tracePath,
     bundle: summary.evidenceBundlePath,
@@ -3990,6 +4003,8 @@ function buildResearchPackArtifactCoverage(summary = {}, options = {}) {
     authBoundary: summary.authBoundaryReportPath,
     workerFrame: summary.workerFrameReportPath,
     drilldownPlan: summary.drilldownPlanPath,
+    f12Navigation: summary.f12NavigationPath,
+    firstF12RequestDetail: summary.firstF12RequestDetailPath,
     researchPack: summary.researchPackPath,
   };
   const rows = Object.keys(requested).map((name) => ({

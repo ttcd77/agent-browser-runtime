@@ -94,6 +94,7 @@ console.log(JSON.stringify({
   captureBoundaries: pack.captureBoundaries,
   artifactPaths: {
     harPath: pack.summary?.harPath,
+    harCompletenessPath: pack.summary?.harCompletenessPath,
     applicationExportPath: pack.summary?.applicationExportPath,
     tracePath: pack.summary?.tracePath,
     evidenceBundlePath: pack.summary?.evidenceBundlePath,

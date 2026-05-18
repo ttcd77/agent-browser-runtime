@@ -414,6 +414,8 @@ const researchPack = await callTool("devtools_security_research_pack", {
   includeApplicationExport: true,
 });
 assert(researchPack.backend === "personal-chrome", `Personal Chrome security research pack wrong backend: ${JSON.stringify(researchPack)}`);
+assert(researchPack.summary?.harCompletenessPath, "Personal Chrome security research pack missing HAR completeness path");
+assert(researchPack.artifacts?.harCompleteness?.entryCount >= 1, `Personal Chrome security research pack missing HAR completeness artifact: ${JSON.stringify(researchPack.artifacts?.harCompleteness)}`);
 assert(researchPack.summary?.evidenceBundlePath, "Personal Chrome security research pack missing bundle path");
 assert(researchPack.summary?.evidenceManifestPath, "Personal Chrome security research pack missing evidence manifest path");
 assert(researchPack.summary?.correlationGraphPath, "Personal Chrome security research pack missing correlation graph path");
@@ -444,6 +446,7 @@ assert(researchPack.handoffCompleteness?.checks?.some((check) => check.name === 
 assert(researchPack.handoffDrilldowns?.some((entry) => entry.tool === "devtools_artifact_inspect" && entry.input?.path === researchPack.summary.researchPackPath), "Personal Chrome security research pack missing handoff inspect drilldown");
 assert(researchPack.parityMatrix?.backend === "personal-chrome", "Personal Chrome security research pack missing parity snapshot");
 assert(researchPack.artifacts?.artifactIndex?.kinds?.["research-pack"] >= 1, `Personal Chrome security research pack artifact index missing handoff kind: ${JSON.stringify(researchPack.artifacts?.artifactIndex?.kinds)}`);
+assert(researchPack.artifacts?.artifactIndex?.kinds?.["har-completeness"] >= 1, `Personal Chrome security research pack artifact index missing HAR completeness kind: ${JSON.stringify(researchPack.artifacts?.artifactIndex?.kinds)}`);
 assert(researchPack.artifacts?.artifactIndex?.kinds?.["f12-navigation"] >= 1, `Personal Chrome security research pack artifact index missing f12-navigation kind: ${JSON.stringify(researchPack.artifacts?.artifactIndex?.kinds)}`);
 assert(researchPack.artifacts?.artifactIndex?.kinds?.["request-detail"] >= 1, `Personal Chrome security research pack artifact index missing request-detail kind: ${JSON.stringify(researchPack.artifacts?.artifactIndex?.kinds)}`);
 assert(researchPack.drilldownPlan?.drilldowns?.some((entry) => entry.tool === "devtools_evidence_timeline"), "Personal Chrome security research pack missing evidence timeline drilldown");
@@ -458,8 +461,10 @@ assert(researchPackInspect.researchPackHandoff?.agentEntryMode === "facade-first
 assert(researchPackInspect.researchPackHandoff?.professionalPath?.includes("browser_security_pack"), "Personal Chrome handoff inspect missing professional facade path");
 assert(researchPackInspect.researchPackHandoff?.handoffChecks?.some((check) => check.name === "agentUsageRoute" && check.present), "Personal Chrome handoff inspect missing handoff check rows");
 assert(researchPackInspect.researchPackHandoff?.artifactCoverageRows?.some((row) => row.name === "har" && row.status === "present"), "Personal Chrome handoff inspect missing artifact coverage rows");
+assert(researchPackInspect.researchPackHandoff?.artifactCoverageRows?.some((row) => row.name === "harCompleteness" && row.status === "present"), "Personal Chrome handoff inspect missing HAR completeness artifact coverage row");
 assert(researchPackInspect.researchPackHandoff?.recommendedRoute?.some((step) => step.tool === "browser_security_pack"), "Personal Chrome handoff inspect missing recommended agent route");
 assert(researchPackInspect.researchPackHandoff?.panelRoutes?.network?.some((step) => step.tool === "devtools_request_detail"), "Personal Chrome handoff inspect missing network panel route");
+assert(researchPackInspect.researchPackHandoff?.artifactPaths?.harCompletenessPath, "Personal Chrome handoff inspect missing HAR completeness artifact path");
 assert(researchPackInspect.researchPackHandoff?.f12Navigation?.requestNodeCount >= 1, "Personal Chrome handoff inspect missing F12 navigation");
 assert(researchPackInspect.researchPackHandoff?.artifactPaths?.f12NavigationPath, "Personal Chrome handoff inspect missing F12 navigation artifact path");
 assert(researchPackInspect.researchPackHandoff?.firstF12RequestDetail?.sectionAvailability?.headers === true, "Personal Chrome handoff inspect missing first F12 request detail summary");

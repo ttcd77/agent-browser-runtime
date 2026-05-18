@@ -32,9 +32,9 @@ The runtime then performs a bounded workflow:
    `overview`, `network`, `storage`, `console`, `sources`, and `performance`.
 5. Save the evidence artifacts the agent would normally need to ask for
    separately:
-   HAR, Application export, Chrome trace, trace summary, compact evidence
-   bundle, evidence manifest, request correlation graph, auth boundary report,
-   and worker/frame boundary report.
+   HAR, HAR completeness report, Application export, Chrome trace, trace
+   summary, compact evidence bundle, evidence manifest, request correlation
+   graph, auth boundary report, and worker/frame boundary report.
 6. Return one structured response with summaries, completeness notes, artifact
    paths, and suggested next tools for drill-down.
 
@@ -52,6 +52,8 @@ Typical output includes:
 - source/script inventory and source-map metadata,
 - Performance timing, observer entries, and optional Chrome trace file,
 - saved HAR path,
+- saved HAR completeness path for body, timing, redirect, and
+  security-metadata coverage,
 - saved Application export path,
 - saved evidence bundle path,
 - saved evidence manifest path with file hashes,
@@ -69,6 +71,8 @@ Typical output includes:
   artifact index, evidence timeline, capture status, and parity matrix,
 - artifact coverage rows showing whether each requested evidence file is
   `present`, `skipped`, or `missing`,
+- `summary.harCompletenessPath`, a standalone JSON artifact for HAR body,
+  timing, redirect, and security-metadata coverage,
 - `f12Navigation`, a deterministic index from captured request nodes to
   `devtools_request_detail` plus F12 request sections,
 - `summary.f12NavigationPath`, a standalone JSON artifact for the same F12

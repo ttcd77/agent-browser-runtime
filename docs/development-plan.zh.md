@@ -897,3 +897,13 @@
 - artifact index 会把该文件归类为 `f12-navigation`，方便 Agent 直接读取“请求列表 -> request detail / section route”的导航表。
 - `devtools_professional_readiness.routeSummary.f12NavigationArtifact` 和 `nextActions` 会暴露该 artifact 的 inspect/read 路线。
 - 该文件只保存客观导航路线，不判断请求是否异常。
+
+### 2026-05-19: HAR Completeness 独立证据文件接入 Research Pack
+
+已经完成:
+
+- `devtools_security_research_pack` / `browser_security_pack` 会保存 `devtools_har_completeness` 报告。
+- `summary.harCompletenessPath` 和 handoff `artifactPaths.harCompletenessPath` 会返回该文件路径。
+- artifact index 会把该文件归类为 `har-completeness`，避免和原始 HAR 文件混在一起。
+- evidence manifest 会记录 HAR completeness 报告路径和哈希。
+- 该报告只描述 body、timing、redirect、security metadata 覆盖率，不判断漏洞。

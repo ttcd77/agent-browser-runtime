@@ -240,6 +240,8 @@ try {
   });
   assert(pack.backend === "managed-cdp", `professional pack wrong backend: ${JSON.stringify(pack)}`);
   assert(pack.summary?.harPath, "professional pack missing HAR path");
+  assert(pack.summary?.harCompletenessPath, "professional pack missing HAR completeness path");
+  assert(pack.artifacts?.harCompleteness?.entryCount >= 1, `professional pack missing HAR completeness artifact: ${JSON.stringify(pack.artifacts?.harCompleteness)}`);
   assert(pack.summary?.applicationExportPath, "professional pack missing Application export path");
   assert(pack.summary?.evidenceBundlePath, "professional pack missing evidence bundle path");
   assert(pack.summary?.correlationGraphPath, "professional pack missing correlation graph path");
@@ -266,6 +268,7 @@ try {
   assert(pack.handoffCompleteness?.checks?.some((check) => check.name === "agentUsageRoute" && check.present), `professional pack handoff completeness missing agent route check: ${JSON.stringify(pack.handoffCompleteness?.checks)}`);
   assert(pack.summary?.artifactCoverageReady === true, `professional pack artifact coverage not ready: ${JSON.stringify(pack.summary?.artifactCoverageMissing)}`);
   assert(pack.artifactCoverage?.rows?.some((row) => row.name === "har" && row.status === "present"), `professional pack missing HAR artifact coverage: ${JSON.stringify(pack.artifactCoverage)}`);
+  assert(pack.artifactCoverage?.rows?.some((row) => row.name === "harCompleteness" && row.status === "present"), `professional pack missing HAR completeness artifact coverage: ${JSON.stringify(pack.artifactCoverage)}`);
   assert(pack.summary?.drilldownPlanPath, "professional pack missing drilldown plan path");
   assert(pack.summary?.researchPackPath, "professional pack missing handoff path");
   assert(pack.artifacts?.researchPack?.sha256, "professional pack missing handoff hash");
@@ -279,6 +282,7 @@ try {
   assert(pack.parityMatrix?.summary?.strongestBackend === "managed-cdp", "professional pack missing Managed Browser parity snapshot");
   assert(pack.artifacts?.artifactIndex?.totalFileCount >= 1, "professional pack missing artifact index payload");
   assert(pack.artifacts?.artifactIndex?.kinds?.["research-pack"] >= 1, `professional pack artifact index missing handoff kind: ${JSON.stringify(pack.artifacts?.artifactIndex?.kinds)}`);
+  assert(pack.artifacts?.artifactIndex?.kinds?.["har-completeness"] >= 1, `professional pack artifact index missing HAR completeness kind: ${JSON.stringify(pack.artifacts?.artifactIndex?.kinds)}`);
   assert(pack.artifacts?.artifactIndex?.kinds?.["f12-navigation"] >= 1, `professional pack artifact index missing f12-navigation kind: ${JSON.stringify(pack.artifacts?.artifactIndex?.kinds)}`);
   assert(pack.artifacts?.artifactIndex?.kinds?.["request-detail"] >= 1, `professional pack artifact index missing request-detail kind: ${JSON.stringify(pack.artifacts?.artifactIndex?.kinds)}`);
   assert(pack.artifacts?.evidenceTimeline?.eventCount >= 1, "professional pack missing evidence timeline payload");
@@ -384,6 +388,7 @@ try {
   assert(handoffInspect.researchPackHandoff?.artifactCoverageRows?.some((row) => row.name === "har" && row.status === "present"), "professional handoff inspect missing artifact coverage rows");
   assert(handoffInspect.researchPackHandoff?.recommendedRoute?.some((step) => step.tool === "browser_security_pack"), "professional handoff inspect missing recommended agent route");
   assert(handoffInspect.researchPackHandoff?.panelRoutes?.network?.some((step) => step.tool === "devtools_request_detail"), "professional handoff inspect missing network panel route");
+  assert(handoffInspect.researchPackHandoff?.artifactPaths?.harCompletenessPath, "professional handoff inspect missing HAR completeness artifact path");
   assert(handoffInspect.researchPackHandoff?.f12Navigation?.requestNodeCount >= 1, "professional handoff inspect missing F12 navigation");
   assert(handoffInspect.researchPackHandoff?.artifactPaths?.f12NavigationPath, "professional handoff inspect missing F12 navigation artifact path");
   assert(handoffInspect.researchPackHandoff?.firstF12RequestDetail?.sectionAvailability?.headers === true, "professional handoff inspect missing first F12 request detail summary");
