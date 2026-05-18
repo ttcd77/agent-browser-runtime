@@ -3307,7 +3307,7 @@ async function securityResearchPack(params = {}) {
     label: artifacts.captureStatus?.capture?.label || null,
     trafficCount: artifacts.captureStatus?.trackedRequests ?? artifacts.captureStatus?.networkEvents ?? null,
   };
-  const handoffCompleteness = buildResearchPackHandoffCompleteness(summary, artifacts, workflow, drilldownPlan, parityMatrix);
+  const handoffCompleteness = buildResearchPackHandoffCompleteness(summary, artifacts, workflow, drilldownPlan, parityMatrix, agentUsage);
   summary.handoffReady = handoffCompleteness.ready;
   summary.handoffPresentCount = handoffCompleteness.presentCount;
   summary.handoffMissing = handoffCompleteness.missing;
@@ -3462,9 +3462,12 @@ function professionalAppsecWorkflowSummary() {
   };
 }
 
-function buildResearchPackHandoffCompleteness(summary = {}, artifacts = {}, workflow = {}, drilldownPlan = {}, parityMatrix = {}) {
+function buildResearchPackHandoffCompleteness(summary = {}, artifacts = {}, workflow = {}, drilldownPlan = {}, parityMatrix = {}, agentUsage = {}) {
+  const defaultRoute = Array.isArray(agentUsage?.defaultRoute) ? agentUsage.defaultRoute : [];
+  const panelRoutes = agentUsage?.panelRoutes || {};
   const checks = [
     { name: "workflow", present: Boolean(workflow?.task && workflow?.defaultPath?.length), evidence: workflow?.task || null },
+    { name: "agentUsageRoute", present: Boolean(defaultRoute.some((step) => step.tool === "browser_security_pack") && panelRoutes.network?.some((step) => step.tool === "devtools_request_detail")), evidence: defaultRoute.map((step) => step.tool) },
     { name: "researchPack", present: Boolean(summary.researchPackPath && artifacts.researchPack?.sha256), evidence: summary.researchPackPath || null },
     { name: "drilldownPlan", present: Boolean(summary.drilldownPlanPath && drilldownPlan?.count >= 1), evidence: summary.drilldownPlanPath || null },
     { name: "artifactIndex", present: Boolean(artifacts.artifactIndex?.totalFileCount >= 1), evidence: artifacts.artifactIndex?.totalFileCount ?? null },

@@ -244,6 +244,15 @@
 - Managed Professional smoke 和 Personal Chrome smoke 都已覆盖 research pack 与 handoff inspect 的 route。
 - 这只是离线证据包的路线快照，不读取隐藏数据、不判断漏洞。
 
+### 2026-05-18: Handoff Agent Route Completeness
+
+已经完成:
+
+- `handoffCompleteness` 新增 `agentUsageRoute` 检查。
+- research pack 只有在默认路线包含 `browser_security_pack` 且 Network panel route 包含 `devtools_request_detail` 时，才算 route 交接完整。
+- Managed Professional smoke 和 Personal Chrome smoke 都已覆盖该检查。
+- 这只是机械完整性校验，不代表证据足够、不判断漏洞。
+
 ### 2026-05-18: Professional Readiness Tool
 
 已经完成:

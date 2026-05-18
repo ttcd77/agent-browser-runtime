@@ -420,6 +420,7 @@ assert(researchPack.agentEntryPoints?.defaultMode === "facade-first", "Personal 
 assert(researchPack.agentEntryPoints?.professionalPath?.includes("browser_security_pack"), "Personal Chrome security research pack missing professional agent route");
 assert(researchPack.agentUsage?.defaultRoute?.some((step) => step.tool === "browser_security_pack"), "Personal Chrome security research pack missing default agent usage route");
 assert(researchPack.agentUsage?.panelRoutes?.network?.some((step) => step.tool === "devtools_request_detail"), "Personal Chrome security research pack missing network panel usage route");
+assert(researchPack.handoffCompleteness?.checks?.some((check) => check.name === "agentUsageRoute" && check.present), `Personal Chrome handoff completeness missing agent route check: ${JSON.stringify(researchPack.handoffCompleteness?.checks)}`);
 assert(researchPack.handoffDrilldowns?.some((entry) => entry.tool === "devtools_artifact_inspect" && entry.input?.path === researchPack.summary.researchPackPath), "Personal Chrome security research pack missing handoff inspect drilldown");
 assert(researchPack.parityMatrix?.backend === "personal-chrome", "Personal Chrome security research pack missing parity snapshot");
 assert(researchPack.artifacts?.artifactIndex?.kinds?.["research-pack"] >= 1, `Personal Chrome security research pack artifact index missing handoff kind: ${JSON.stringify(researchPack.artifacts?.artifactIndex?.kinds)}`);

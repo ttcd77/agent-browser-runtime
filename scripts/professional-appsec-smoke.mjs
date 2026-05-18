@@ -239,6 +239,7 @@ try {
   assert(pack.artifacts?.captureStatus?.capture?.enabled === true, "professional pack missing capture status artifact");
   assert(pack.summary?.handoffReady === true, `professional pack handoff not ready: ${JSON.stringify(pack.summary?.handoffMissing)}`);
   assert(pack.handoffCompleteness?.ready === true, `professional pack missing handoff completeness: ${JSON.stringify(pack.handoffCompleteness)}`);
+  assert(pack.handoffCompleteness?.checks?.some((check) => check.name === "agentUsageRoute" && check.present), `professional pack handoff completeness missing agent route check: ${JSON.stringify(pack.handoffCompleteness?.checks)}`);
   assert(pack.summary?.artifactCoverageReady === true, `professional pack artifact coverage not ready: ${JSON.stringify(pack.summary?.artifactCoverageMissing)}`);
   assert(pack.artifactCoverage?.rows?.some((row) => row.name === "har" && row.status === "present"), `professional pack missing HAR artifact coverage: ${JSON.stringify(pack.artifactCoverage)}`);
   assert(pack.summary?.drilldownPlanPath, "professional pack missing drilldown plan path");
