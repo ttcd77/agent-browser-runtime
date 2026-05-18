@@ -409,6 +409,15 @@
 - Agent 接手顺序更明确: 先读 readiness `routeSummary`，再按需读 `nextActions`、artifact index 或完整 handoff。
 - 这只是使用说明和发布门禁，不改变证据采集逻辑、不判断漏洞。
 
+### 2026-05-18: Runnable Example Route Summary
+
+已经完成:
+
+- `examples/security-research-pack.mjs` 现在在 `afterReadiness` 中输出 `routeSummary`。
+- `smoke:example` 验证示例输出包含 latest handoff inspect/read 和 first concrete request drilldown。
+- 公开示例、CLI、readiness 三条路径现在都暴露同一套 Agent 接手路线。
+- 这只是示例输出路线，不读取证据正文、不判断漏洞。
+
 ### 2026-05-18: Professional Readiness Tool
 
 已经完成:

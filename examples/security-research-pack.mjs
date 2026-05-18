@@ -61,6 +61,7 @@ console.log(JSON.stringify({
     missing: afterReadiness.missing,
     artifactCount: afterReadiness.artifactCount,
     timelineEventCount: afterReadiness.timelineEventCount,
+    routeSummary: afterReadiness.routeSummary,
     objectiveBoundary: afterReadiness.objectiveBoundary,
   },
   handoff: {

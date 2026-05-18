@@ -128,6 +128,9 @@ try {
   assert(output.beforeReadiness?.objectiveBoundary?.includes("does not judge vulnerabilities"), "before readiness crossed objective boundary");
   assert(output.afterReadiness?.ready === true, `after readiness not ready: ${JSON.stringify(output.afterReadiness)}`);
   assert(output.afterReadiness?.evidenceReady === true, `after readiness missing evidence: ${JSON.stringify(output.afterReadiness)}`);
+  assert(output.afterReadiness?.routeSummary?.latestHandoffInspect?.tool === "devtools_artifact_inspect", `example missing routeSummary handoff inspect: ${JSON.stringify(output.afterReadiness?.routeSummary)}`);
+  assert(output.afterReadiness?.routeSummary?.latestHandoffRead?.tool === "devtools_artifact_read", `example missing routeSummary handoff read: ${JSON.stringify(output.afterReadiness?.routeSummary)}`);
+  assert(output.afterReadiness?.routeSummary?.firstConcreteDrilldown?.tool === "devtools_request_detail", `example missing routeSummary concrete drilldown: ${JSON.stringify(output.afterReadiness?.routeSummary)}`);
   assert(output.handoff?.ready === true, `handoff not ready: ${JSON.stringify(output.handoff)}`);
   assert(output.artifactCoverage?.ready === true, `artifact coverage not ready: ${JSON.stringify(output.artifactCoverage)}`);
   assert(output.artifactPaths?.researchPackPath, "example missing research pack path");
