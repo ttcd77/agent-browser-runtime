@@ -1085,11 +1085,13 @@ try {
   assert(artifactIndex.totalFileCount >= 1, `artifact index missing files: ${JSON.stringify(artifactIndex)}`);
   assert(artifactIndex.artifacts?.some((artifact) => artifact.kind === "har" && artifact.path === savedHar.harPath), `artifact index missing saved HAR: ${JSON.stringify(artifactIndex.artifacts)}`);
   assert(artifactIndex.latestByKind?.har?.inspectInput?.path, `artifact index missing latest HAR inspect pointer: ${JSON.stringify(artifactIndex.latestByKind)}`);
+  assert(artifactIndex.recommendedDrilldowns?.some((entry) => entry.tool === "devtools_artifact_inspect" && entry.input?.path), `artifact index missing recommended inspect drilldown: ${JSON.stringify(artifactIndex.recommendedDrilldowns)}`);
   const handoffArtifactIndex = await callTool(baseUrl, "devtools_artifact_index", {
     profile: "default",
     maxFiles: 200,
   });
   assert(handoffArtifactIndex.latestByKind?.["research-pack"]?.inspectInput?.path, `artifact index missing latest research-pack pointer: ${JSON.stringify(handoffArtifactIndex.latestByKind)}`);
+  assert(handoffArtifactIndex.recommendedDrilldowns?.some((entry) => entry.tool === "devtools_artifact_inspect" && entry.input?.path === handoffArtifactIndex.latestByKind?.["research-pack"]?.path), `artifact index missing latest research-pack drilldown: ${JSON.stringify(handoffArtifactIndex.recommendedDrilldowns)}`);
   const artifactSearch = await callTool(baseUrl, "devtools_artifact_search", {
     profile: "default",
     query: "Agent Browser Runtime",

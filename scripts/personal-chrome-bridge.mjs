@@ -893,6 +893,28 @@ function buildArtifactIndex(files = [], params = {}) {
       };
     }
   }
+  const recommendedKindOrder = ["research-pack", "drilldown-plan", "har", "application", "bundle", "manifest", "graph", "auth-boundary", "boundary", "trace"];
+  const recommendedDrilldowns = recommendedKindOrder
+    .filter((kind) => latestByKind[kind])
+    .flatMap((kind) => {
+      const artifact = latestByKind[kind];
+      const drilldowns = [{
+        label: `Latest ${kind} artifact`,
+        tool: "devtools_artifact_inspect",
+        input: artifact.inspectInput,
+        path: artifact.path,
+      }];
+      if (["research-pack", "drilldown-plan", "har", "application", "bundle", "manifest", "graph", "auth-boundary", "boundary"].includes(kind)) {
+        drilldowns.push({
+          label: `Read latest ${kind} artifact`,
+          tool: "devtools_artifact_read",
+          input: artifact.readInput,
+          path: artifact.path,
+        });
+      }
+      return drilldowns;
+    })
+    .slice(0, 12);
   return {
     schema: "agent-browser-runtime.artifact-index.v1",
     generatedAt: new Date().toISOString(),
@@ -901,6 +923,7 @@ function buildArtifactIndex(files = [], params = {}) {
     totalBytes,
     kinds,
     latestByKind,
+    recommendedDrilldowns,
     filters: {
       query: query || null,
       kind: kindFilter || null,
@@ -923,6 +946,7 @@ function buildArtifactIndex(files = [], params = {}) {
       "This index lists local evidence artifacts that already exist on disk.",
       "It does not read every artifact body and does not decide vulnerability impact.",
       "latestByKind is a convenience pointer for navigation only; use inspect/read tools for bounded content access.",
+      "recommendedDrilldowns are deterministic navigation shortcuts, not findings.",
       "Use devtools_artifact_inspect for bounded structure, preview, and literal match drill-down.",
     ],
   };

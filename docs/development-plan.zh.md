@@ -204,6 +204,16 @@
 - Managed Browser 和 Personal Chrome smoke 都已覆盖 HAR 与 research-pack 最新指针。
 - 这只是本地证据导航，不读取内容、不判断安全影响。
 
+### 2026-05-18: Artifact Index Recommended Drilldowns
+
+已经完成:
+
+- `devtools_artifact_index` / `personal_chrome_artifact_index` 新增 `recommendedDrilldowns`。
+- Agent 可以从 artifact index 直接拿到最新 research-pack、drilldown-plan、HAR、bundle、manifest 等证据的 inspect/read 路线。
+- `latestByKind` 继续保留为每类最新证据指针；`recommendedDrilldowns` 是可直接执行的导航快捷方式。
+- Managed Browser 和 Personal Chrome smoke 都已覆盖 HAR 与 research-pack 推荐 drilldown。
+- 这只是确定性证据导航，不读取内容、不判断安全影响。
+
 ### 2026-05-18: Professional Readiness Tool
 
 已经完成:
