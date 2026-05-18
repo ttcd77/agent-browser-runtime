@@ -226,6 +226,8 @@ try {
   assert(pack.artifacts?.captureStatus?.capture?.enabled === true, "professional pack missing capture status artifact");
   assert(pack.summary?.handoffReady === true, `professional pack handoff not ready: ${JSON.stringify(pack.summary?.handoffMissing)}`);
   assert(pack.handoffCompleteness?.ready === true, `professional pack missing handoff completeness: ${JSON.stringify(pack.handoffCompleteness)}`);
+  assert(pack.summary?.artifactCoverageReady === true, `professional pack artifact coverage not ready: ${JSON.stringify(pack.summary?.artifactCoverageMissing)}`);
+  assert(pack.artifactCoverage?.rows?.some((row) => row.name === "har" && row.status === "present"), `professional pack missing HAR artifact coverage: ${JSON.stringify(pack.artifactCoverage)}`);
   assert(pack.summary?.drilldownPlanPath, "professional pack missing drilldown plan path");
   assert(pack.summary?.researchPackPath, "professional pack missing handoff path");
   assert(pack.artifacts?.researchPack?.sha256, "professional pack missing handoff hash");
@@ -261,6 +263,7 @@ try {
   });
   assert(handoffPreview.contentText?.includes("security-research-pack-handoff"), "professional handoff preview missing schema marker");
   assert(handoffPreview.contentText?.includes("professional-appsec"), "professional handoff preview missing workflow marker");
+  assert(handoffPreview.contentText?.includes("artifactCoverage"), "professional handoff preview missing artifact coverage marker");
   const drilldownPreview = await callTool(baseUrl, "devtools_artifact_inspect", {
     profile: "professional",
     path: pack.summary.drilldownPlanPath,

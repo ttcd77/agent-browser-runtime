@@ -3004,6 +3004,18 @@ async function securityResearchPack(params = {}) {
     bytes: statSync(researchPackPath).size,
     sha256: sha256File(researchPackPath),
   };
+  const artifactCoverage = buildResearchPackArtifactCoverage(summary, params || {});
+  summary.artifactCoverageReady = artifactCoverage.ready;
+  summary.artifactCoverageMissing = artifactCoverage.missing;
+  summary.artifactCoverageSkipped = artifactCoverage.skipped;
+  researchPackHandoff.summary = { ...summary, researchPackPath };
+  researchPackHandoff.artifactCoverage = artifactCoverage;
+  writeFileSync(researchPackPath, `${JSON.stringify(researchPackHandoff, null, 2)}\n`, "utf8");
+  artifacts.researchPack = {
+    path: researchPackPath,
+    bytes: statSync(researchPackPath).size,
+    sha256: sha256File(researchPackPath),
+  };
   return {
     backend: "personal-chrome",
     generatedAt,
@@ -3019,6 +3031,7 @@ async function securityResearchPack(params = {}) {
       performance,
     },
     artifacts,
+    artifactCoverage,
     handoffCompleteness,
     workflow,
     parityMatrix,
@@ -3138,6 +3151,48 @@ function buildResearchPackHandoffCompleteness(summary = {}, artifacts = {}, work
     missing: checks.filter((check) => !check.present).map((check) => check.name),
     checks,
     objectiveBoundary: "This is a mechanical handoff-artifact checklist; it does not decide security impact.",
+  };
+}
+
+function buildResearchPackArtifactCoverage(summary = {}, options = {}) {
+  const requested = {
+    har: options.includeHar !== false,
+    application: options.includeApplicationExport !== false,
+    trace: options.includeTrace !== false,
+    bundle: true,
+    manifest: true,
+    correlationGraph: true,
+    authBoundary: true,
+    workerFrame: true,
+    drilldownPlan: true,
+    researchPack: true,
+  };
+  const paths = {
+    har: summary.harPath,
+    application: summary.applicationExportPath,
+    trace: summary.tracePath,
+    bundle: summary.evidenceBundlePath,
+    manifest: summary.evidenceManifestPath,
+    correlationGraph: summary.correlationGraphPath,
+    authBoundary: summary.authBoundaryReportPath,
+    workerFrame: summary.workerFrameReportPath,
+    drilldownPlan: summary.drilldownPlanPath,
+    researchPack: summary.researchPackPath,
+  };
+  const rows = Object.keys(requested).map((name) => ({
+    name,
+    requested: requested[name],
+    status: requested[name] ? (paths[name] ? "present" : "missing") : "skipped",
+    path: paths[name] || null,
+  }));
+  return {
+    schema: "agent-browser-runtime.research-pack-artifact-coverage.v1",
+    ready: rows.every((row) => row.status !== "missing"),
+    present: rows.filter((row) => row.status === "present").map((row) => row.name),
+    missing: rows.filter((row) => row.status === "missing").map((row) => row.name),
+    skipped: rows.filter((row) => row.status === "skipped").map((row) => row.name),
+    rows,
+    objectiveBoundary: "This reports artifact file presence for the requested workflow; it does not judge security impact.",
   };
 }
 

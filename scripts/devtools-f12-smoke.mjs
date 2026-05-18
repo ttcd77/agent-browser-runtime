@@ -675,6 +675,7 @@ try {
   assert(researchPack.summary?.drilldownCount >= 3, "security research pack missing drilldown plan count");
   assert(researchPack.summary?.capture?.enabled === true && typeof researchPack.summary?.capture?.trafficCount === "number", `security research pack missing capture summary: ${JSON.stringify(researchPack.summary?.capture)}`);
   assert(researchPack.summary?.handoffReady === true, `security research pack handoff not ready: ${JSON.stringify(researchPack.summary?.handoffMissing)}`);
+  assert(researchPack.summary?.artifactCoverageReady === true, `security research pack artifact coverage not ready: ${JSON.stringify(researchPack.summary?.artifactCoverageMissing)}`);
   assert(researchPack.summary?.drilldownPlanPath, "security research pack missing drilldown plan path");
   assert(researchPack.summary?.researchPackPath, "security research pack missing handoff path");
   assert(researchPack.artifacts?.researchPack?.sha256, "security research pack missing handoff hash");
