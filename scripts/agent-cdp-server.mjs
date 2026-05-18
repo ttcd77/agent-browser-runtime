@@ -2859,6 +2859,26 @@ function professionalAppsecWorkflowSummary() {
   };
 }
 
+function buildResearchPackHandoffCompleteness(summary = {}, artifacts = {}, workflow = {}, drilldownPlan = {}, parityMatrix = {}) {
+  const checks = [
+    { name: "workflow", present: Boolean(workflow?.task && workflow?.defaultPath?.length), evidence: workflow?.task || null },
+    { name: "researchPack", present: Boolean(summary.researchPackPath && artifacts.researchPack?.sha256), evidence: summary.researchPackPath || null },
+    { name: "drilldownPlan", present: Boolean(summary.drilldownPlanPath && drilldownPlan?.count >= 1), evidence: summary.drilldownPlanPath || null },
+    { name: "artifactIndex", present: Boolean(artifacts.artifactIndex?.totalFileCount >= 1), evidence: artifacts.artifactIndex?.totalFileCount ?? null },
+    { name: "evidenceTimeline", present: Boolean(artifacts.evidenceTimeline?.eventCount >= 1), evidence: artifacts.evidenceTimeline?.eventCount ?? null },
+    { name: "captureStatus", present: Boolean(artifacts.captureStatus?.capture), evidence: summary.capture || null },
+    { name: "parityMatrix", present: Boolean(parityMatrix?.summary?.panelCount || parityMatrix?.panelCount), evidence: parityMatrix?.summary?.panelCount ?? parityMatrix?.panelCount ?? null },
+  ];
+  return {
+    schema: "agent-browser-runtime.research-pack-handoff-completeness.v1",
+    ready: checks.every((check) => check.present),
+    presentCount: checks.filter((check) => check.present).length,
+    missing: checks.filter((check) => !check.present).map((check) => check.name),
+    checks,
+    objectiveBoundary: "This is a mechanical handoff-artifact checklist; it does not decide security impact.",
+  };
+}
+
 function devtoolsToolCategory(name) {
   if (name === "agent_inspect" || /backend_capabilities|tool_catalog|tool_help|workflow_guide|capability_map|parity_matrix|protocol_schema/.test(name)) return "orientation";
   if (/tabs|snapshot|screenshot|click|type|scroll|eval|hard_reload/.test(name)) return "page-control";
@@ -10657,12 +10677,17 @@ function registerStandaloneBrowserTools(tools, cdpPort, profileRegistry, default
         label: artifacts.captureStatus?.capture?.label || null,
         trafficCount: artifacts.captureStatus?.trafficCount ?? null,
       };
+      const handoffCompleteness = buildResearchPackHandoffCompleteness(summary, artifacts, workflow, drilldownPlan, parityMatrix);
+      summary.handoffReady = handoffCompleteness.ready;
+      summary.handoffPresentCount = handoffCompleteness.presentCount;
+      summary.handoffMissing = handoffCompleteness.missing;
       researchPackHandoff.summary = { ...summary, researchPackPath };
       researchPackHandoff.artifactIndexSummary = {
         totalFileCount: artifacts.artifactIndex?.totalFileCount ?? null,
         kinds: artifacts.artifactIndex?.kinds || null,
       };
       researchPackHandoff.captureStatus = artifacts.captureStatus;
+      researchPackHandoff.handoffCompleteness = handoffCompleteness;
       writeFileSync(researchPackPath, `${JSON.stringify(researchPackHandoff, null, 2)}\n`, "utf8");
       artifacts.researchPack = {
         path: researchPackPath,
@@ -10685,6 +10710,7 @@ function registerStandaloneBrowserTools(tools, cdpPort, profileRegistry, default
           performance,
         },
         artifacts,
+        handoffCompleteness,
         workflow,
         parityMatrix,
         drilldownPlan,

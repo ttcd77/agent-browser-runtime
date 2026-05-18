@@ -224,6 +224,8 @@ try {
   assert(pack.summary?.workflowTask === "professional-appsec", "professional pack missing workflow task summary");
   assert(pack.summary?.capture?.enabled === true && typeof pack.summary?.capture?.trafficCount === "number", `professional pack missing capture summary: ${JSON.stringify(pack.summary?.capture)}`);
   assert(pack.artifacts?.captureStatus?.capture?.enabled === true, "professional pack missing capture status artifact");
+  assert(pack.summary?.handoffReady === true, `professional pack handoff not ready: ${JSON.stringify(pack.summary?.handoffMissing)}`);
+  assert(pack.handoffCompleteness?.ready === true, `professional pack missing handoff completeness: ${JSON.stringify(pack.handoffCompleteness)}`);
   assert(pack.summary?.drilldownPlanPath, "professional pack missing drilldown plan path");
   assert(pack.summary?.researchPackPath, "professional pack missing handoff path");
   assert(pack.artifacts?.researchPack?.sha256, "professional pack missing handoff hash");

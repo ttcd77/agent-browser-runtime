@@ -62,6 +62,8 @@ Typical output includes:
   produced the pack,
 - final capture status, including whether capture is still enabled, capture
   label, timestamps, and observed traffic count when the backend exposes it,
+- handoff completeness checklist for workflow, research pack, drilldown plan,
+  artifact index, evidence timeline, capture status, and parity matrix,
 - capture boundaries so the agent knows what time window was recorded.
 
 The saved paths are local files under the selected profile evidence directory.
