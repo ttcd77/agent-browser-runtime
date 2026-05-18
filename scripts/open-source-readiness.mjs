@@ -99,6 +99,13 @@ if (existsSync("docs/agent-devtools-api.md")) {
   }
 }
 
+if (existsSync("docs/agent-operator-runbook.md")) {
+  const runbook = readText("docs/agent-operator-runbook.md");
+  for (const phrase of ["professional-appsec", "handoffReady", "devtools_artifact_read"]) {
+    if (!runbook.includes(phrase)) failures.push(`agent-operator-runbook.md missing operator phrase: ${phrase}`);
+  }
+}
+
 let tracked = [];
 try {
   tracked = git(["ls-files"]).split(/\r?\n/).filter(Boolean).map((path) => path.replace(/\\/g, "/"));

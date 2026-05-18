@@ -10,6 +10,20 @@ vulnerability.
 
 ## Default Workflow
 
+For professional AppSec work, the default route is:
+
+```text
+browser_open -> browser_capture -> browser_inspect -> browser_security_pack -> drilldownPlan
+```
+
+You can retrieve this as machine-readable instructions:
+
+```bash
+curl -X POST http://127.0.0.1:17335/tool/devtools_workflow_guide \
+  -H "content-type: application/json" \
+  -d "{\"profile\":\"default\",\"task\":\"professional-appsec\"}"
+```
+
 1. Check backend capability.
 
 ```bash
@@ -135,8 +149,29 @@ For a repeatable first-pass evidence package:
 npm run research:pack -- --url https://example.com --profile researcher
 ```
 
-This calls `devtools_security_research_pack` and prints local artifact paths.
-Use `--json` for the full response.
+This calls `devtools_security_research_pack` and prints local artifact paths,
+the workflow used, capture status, artifact kind counts, handoff readiness, and
+first drill-down tools. Use `--json` for the full response.
+
+When reading a returned pack, check these fields before deeper analysis:
+
+- `summary.handoffReady`: whether the mechanical handoff checklist is complete.
+- `summary.handoffMissing`: missing handoff components, if any.
+- `handoffCompleteness.checks`: objective checklist for workflow, research pack,
+  drilldown plan, artifact index, evidence timeline, capture status, and F12
+  parity matrix.
+- `summary.researchPackPath`: the saved cross-session handoff JSON.
+- `summary.drilldownPlanPath`: deterministic next tool routes.
+- `summary.capture`: final capture status and observed traffic count.
+
+Read the handoff file with bounded artifact tools instead of loading every
+artifact into context:
+
+```bash
+curl -X POST http://127.0.0.1:17335/tool/devtools_artifact_read \
+  -H "content-type: application/json" \
+  -d "{\"profile\":\"researcher\",\"path\":\"<researchPackPath>\",\"mode\":\"line\",\"startLine\":1,\"maxLines\":120}"
+```
 
 ## Choosing Tools
 
