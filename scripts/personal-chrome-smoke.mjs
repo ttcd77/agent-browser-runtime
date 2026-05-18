@@ -191,6 +191,18 @@ const applicationReady = await callTool("devtools_cdp_command", {
 });
 assert(Array.isArray(applicationReady.result?.result?.value), `Personal fixture storage did not settle: ${JSON.stringify(applicationReady)}`);
 
+const sourceSearch = await callTool("devtools_sources_search", {
+  query: "AGENT_PERSONAL_SMOKE_MARKER",
+  reload: true,
+  ignoreCache: true,
+  waitMs: 500,
+  maxMatches: 5,
+});
+assert(sourceSearch.matchCount > 0, `Personal Chrome source search did not find marker script: ${JSON.stringify(sourceSearch)}`);
+assert(sourceSearch.recommendedDrilldowns?.some((entry) => entry.tool === "devtools_source_get" && entry.input?.scriptId), `Personal Chrome source search missing source_get drilldown: ${JSON.stringify(sourceSearch.recommendedDrilldowns)}`);
+assert(sourceSearch.recommendedDrilldowns?.some((entry) => entry.tool === "devtools_source_pretty_print" && entry.input?.scriptId), `Personal Chrome source search missing pretty-print drilldown: ${JSON.stringify(sourceSearch.recommendedDrilldowns)}`);
+assert(sourceSearch.captureBoundaries?.some((entry) => String(entry).includes("parsed")), `Personal Chrome source search missing capture boundaries: ${JSON.stringify(sourceSearch.captureBoundaries)}`);
+
 await callTool("devtools_cdp_command", {
   method: "Runtime.evaluate",
   params: {

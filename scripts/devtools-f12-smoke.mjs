@@ -404,6 +404,9 @@ try {
     maxMatches: 5,
   });
   assert(sourceSearch.matchCount > 0, "source search did not find the marker script");
+  assert(sourceSearch.recommendedDrilldowns?.some((entry) => entry.tool === "devtools_source_get" && entry.input?.scriptId), `source search missing source_get drilldown: ${JSON.stringify(sourceSearch.recommendedDrilldowns)}`);
+  assert(sourceSearch.recommendedDrilldowns?.some((entry) => entry.tool === "devtools_source_pretty_print" && entry.input?.scriptId), `source search missing pretty-print drilldown: ${JSON.stringify(sourceSearch.recommendedDrilldowns)}`);
+  assert(sourceSearch.captureBoundaries?.some((entry) => String(entry).includes("parsed")), `source search missing capture boundaries: ${JSON.stringify(sourceSearch.captureBoundaries)}`);
   const frameSearch = await callTool(baseUrl, "devtools_dom_search", {
     profile: "default",
     query: "FRAME_SECRET_MARKER",

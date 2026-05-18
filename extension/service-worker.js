@@ -4680,6 +4680,67 @@ function findSourceMatches(sourceText, query, options = {}) {
   return matches;
 }
 
+function buildSourceSearchDrilldowns(results = [], params = {}) {
+  const firstMatch = results.find((entry) => entry && !entry.error && entry.scriptId) || null;
+  if (!firstMatch) {
+    return [
+      {
+        label: "Reload and search parsed sources again",
+        tool: "devtools_sources_search",
+        input: {
+          query: params.query || "<query>",
+          reload: true,
+          ignoreCache: true,
+          maxMatches: params.maxMatches || 50,
+        },
+        why: "If no parsed script matched, reload with cache bypass to collect a fresh scriptParsed set.",
+      },
+    ];
+  }
+  const drilldowns = [
+    {
+      label: "Read matching script source",
+      tool: "devtools_source_get",
+      input: { scriptId: firstMatch.scriptId },
+      why: "Open the complete parsed script that contains the literal match.",
+    },
+    {
+      label: "Pretty-print matching script",
+      tool: "devtools_source_pretty_print",
+      input: { scriptId: firstMatch.scriptId, query: params.query || undefined },
+      why: "Create a readable view of minified or bundled script text near the same match.",
+    },
+  ];
+  if (firstMatch.sourceMapURL) {
+    drilldowns.push({
+      label: "Inspect source map metadata",
+      tool: "devtools_source_map_metadata",
+      input: { scriptId: firstMatch.scriptId, fetchMap: true },
+      why: "Check whether DevTools can map the generated script back to original sources.",
+    });
+    drilldowns.push({
+      label: "Extract original source-map files",
+      tool: "devtools_source_map_sources",
+      input: { scriptId: firstMatch.scriptId, save: true, maxSources: 20 },
+      why: "Save extractable original sources as bounded local artifacts for later review.",
+    });
+  }
+  if (firstMatch.url && typeof firstMatch.line === "number") {
+    drilldowns.push({
+      label: "Set breakpoint at matching source location",
+      tool: "devtools_debugger_control",
+      input: {
+        action: "setBreakpointByUrl",
+        url: firstMatch.url,
+        lineNumber: Math.max(0, firstMatch.line - 1),
+        columnNumber: Math.max(0, firstMatch.column || 0),
+      },
+      why: "Attach a DevTools breakpoint at the same generated-script location without interpreting runtime impact.",
+    });
+  }
+  return drilldowns;
+}
+
 function pushTextSearchMatches(results, { category, source, locator = {}, text, query, options = {} }) {
   const maxMatches = Number(options.maxMatches || 50);
   const remaining = Math.max(0, maxMatches - results.length);
@@ -6181,6 +6242,12 @@ async function chromeSourcesSearch(params) {
     matchCount: results.filter((entry) => !entry.error).length,
     errorCount: results.filter((entry) => entry.error).length,
     results,
+    recommendedDrilldowns: buildSourceSearchDrilldowns(results, params),
+    captureBoundaries: [
+      "Sources search only covers scripts parsed in the active chrome.debugger session.",
+      "Source-map extraction is available only when Chrome exposes sourceMappingURL data and the map contains readable sources.",
+      "Breakpoint recommendations identify generated-script locations; they do not interpret runtime behavior.",
+    ],
   };
 }
 
