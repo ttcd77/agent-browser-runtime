@@ -231,6 +231,9 @@ try {
   assert("initiatorSummary" in requestDetail.detail, "request detail missing initiator summary");
   assert(requestDetail.detail?.lifecycleFlags && typeof requestDetail.detail.lifecycleFlags === "object", "request detail missing lifecycle flags");
   assert(requestDetail.detail?.requestHeaders && typeof requestDetail.detail.requestHeaders === "object", "request detail missing headers");
+  assert(requestDetail.detail?.f12Sections?.headers?.general?.requestUrl, "request detail missing F12 headers section");
+  assert(requestDetail.detail?.f12Sections?.timing && "timingSource" in requestDetail.detail.f12Sections.timing, "request detail missing F12 timing section");
+  assert(Array.isArray(requestDetail.detail?.f12Sections?.boundaries), "request detail missing F12 section boundaries");
   const issuesLog = await callTool(baseUrl, "devtools_issues_log", {
     profile: "default",
     reload: false,
@@ -824,6 +827,7 @@ try {
     requestId: redirectRow.requestId,
   });
   assert(redirectDetail.detail?.redirectChain?.some((entry) => String(entry.url || "").includes("/redirect-start") && Number(entry.status) === 302), `request detail missing redirect start evidence: ${JSON.stringify(redirectDetail.detail?.redirectChain)}`);
+  assert(redirectDetail.detail?.f12Sections?.redirects?.count >= 1, `request detail missing F12 redirects section: ${JSON.stringify(redirectDetail.detail?.f12Sections)}`);
   const filteredRedirects = await callTool(baseUrl, "devtools_network_log", {
     profile: "default",
     redirected: true,

@@ -1477,6 +1477,74 @@ async function buildInitiatorSourceContext(getScriptSource, initiatorSummary = n
   }
 }
 
+function buildRequestF12Sections(entry = {}, cookies = []) {
+  const requestHeaders = entry.requestHeaders || {};
+  const responseHeaders = entry.responseHeaders || {};
+  const requestHeadersLower = lowerHeaderMap(requestHeaders);
+  const responseHeadersLower = lowerHeaderMap(responseHeaders);
+  const timingRow = buildNetworkTimeline([entry], 1)[0] || {};
+  return {
+    overview: buildNetworkF12Columns(entry),
+    headers: {
+      general: {
+        requestUrl: entry.url || "",
+        requestMethod: entry.method || null,
+        statusCode: entry.status ?? null,
+        statusText: entry.statusText || null,
+        remoteAddress: entry.remoteIPAddress ? `${entry.remoteIPAddress}:${entry.remotePort || ""}` : null,
+        referrerPolicy: requestHeadersLower.referer || requestHeadersLower.referrer || null,
+      },
+      request: requestHeaders,
+      response: responseHeaders,
+      rawRequestHeadersText: entry.requestHeadersText || null,
+      rawResponseHeadersText: entry.responseHeadersText || null,
+    },
+    payload: {
+      hasPostData: Boolean(entry.hasPostData),
+      postDataLength: entry.postDataLength ?? null,
+      requestContentType: requestHeadersLower["content-type"] || null,
+      bodyReadable: Boolean(entry.bodyReadable || entry.bodyText || entry.bodyPath),
+      bodyBytes: entry.bodyBytes ?? null,
+      bodyPath: entry.bodyPath || null,
+      bodyBase64Encoded: Boolean(entry.bodyBase64Encoded),
+    },
+    cookies: {
+      requestCookieHeaderPresent: Boolean(requestHeadersLower.cookie),
+      responseSetCookieHeaderPresent: Boolean(responseHeadersLower["set-cookie"]),
+      requestCookies: parseCookieHeader(requestHeadersLower.cookie || ""),
+      setCookieHeader: responseHeadersLower["set-cookie"] || "",
+      associatedCookies: entry.associatedCookies || [],
+      blockedRequestCookies: entry.blockedRequestCookies || [],
+      blockedResponseCookies: entry.blockedResponseCookies || [],
+      browserCookiesForUrlCount: Array.isArray(cookies) ? cookies.length : 0,
+    },
+    timing: {
+      rawTiming: entry.timing || null,
+      phases: timingRow.phases || null,
+      durationMs: timingRow.durationMs ?? null,
+      timingSource: entry.timing ? "chrome-debugger-network-timing" : "wall-clock-capture",
+    },
+    initiator: {
+      type: entry.initiator?.type || entry.initiatorType || null,
+      summary: buildInitiatorSummary(entry.initiator || null),
+    },
+    redirects: {
+      count: Array.isArray(entry.redirectChain) ? entry.redirectChain.length : 0,
+      chain: entry.redirectChain || [],
+    },
+    security: {
+      protocol: entry.protocol || null,
+      securityDetails: entry.securityDetails || null,
+      resourceIPAddressSpace: entry.resourceIPAddressSpace ?? null,
+    },
+    boundaries: [
+      "Request detail sections mirror F12 detail tabs as objective evidence groups.",
+      "Missing body, timing, cookie, or security fields mean Chrome did not expose them in the current capture.",
+      "These sections do not classify the request as safe, unsafe, exploitable, or vulnerable.",
+    ],
+  };
+}
+
 function buildRequestDetail(entry, cookies = []) {
   if (!entry) return null;
   const requestHeadersLower = lowerHeaderMap(entry.requestHeaders || {});
@@ -1542,6 +1610,7 @@ function buildRequestDetail(entry, cookies = []) {
       statusCodeFromExtraInfo: entry.extraInfoStatusCode ?? null,
       resourceIPAddressSpace: entry.resourceIPAddressSpace ?? null,
     },
+    f12Sections: buildRequestF12Sections(entry, cookies),
   };
 }
 

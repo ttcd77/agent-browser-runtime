@@ -791,3 +791,21 @@
 - `devtools_network_log` 额外返回 `f12TableColumns`，让 Agent 知道这些列是稳定表格入口。
 - Managed Browser 和 Personal Chrome 都保持同一字段形状。
 - 该能力只是把 F12 Network 表格证据结构化，不判断请求是否异常或漏洞。
+
+### 2026-05-18: Request Detail F12 分组完成
+
+已经完成:
+
+- `devtools_request_detail` / `personal_chrome_request_detail` 的 detail 新增 `f12Sections`。
+- Agent 可以按 F12 Request Details 的心智模型读取:
+  - overview
+  - headers
+  - payload
+  - cookies
+  - timing
+  - initiator
+  - redirects
+  - security
+- 每个 section 只是重新组织已捕获的客观浏览器证据，不新增漏洞判断。
+- `f12Sections.boundaries` 明确说明缺失字段代表当前捕获中 Chrome 没有暴露，而不是工具编造结论。
+- Managed Browser 和 Personal Chrome smoke 都验证了 headers、timing / redirects 和 boundaries。

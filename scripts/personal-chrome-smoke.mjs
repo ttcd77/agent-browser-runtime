@@ -221,6 +221,9 @@ const redirectDetail = await callTool("devtools_request_detail", {
   requestId: redirectRow.requestId,
 });
 assert(redirectDetail.detail?.redirectChain?.some((entry) => String(entry.url || "").includes("/redirect-start") && Number(entry.status) === 302), `Personal request detail missing redirect start evidence: ${JSON.stringify(redirectDetail.detail?.redirectChain)}`);
+assert(redirectDetail.detail?.f12Sections?.headers?.general?.requestUrl, "Personal request detail missing F12 headers section");
+assert(redirectDetail.detail?.f12Sections?.redirects?.count >= 1, `Personal request detail missing F12 redirects section: ${JSON.stringify(redirectDetail.detail?.f12Sections)}`);
+assert(Array.isArray(redirectDetail.detail?.f12Sections?.boundaries), "Personal request detail missing F12 section boundaries");
 const requestGraph = await callTool("devtools_request_correlation_graph", {
   limit: 200,
 });
