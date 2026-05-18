@@ -300,6 +300,16 @@
 - Managed Professional smoke 和 Personal Chrome smoke 都已覆盖 timeline type 分布。
 - 这只是 evidence timeline 的客观计数，不读取正文、不判断漏洞。
 
+### 2026-05-18: Readiness F12 Coverage Summary
+
+已经完成:
+
+- `devtools_professional_readiness` / `personal_chrome_professional_readiness` 现在返回 `f12Coverage`。
+- Agent 不需要额外调用 parity matrix，就能在 readiness 里看到 F12 panel 总数、strong panels、partial panels 和 intentional-gap panels。
+- Managed Professional smoke 覆盖 Network strong panel 和 DevTools UI Extras intentional gap。
+- Personal Chrome smoke 覆盖 Network strong panel 和 Performance / Memory partial boundary。
+- 这只是 F12 能力边界摘要，不判断漏洞、不替 Agent 选择结论。
+
 ### 2026-05-18: Professional Readiness Tool
 
 已经完成:

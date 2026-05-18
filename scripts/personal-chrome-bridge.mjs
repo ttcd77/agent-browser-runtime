@@ -2345,6 +2345,14 @@ function buildProfessionalReadiness({
   const artifactKinds = artifactIndex?.kinds || artifactIndex?.summary?.kinds || null;
   const timelineCount = evidenceTimeline?.eventCount ?? evidenceTimeline?.summary?.eventCount ?? null;
   const timelineTypes = evidenceTimeline?.byType || evidenceTimeline?.summary?.byType || null;
+  const parityRows = Array.isArray(parityMatrix?.rows) ? parityMatrix.rows : [];
+  const f12Coverage = {
+    panelCount: parityMatrix?.summary?.panelCount ?? parityMatrix?.panelCount ?? parityRows.length,
+    counts: parityMatrix?.summary?.counts || null,
+    strongPanels: parityRows.filter((row) => String(row.coverage || "").startsWith("strong")).map((row) => row.panel),
+    partialPanels: parityRows.filter((row) => String(row.coverage || "").includes("partial") || row.managed === "partial" || row.personal === "partial").map((row) => row.panel),
+    intentionalGapPanels: parityRows.filter((row) => row.coverage === "intentional-gap" || row.managed === "not-first-class" || row.personal === "not-first-class").map((row) => row.panel),
+  };
   const agentUsage = capabilityMap?.agentUsage || null;
   const recommendedRoute = Array.isArray(agentUsage?.defaultRoute) ? agentUsage.defaultRoute : [];
   const artifactDrilldowns = Array.isArray(artifactIndex?.recommendedDrilldowns) ? artifactIndex.recommendedDrilldowns.slice(0, 8) : [];
@@ -2453,6 +2461,7 @@ function buildProfessionalReadiness({
     artifactKinds,
     timelineEventCount: timelineCount,
     timelineTypes,
+    f12Coverage,
     latestResearchPackHandoff,
     recommendedRoute,
     panelRoutes: agentUsage?.panelRoutes || null,
