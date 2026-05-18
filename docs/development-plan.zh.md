@@ -154,6 +154,14 @@
 - 每一行返回 Managed / Personal 支持状态、对应工具、浏览器边界和“不判断漏洞”的客观边界。
 - Managed Browser 被明确标记为主线后端；Personal Chrome 保持同合同，遇到 chrome.debugger 不支持的能力返回 partial / notApplicable 边界。
 
+### 2026-05-18: Professional AppSec Fixture Smoke
+
+已经完成:
+
+- 新增 `npm run smoke:professional`。
+- 这个 smoke 启动本地授权 fixture，覆盖 redirect、cookie/storage、same-origin iframe、open shadow root、service worker/cache、source map、Application export、evidence pack、correlation graph、worker/frame report 和 F12 parity matrix。
+- 目标不是判断漏洞，而是证明 Managed Browser 主线可以把一组真实 AppSec 研究常见证据串成完整、可保存、可 drilldown 的工作流。
+
 ### 2026-05-18: Evidence Timeline Filters
 
 已经完成:

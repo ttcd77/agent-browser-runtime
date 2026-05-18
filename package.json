@@ -40,6 +40,7 @@
     "dev:loop-check": "node scripts/continuous-dev-check.mjs",
     "smoke:server": "npm run build && node scripts/agent-server-smoke.mjs",
     "smoke:f12": "npm run build && node scripts/devtools-f12-smoke.mjs",
+    "smoke:professional": "npm run build && node scripts/professional-appsec-smoke.mjs",
     "research:pack": "node scripts/security-research-pack-cli.mjs",
     "check": "npm run build && npm run test",
     "check:devtools": "npm run contract:devtools && npm run smoke:f12 && npm run smoke:personal",
