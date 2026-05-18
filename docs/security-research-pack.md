@@ -60,6 +60,9 @@ Typical output includes:
 - saved worker/frame boundary report path,
 - workflow snapshot showing the professional `browser_*` facade path that
   produced the pack,
+- `agentEntryPoints` snapshot from `devtools_tool_catalog`, so another agent can
+  continue from the same facade-first route without scanning the full tool
+  surface,
 - final capture status, including whether capture is still enabled, capture
   label, timestamps, and observed traffic count when the backend exposes it,
 - handoff completeness checklist for workflow, research pack, drilldown plan,

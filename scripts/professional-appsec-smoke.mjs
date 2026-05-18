@@ -241,6 +241,9 @@ try {
   assert(pack.summary?.drilldownPlanPath, "professional pack missing drilldown plan path");
   assert(pack.summary?.researchPackPath, "professional pack missing handoff path");
   assert(pack.artifacts?.researchPack?.sha256, "professional pack missing handoff hash");
+  assert(pack.agentEntryPoints?.defaultMode === "facade-first", "professional pack missing agent entry points");
+  assert(pack.agentEntryPoints?.professionalPath?.includes("browser_security_pack"), "professional pack missing professional agent route");
+  assert(pack.toolCatalogSummary?.toolCount >= 1, "professional pack missing tool catalog summary");
   assert(pack.workflow?.defaultPath?.join(" -> ") === "browser_open -> browser_capture -> browser_inspect -> browser_security_pack -> drilldownPlan", "professional pack missing workflow snapshot");
   assert(pack.handoffDrilldowns?.some((entry) => entry.tool === "devtools_artifact_read" && entry.input?.path === pack.summary.researchPackPath), "professional pack missing handoff read drilldown");
   assert(pack.parityMatrix?.summary?.strongestBackend === "managed-cdp", "professional pack missing Managed Browser parity snapshot");
@@ -276,10 +279,11 @@ try {
     path: pack.summary.researchPackPath,
     mode: "line",
     startLine: 1,
-    maxLines: 200,
+    lineCount: 320,
   });
   assert(handoffPreview.contentText?.includes("security-research-pack-handoff"), "professional handoff preview missing schema marker");
   assert(handoffPreview.contentText?.includes("professional-appsec"), "professional handoff preview missing workflow marker");
+  assert(handoffPreview.contentText?.includes("agentEntryPoints"), "professional handoff preview missing agent entry points");
   assert(handoffPreview.contentText?.includes("artifactCoverage"), "professional handoff preview missing artifact coverage marker");
   const drilldownPreview = await callTool(baseUrl, "devtools_artifact_inspect", {
     profile: "professional",

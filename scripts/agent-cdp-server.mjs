@@ -10745,6 +10745,8 @@ function registerStandaloneBrowserTools(tools, cdpPort, profileRegistry, default
       artifacts.evidenceTimeline = await safeCall("devtools_evidence_timeline", { maxEvents: 80, maxArtifacts: 120 });
       const parityMatrix = await safeCall("devtools_f12_parity_matrix");
       const workflow = devtoolsWorkflowGuide("professional-appsec");
+      const toolCatalogSnapshot = devtoolsToolCatalogFromEntries([...tools.values()], {});
+      const agentEntryPoints = toolCatalogSnapshot.agentEntryPoints || null;
       const drilldownPlan = buildResearchPackDrilldowns(artifacts, { profile: profile.name, evidenceDir: profile.evidenceDir });
       artifacts.drilldownPlan = drilldownPlan;
       artifacts.manifest = await safeCall("devtools_evidence_manifest", {
@@ -10823,6 +10825,11 @@ function registerStandaloneBrowserTools(tools, cdpPort, profileRegistry, default
           authBoundaryReportPath: summary.authBoundaryReportPath,
           workerFrameReportPath: summary.workerFrameReportPath,
           drilldownPlanPath: summary.drilldownPlanPath,
+        },
+        agentEntryPoints,
+        toolCatalogSummary: {
+          toolCount: toolCatalogSnapshot.toolCount,
+          categories: toolCatalogSnapshot.categories,
         },
         workflow,
         drilldownPlan: {
@@ -10903,6 +10910,11 @@ function registerStandaloneBrowserTools(tools, cdpPort, profileRegistry, default
         artifactCoverage,
         handoffCompleteness,
         workflow,
+        agentEntryPoints,
+        toolCatalogSummary: {
+          toolCount: toolCatalogSnapshot.toolCount,
+          categories: toolCatalogSnapshot.categories,
+        },
         parityMatrix,
         drilldownPlan,
         handoffDrilldowns,

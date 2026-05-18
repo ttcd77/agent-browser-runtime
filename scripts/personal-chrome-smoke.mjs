@@ -416,6 +416,8 @@ assert(researchPack.summary?.drilldownCount >= 3, "Personal Chrome security rese
 assert(researchPack.summary?.drilldownPlanPath, "Personal Chrome security research pack missing drilldown plan path");
 assert(researchPack.summary?.researchPackPath, "Personal Chrome security research pack missing handoff path");
 assert(researchPack.artifacts?.researchPack?.sha256, "Personal Chrome security research pack missing handoff hash");
+assert(researchPack.agentEntryPoints?.defaultMode === "facade-first", "Personal Chrome security research pack missing agent entry points");
+assert(researchPack.agentEntryPoints?.professionalPath?.includes("browser_security_pack"), "Personal Chrome security research pack missing professional agent route");
 assert(researchPack.handoffDrilldowns?.some((entry) => entry.tool === "devtools_artifact_inspect" && entry.input?.path === researchPack.summary.researchPackPath), "Personal Chrome security research pack missing handoff inspect drilldown");
 assert(researchPack.parityMatrix?.backend === "personal-chrome", "Personal Chrome security research pack missing parity snapshot");
 assert(researchPack.artifacts?.artifactIndex?.kinds?.["research-pack"] >= 1, `Personal Chrome security research pack artifact index missing handoff kind: ${JSON.stringify(researchPack.artifacts?.artifactIndex?.kinds)}`);

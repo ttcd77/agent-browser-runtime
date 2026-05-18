@@ -155,6 +155,16 @@
 - smoke 已验证 catalog 暴露 `facade-first` 和 `browser_security_pack` 专业路径。
 - 这仍然只是工具路由元数据，不判断漏洞或安全影响。
 
+### 2026-05-18: Research Pack Agent Handoff Route
+
+已经完成:
+
+- `devtools_security_research_pack` / `browser_security_pack` 现在把 `agentEntryPoints` 和 `toolCatalogSummary` 写入返回值和 handoff JSON。
+- 下一个 Agent 打开 evidence pack 时，不需要重新扫描完整工具列表；可以直接沿用 facade-first、professional path、drilldown rule 和 escape hatch 边界。
+- Managed Browser 和 Personal Chrome 都返回同一交接结构。
+- smoke 已验证 pack 和 handoff 文件包含 agent entry points。
+- 这只是交接路线和工具可用性快照，不判断漏洞或安全影响。
+
 ### 2026-05-18: Professional Readiness Tool
 
 已经完成:
