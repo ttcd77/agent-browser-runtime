@@ -10546,6 +10546,7 @@ function registerStandaloneBrowserTools(tools, cdpPort, profileRegistry, default
       artifacts.artifactIndex = await safeCall("devtools_artifact_index", { maxFiles: 200 });
       artifacts.evidenceTimeline = await safeCall("devtools_evidence_timeline", { maxEvents: 80, maxArtifacts: 120 });
       const parityMatrix = await safeCall("devtools_f12_parity_matrix");
+      const workflow = devtoolsWorkflowGuide("professional-appsec");
       const drilldownPlan = buildResearchPackDrilldowns(artifacts, { profile: profile.name, evidenceDir: profile.evidenceDir });
       artifacts.drilldownPlan = drilldownPlan;
       artifacts.manifest = await safeCall("devtools_evidence_manifest", {
@@ -10585,6 +10586,7 @@ function registerStandaloneBrowserTools(tools, cdpPort, profileRegistry, default
         evidenceTimelineEventCount: artifacts.evidenceTimeline?.eventCount ?? null,
         f12ParityPanelCount: parityMatrix?.summary?.panelCount ?? null,
         drilldownCount: drilldownPlan.count,
+        workflowTask: workflow.task || "professional-appsec",
       };
       const captureBoundaries = [
         "This workflow records only evidence observable after capture starts and during the reload/reproduction window.",
@@ -10624,6 +10626,7 @@ function registerStandaloneBrowserTools(tools, cdpPort, profileRegistry, default
           workerFrameReportPath: summary.workerFrameReportPath,
           drilldownPlanPath: summary.drilldownPlanPath,
         },
+        workflow,
         drilldownPlan: {
           planPath: drilldownPlan.planPath || null,
           count: drilldownPlan.count,
@@ -10659,6 +10662,7 @@ function registerStandaloneBrowserTools(tools, cdpPort, profileRegistry, default
           performance,
         },
         artifacts,
+        workflow,
         parityMatrix,
         drilldownPlan,
         handoffDrilldowns,

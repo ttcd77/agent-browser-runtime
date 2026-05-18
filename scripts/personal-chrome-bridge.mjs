@@ -2877,6 +2877,7 @@ async function securityResearchPack(params = {}) {
   artifacts.artifactIndex = await safeBridgeTool("devtools_artifact_index", { maxFiles: 200 });
   artifacts.evidenceTimeline = await safeBridgeTool("devtools_evidence_timeline", { maxEvents: 80, maxArtifacts: 120 });
   const parityMatrix = await safeBridgeTool("devtools_f12_parity_matrix");
+  const workflow = workflowGuide("professional-appsec");
   const drilldownPlan = buildResearchPackDrilldowns(artifacts);
   artifacts.drilldownPlan = drilldownPlan;
   artifacts.manifest = await safeBridgeTool("devtools_evidence_manifest", {
@@ -2916,6 +2917,7 @@ async function securityResearchPack(params = {}) {
     evidenceTimelineEventCount: artifacts.evidenceTimeline?.eventCount ?? null,
     f12ParityPanelCount: parityMatrix?.summary?.panelCount ?? null,
     drilldownCount: drilldownPlan.count,
+    workflowTask: workflow.task || "professional-appsec",
   };
   const captureBoundaries = [
     "Personal Chrome mode runs against the user's active browser profile after local extension authorization.",
@@ -2954,6 +2956,7 @@ async function securityResearchPack(params = {}) {
       workerFrameReportPath: summary.workerFrameReportPath,
       drilldownPlanPath: summary.drilldownPlanPath,
     },
+    workflow,
     drilldownPlan: {
       planPath: drilldownPlan.planPath || null,
       count: drilldownPlan.count,
@@ -2988,6 +2991,7 @@ async function securityResearchPack(params = {}) {
       performance,
     },
     artifacts,
+    workflow,
     parityMatrix,
     drilldownPlan,
     handoffDrilldowns,

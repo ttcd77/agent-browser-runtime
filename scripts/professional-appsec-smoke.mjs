@@ -221,9 +221,11 @@ try {
   assert(pack.summary?.evidenceTimelineEventCount >= 1, "professional pack missing evidence timeline count");
   assert(pack.summary?.f12ParityPanelCount >= 1, "professional pack missing F12 parity count");
   assert(pack.summary?.drilldownCount >= 3, "professional pack missing drilldown count");
+  assert(pack.summary?.workflowTask === "professional-appsec", "professional pack missing workflow task summary");
   assert(pack.summary?.drilldownPlanPath, "professional pack missing drilldown plan path");
   assert(pack.summary?.researchPackPath, "professional pack missing handoff path");
   assert(pack.artifacts?.researchPack?.sha256, "professional pack missing handoff hash");
+  assert(pack.workflow?.defaultPath?.join(" -> ") === "browser_open -> browser_capture -> browser_inspect -> browser_security_pack -> drilldownPlan", "professional pack missing workflow snapshot");
   assert(pack.handoffDrilldowns?.some((entry) => entry.tool === "devtools_artifact_read" && entry.input?.path === pack.summary.researchPackPath), "professional pack missing handoff read drilldown");
   assert(pack.parityMatrix?.summary?.strongestBackend === "managed-cdp", "professional pack missing Managed Browser parity snapshot");
   assert(pack.artifacts?.artifactIndex?.totalFileCount >= 1, "professional pack missing artifact index payload");
@@ -253,6 +255,7 @@ try {
     maxLines: 80,
   });
   assert(handoffPreview.contentText?.includes("security-research-pack-handoff"), "professional handoff preview missing schema marker");
+  assert(handoffPreview.contentText?.includes("professional-appsec"), "professional handoff preview missing workflow marker");
   const drilldownPreview = await callTool(baseUrl, "devtools_artifact_inspect", {
     profile: "professional",
     path: pack.summary.drilldownPlanPath,

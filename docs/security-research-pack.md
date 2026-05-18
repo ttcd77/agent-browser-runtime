@@ -58,6 +58,8 @@ Typical output includes:
 - saved request correlation graph path,
 - saved auth boundary report path,
 - saved worker/frame boundary report path,
+- workflow snapshot showing the professional `browser_*` facade path that
+  produced the pack,
 - capture boundaries so the agent knows what time window was recorded.
 
 The saved paths are local files under the selected profile evidence directory.
