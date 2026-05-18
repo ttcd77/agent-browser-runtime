@@ -1222,6 +1222,37 @@ function summarizeNetworkRecords(requests, websockets = [], limit = 10) {
 
   slowest.sort((a, b) => b.durationMs - a.durationMs);
   largest.sort((a, b) => b.bytes - a.bytes);
+  const readableBody = requests.find((request) => request.bodyReadable || request.bodyText || request.bodyPath || request.bodyBytes);
+  const recommendedDrilldowns = [];
+  const pushRequest = (request, label, why) => {
+    if (!request?.requestId) return;
+    recommendedDrilldowns.push({
+      label,
+      tool: "devtools_request_detail",
+      input: { requestId: request.requestId },
+      why,
+    });
+  };
+  pushRequest(failed.at(-1), "Inspect latest failed request", "Open concrete request detail for status, errorText, blockedReason, CORS status, headers, timing, and body availability.");
+  pushRequest(redirects.at(-1), "Inspect latest redirect chain", "Open concrete request detail for redirectChain and response header evidence.");
+  pushRequest(slowest[0], "Inspect slowest request", "Open concrete request detail for timing phases and initiator evidence.");
+  pushRequest(largest[0], "Inspect largest response", "Open concrete request detail for size, mime type, body availability, and cache/source metadata.");
+  if (readableBody?.requestId) {
+    recommendedDrilldowns.push({
+      label: "Read first available response body",
+      tool: "devtools_request_body",
+      input: { requestId: readableBody.requestId, maxBytes: 4000 },
+      why: "Read a bounded response body for a request where Chrome currently exposes body evidence.",
+    });
+  }
+  if (websockets.length) {
+    recommendedDrilldowns.push({
+      label: "Inspect realtime channels",
+      tool: "devtools_realtime_log",
+      input: { limit },
+      why: "Read observed WebSocket/SSE metadata and frames/messages without treating them as request rows.",
+    });
+  }
 
   return {
     requestCount: requests.length,
@@ -1260,6 +1291,7 @@ function summarizeNetworkRecords(requests, websockets = [], limit = 10) {
       closedAt: socket.closedAt,
       errorMessage: socket.errorMessage,
     })),
+    recommendedDrilldowns,
   };
 }
 

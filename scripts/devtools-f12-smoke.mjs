@@ -213,6 +213,7 @@ try {
     limit: 5,
   });
   assert(networkSummary.requestCount > 0, "network summary returned no requests");
+  assert(networkSummary.recommendedDrilldowns?.some((entry) => entry.tool === "devtools_request_detail"), `network summary missing request detail drilldown: ${JSON.stringify(networkSummary.recommendedDrilldowns)}`);
   const networkTimeline = await callTool(baseUrl, "devtools_network_timeline", {
     profile: "default",
     limit: 5,
@@ -796,6 +797,7 @@ try {
   });
   const redirectRow = redirectSummary.redirects?.find((row) => row.chainLength >= 1 && String(row.url || "").includes("/redirect-end"));
   assert(redirectRow, `network summary missing redirect chain evidence: ${JSON.stringify(redirectSummary.redirects)}`);
+  assert(redirectSummary.recommendedDrilldowns?.some((entry) => entry.label === "Inspect latest redirect chain" && entry.input?.requestId === redirectRow.requestId), `network summary missing redirect drilldown: ${JSON.stringify(redirectSummary.recommendedDrilldowns)}`);
   const redirectDetail = await callTool(baseUrl, "devtools_request_detail", {
     profile: "default",
     requestId: redirectRow.requestId,

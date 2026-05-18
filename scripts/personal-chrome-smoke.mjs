@@ -204,6 +204,7 @@ const redirectSummary = await callTool("devtools_network_summary", {
 });
 const redirectRow = redirectSummary.redirects?.find((row) => row.chainLength >= 1 && String(row.url || "").includes("/redirect-end"));
 assert(redirectRow, `Personal network summary missing redirect chain evidence: ${JSON.stringify(redirectSummary.redirects)}`);
+assert(redirectSummary.recommendedDrilldowns?.some((entry) => entry.label === "Inspect latest redirect chain" && entry.input?.requestId === redirectRow.requestId), `Personal network summary missing redirect drilldown: ${JSON.stringify(redirectSummary.recommendedDrilldowns)}`);
 const redirectDetail = await callTool("devtools_request_detail", {
   requestId: redirectRow.requestId,
 });
