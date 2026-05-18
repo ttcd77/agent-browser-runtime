@@ -224,6 +224,16 @@
 - 每个 route step 只提供 tool、input、why/needs，不读取证据、不替 Agent 判断漏洞。
 - Managed Browser 和 Personal Chrome smoke 都已覆盖默认路线、request-detail 路线和 artifact-inspect 路线。
 
+### 2026-05-18: Professional Readiness Agent Routes
+
+已经完成:
+
+- `devtools_professional_readiness` / `personal_chrome_professional_readiness` 现在直接返回 `recommendedRoute` 和 `panelRoutes`。
+- `recommendedRoute` 来自 capability map 的专业默认路线，Agent 不需要额外调用 capability map 才能知道下一整条路线。
+- readiness 新增 `agentUsageRoute` 机械检查，确认专业路线包含 `browser_security_pack`。
+- Managed Professional smoke 和 Personal Chrome smoke 都已覆盖 readiness route。
+- 这只是路线暴露和机械检查，不读取证据、不判断漏洞。
+
 ### 2026-05-18: Professional Readiness Tool
 
 已经完成:

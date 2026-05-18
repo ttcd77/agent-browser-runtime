@@ -2329,6 +2329,8 @@ function buildProfessionalReadiness({
   const capture = captureStatus?.capture || captureStatus;
   const artifactCount = artifactIndex?.totalFileCount ?? artifactIndex?.summary?.totalFileCount ?? null;
   const timelineCount = evidenceTimeline?.eventCount ?? evidenceTimeline?.summary?.eventCount ?? null;
+  const agentUsage = capabilityMap?.agentUsage || null;
+  const recommendedRoute = Array.isArray(agentUsage?.defaultRoute) ? agentUsage.defaultRoute : [];
   const latestResearchPack = (artifactIndex?.artifacts || [])
     .filter((artifact) => artifact.kind === "research-pack" && artifact.path)
     .sort((a, b) => String(b.modifiedAt || "").localeCompare(String(a.modifiedAt || "")))[0] || null;
@@ -2349,6 +2351,11 @@ function buildProfessionalReadiness({
       name: "facadeTools",
       present: Array.isArray(capabilityMap?.recommendedStart) && capabilityMap.recommendedStart.includes("browser_security_pack"),
       evidence: capabilityMap?.recommendedStart || null,
+    },
+    {
+      name: "agentUsageRoute",
+      present: recommendedRoute.some((step) => step.tool === "browser_security_pack"),
+      evidence: recommendedRoute.map((step) => step.tool),
     },
     {
       name: "f12ParityMatrix",
@@ -2411,6 +2418,8 @@ function buildProfessionalReadiness({
     artifactCount,
     timelineEventCount: timelineCount,
     latestResearchPackHandoff,
+    recommendedRoute,
+    panelRoutes: agentUsage?.panelRoutes || null,
     workflowPath: workflow?.defaultPath || null,
     nextActions,
     objectiveBoundary: "This readiness report checks tool workflow and evidence availability only; it does not judge vulnerabilities or security impact.",

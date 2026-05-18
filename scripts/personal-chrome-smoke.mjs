@@ -589,8 +589,11 @@ const professionalReadiness = await callTool("devtools_professional_readiness", 
 assert(professionalReadiness.backend === "personal-chrome", `Personal Chrome professional readiness wrong backend: ${JSON.stringify(professionalReadiness)}`);
 assert(professionalReadiness.workflowPath?.includes("browser_security_pack"), `Personal Chrome professional readiness missing workflow path: ${JSON.stringify(professionalReadiness)}`);
 assert(professionalReadiness.checks?.some((check) => check.name === "f12ParityMatrix" && check.present), `Personal Chrome professional readiness missing parity check: ${JSON.stringify(professionalReadiness.checks)}`);
+assert(professionalReadiness.checks?.some((check) => check.name === "agentUsageRoute" && check.present), `Personal Chrome professional readiness missing agent usage route check: ${JSON.stringify(professionalReadiness.checks)}`);
 assert(professionalReadiness.latestResearchPackHandoff?.path, "Personal Chrome professional readiness missing latest research pack handoff route");
 assert(professionalReadiness.latestResearchPackHandoff?.inspect?.tool === "devtools_artifact_inspect", "Personal Chrome professional readiness missing latest handoff inspect route");
+assert(professionalReadiness.recommendedRoute?.some((step) => step.tool === "browser_security_pack"), "Personal Chrome professional readiness missing recommended route");
+assert(professionalReadiness.panelRoutes?.network?.some((step) => step.tool === "devtools_request_detail"), "Personal Chrome professional readiness missing network panel route");
 assert(professionalReadiness.objectiveBoundary?.includes("does not judge vulnerabilities"), "Personal Chrome professional readiness crossed objective boundary");
 const workflowGuide = await callTool("devtools_workflow_guide", { task: "auth-boundary" });
 assert(workflowGuide.steps?.some((step) => step.tool === "devtools_auth_boundary_report"), "Personal Chrome workflow guide missing auth boundary step");

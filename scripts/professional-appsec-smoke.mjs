@@ -195,6 +195,9 @@ try {
   assert(initialReadiness.backend === "managed-cdp", `professional readiness wrong backend: ${JSON.stringify(initialReadiness)}`);
   assert(initialReadiness.workflowPath?.join(" -> ") === "browser_open -> browser_capture -> browser_inspect -> browser_security_pack -> drilldownPlan", "professional readiness missing workflow path");
   assert(initialReadiness.checks?.some((check) => check.name === "f12ParityMatrix" && check.present), `professional readiness missing parity check: ${JSON.stringify(initialReadiness.checks)}`);
+  assert(initialReadiness.checks?.some((check) => check.name === "agentUsageRoute" && check.present), `professional readiness missing agent usage route check: ${JSON.stringify(initialReadiness.checks)}`);
+  assert(initialReadiness.recommendedRoute?.some((step) => step.tool === "browser_security_pack"), `professional readiness missing recommended route: ${JSON.stringify(initialReadiness.recommendedRoute)}`);
+  assert(initialReadiness.panelRoutes?.network?.some((step) => step.tool === "devtools_request_detail"), "professional readiness missing network panel route");
   assert(initialReadiness.nextActions?.some((entry) => entry.tool === "browser_security_pack"), `professional readiness missing evidence-pack next action: ${JSON.stringify(initialReadiness.nextActions)}`);
   assert(initialReadiness.objectiveBoundary?.includes("does not judge vulnerabilities"), "professional readiness crossed objective boundary");
   const firstInspect = await callTool(baseUrl, "browser_inspect", {
@@ -259,6 +262,7 @@ try {
   assert(finalReadiness.timelineEventCount >= 1, "professional readiness missing timeline count after pack");
   assert(finalReadiness.latestResearchPackHandoff?.path, "professional readiness missing latest research pack handoff route");
   assert(finalReadiness.latestResearchPackHandoff?.inspect?.tool === "devtools_artifact_inspect", "professional readiness missing latest handoff inspect route");
+  assert(finalReadiness.recommendedRoute?.some((step) => step.tool === "devtools_artifact_index"), "professional readiness missing artifact index in recommended route");
   assert(finalReadiness.nextActions?.some((entry) => entry.tool === "devtools_artifact_inspect"), "professional readiness missing handoff inspect next action");
   assert(pack.drilldownPlan?.drilldowns?.some((entry) => entry.tool === "devtools_request_detail"), "professional pack missing request-detail drilldown");
   assert(pack.drilldownPlan?.planPath === pack.summary.drilldownPlanPath, "professional pack drilldown path mismatch");
