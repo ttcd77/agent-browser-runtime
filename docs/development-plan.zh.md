@@ -427,6 +427,15 @@
 - Managed Professional smoke 和 Personal Chrome smoke 都已覆盖 catalog route template。
 - 当前证据接手仍以 readiness `routeSummary` 为准；catalog route 只用于 Agent 首次定向，不读取证据正文、不判断漏洞。
 
+### 2026-05-18: Workflow Guide Route Summary Template
+
+已经完成:
+
+- `devtools_workflow_guide task=professional-appsec` 现在返回 `routeSummaryTemplate`。
+- 模板包含 readiness first step、security pack、handoff inspect/read 和 firstConcreteDrilldown 的来源说明。
+- Managed Professional smoke 和 Personal Chrome smoke 都已覆盖 workflow guide route template。
+- 这是专业工作流的无状态路线模板；当前证据接手仍以 readiness `routeSummary` 为准，不读取证据正文、不判断漏洞。
+
 ### 2026-05-18: Professional Readiness Tool
 
 已经完成:

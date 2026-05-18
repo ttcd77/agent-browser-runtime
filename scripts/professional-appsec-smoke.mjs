@@ -196,6 +196,9 @@ try {
   assert(workflowGuide.defaultTools?.includes("browser_raw"), "professional workflow guide missing browser_raw escape hatch");
   assert(workflowGuide.steps?.some((step) => step.tool === "devtools_professional_readiness"), "professional workflow guide missing readiness step");
   assert(workflowGuide.steps?.some((step) => step.tool === "browser_security_pack"), "professional workflow guide missing browser_security_pack step");
+  assert(workflowGuide.routeSummaryTemplate?.firstStep?.tool === "devtools_professional_readiness", "professional workflow guide missing route template first step");
+  assert(workflowGuide.routeSummaryTemplate?.evidencePack?.tool === "browser_security_pack", "professional workflow guide missing route template evidence pack");
+  assert(workflowGuide.routeSummaryTemplate?.latestHandoffInspect?.tool === "devtools_artifact_inspect", "professional workflow guide missing route template handoff inspect");
   assert(workflowGuide.exitCriteria?.some((entry) => String(entry).includes("drilldown plan")), "professional workflow guide missing drilldown exit criteria");
   const initialReadiness = await callTool(baseUrl, "devtools_professional_readiness", {
     profile: "professional",

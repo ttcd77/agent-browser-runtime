@@ -642,6 +642,9 @@ const workflowGuide = await callTool("devtools_workflow_guide", { task: "auth-bo
 assert(workflowGuide.steps?.some((step) => step.tool === "devtools_auth_boundary_report"), "Personal Chrome workflow guide missing auth boundary step");
 const professionalWorkflowGuide = await callTool("devtools_workflow_guide", { task: "professional-appsec" });
 assert(professionalWorkflowGuide.steps?.some((step) => step.tool === "devtools_professional_readiness"), "Personal Chrome professional workflow guide missing readiness step");
+assert(professionalWorkflowGuide.routeSummaryTemplate?.firstStep?.tool === "devtools_professional_readiness", "Personal Chrome professional workflow guide missing route template first step");
+assert(professionalWorkflowGuide.routeSummaryTemplate?.evidencePack?.tool === "browser_security_pack", "Personal Chrome professional workflow guide missing route template evidence pack");
+assert(professionalWorkflowGuide.routeSummaryTemplate?.latestHandoffInspect?.tool === "devtools_artifact_inspect", "Personal Chrome professional workflow guide missing route template handoff inspect");
 
 console.log("Personal Chrome smoke passed:");
 console.log(`- bridge: ${baseUrl}`);

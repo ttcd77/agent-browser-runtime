@@ -2719,6 +2719,14 @@ function workflowGuide(task = "first-pass") {
       goal: "Use the small facade first, then drill into exact DevTools evidence only when needed.",
       defaultPath: ["browser_open", "browser_capture", "browser_inspect", "browser_security_pack", "drilldownPlan"],
       defaultTools: ["browser_open", "browser_capture", "browser_inspect", "browser_security_pack", "browser_raw"],
+      routeSummaryTemplate: {
+        firstStep: { tool: "devtools_professional_readiness", input: {} },
+        evidencePack: { tool: "browser_security_pack", input: { url: "https://example.com", includeHar: true, includeTrace: true, includeApplicationExport: true } },
+        latestHandoffInspect: { tool: "devtools_artifact_inspect", input: { path: "<researchPackPath>" } },
+        latestHandoffRead: { tool: "devtools_artifact_read", input: { path: "<researchPackPath>", mode: "line", startLine: 1, maxLines: 120 } },
+        firstConcreteDrilldown: "Use devtools_professional_readiness.routeSummary.firstConcreteDrilldown after evidence exists.",
+        objectiveBoundary: "This template is routing metadata for the professional workflow; it does not read evidence content or judge vulnerabilities.",
+      },
       steps: [
         { tool: "devtools_professional_readiness", input: {}, why: "Check whether workflow, capture status, artifact inventory, and evidence timeline are already mechanically ready." },
         { tool: "browser_open", input: { url: "https://example.com", waitMs: 1000 }, why: "Bind the authorized real Chrome tab to a page and collect page diagnostics." },
