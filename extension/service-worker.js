@@ -1071,6 +1071,55 @@ function hostnameForUrl(url) {
   }
 }
 
+function networkDisplayName(url) {
+  try {
+    const parsed = new URL(url);
+    const parts = parsed.pathname.split("/").filter(Boolean);
+    return `${parts.at(-1) || parsed.hostname}${parsed.search || ""}`;
+  } catch {
+    return String(url || "");
+  }
+}
+
+function buildNetworkF12Columns(request = {}) {
+  const url = request.url || "";
+  let parsed = null;
+  try { parsed = new URL(url); } catch {}
+  const initiatorSummary = buildInitiatorSummary(request.initiator || null);
+  const durationMs = requestDurationMs(request);
+  return {
+    name: networkDisplayName(url),
+    url,
+    method: request.method || null,
+    status: request.status ?? null,
+    statusText: request.statusText || null,
+    type: request.resourceType || null,
+    mimeType: request.mimeType || null,
+    domain: parsed?.hostname || "",
+    scheme: parsed?.protocol ? parsed.protocol.replace(/:$/, "") : "",
+    protocol: request.protocol || null,
+    initiatorType: request.initiator?.type || request.initiatorType || null,
+    initiatorUrl: initiatorSummary?.url || null,
+    initiatorStackDepth: initiatorSummary?.stackDepth ?? 0,
+    sizeBytes: request.encodedDataLength ?? request.bodyBytes ?? null,
+    transferredBytes: request.encodedDataLength ?? null,
+    resourceSizeBytes: request.bodyBytes ?? null,
+    timeMs: durationMs,
+    startedAt: request.timestamp || null,
+    responseAt: request.responseTimestamp || null,
+    finishedAt: request.finishedAt || null,
+    remoteAddress: request.remoteIPAddress ? `${request.remoteIPAddress}:${request.remotePort || ""}` : null,
+    flags: {
+      failed: Boolean(request.failed),
+      redirected: Boolean(Array.isArray(request.redirectChain) && request.redirectChain.length),
+      fromDiskCache: Boolean(request.fromDiskCache),
+      fromServiceWorker: Boolean(request.fromServiceWorker),
+      hasRequestBody: Boolean(request.hasPostData || request.postData || request.postDataLength),
+      hasResponseBody: Boolean(request.bodyReadable || request.bodyText || request.bodyPath || request.bodyBytes),
+    },
+  };
+}
+
 function pickFilterValue(filters = {}, ...names) {
   for (const name of names) {
     if (filters[name] !== undefined && filters[name] !== null && filters[name] !== "") return filters[name];
@@ -1313,6 +1362,7 @@ function buildNetworkTimeline(requests, limit = 100) {
       status: request.status,
       failed: Boolean(request.failed),
       failReason: request.failReason || request.errorText || null,
+      f12Columns: buildNetworkF12Columns(request),
       resourceType: request.resourceType,
       mimeType: request.mimeType,
       protocol: request.protocol,
@@ -2352,7 +2402,8 @@ async function chromeNetworkLog(params) {
     tab: pickTab(tab),
     count: rows.length,
     filtersApplied: params || {},
-    requests: limitNetworkRequests(rows, params, limit),
+    requests: limitNetworkRequests(rows, params, limit).map((row) => ({ ...row, f12Columns: buildNetworkF12Columns(row) })),
+    f12TableColumns: ["name", "status", "type", "initiator", "size", "time", "domain", "method", "scheme", "protocol"],
     websockets: [...session.websockets.values()].slice(-limit),
     websocketAndOtherNetworkEvents: session.network
       .filter((entry) => !entry.requestId || String(entry.method || "").startsWith("Network.webSocket"))

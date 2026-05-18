@@ -236,6 +236,8 @@ const filteredRedirects = await callTool("devtools_network_log", {
   limit: 10,
 });
 assert(filteredRedirects.requests?.some((entry) => entry.requestId === redirectRow.requestId), `Personal network log filters missed redirect row: ${JSON.stringify(filteredRedirects)}`);
+assert(Array.isArray(filteredRedirects.f12TableColumns) && filteredRedirects.f12TableColumns.includes("initiator"), "Personal network log missing F12 table column list");
+assert(filteredRedirects.requests?.every((entry) => entry.f12Columns?.name && entry.f12Columns?.flags), `Personal network log rows missing F12 columns: ${JSON.stringify(filteredRedirects.requests)}`);
 const filteredTimeline = await callTool("devtools_network_timeline", {
   url_contains: "/redirect-end",
   redirected: true,
@@ -244,6 +246,7 @@ const filteredTimeline = await callTool("devtools_network_timeline", {
   limit: 10,
 });
 assert(filteredTimeline.timeline?.some((entry) => entry.requestId === redirectRow.requestId), `Personal network timeline filters missed redirect row: ${JSON.stringify(filteredTimeline)}`);
+assert(filteredTimeline.timeline?.every((entry) => entry.f12Columns?.name && entry.f12Columns?.flags), `Personal network timeline rows missing F12 columns: ${JSON.stringify(filteredTimeline.timeline)}`);
 const replay = await callTool("devtools_request_replay", {
   requestId: redirectRow.requestId,
   headers: {

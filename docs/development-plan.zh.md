@@ -776,3 +776,18 @@
 - 这能区分“浏览器不支持”和“支持但当前窗口没有观测到”，避免把缺失证据误读成页面没有对应行为。
 - Managed Browser 和 Personal Chrome smoke 都加入了 coverage row 断言。
 - 该能力只暴露 PerformanceObserver 的客观覆盖状态，不判断性能根因或漏洞。
+
+### 2026-05-18: Network F12 表格列完成
+
+已经完成:
+
+- `devtools_network_log` 和 `devtools_network_timeline` 的每条请求都新增 `f12Columns`。
+- `f12Columns` 固定暴露接近 F12 Network 表格的客观列:
+  - name、url、method、status、type、mimeType、domain、scheme、protocol
+  - initiatorType、initiatorUrl、initiatorStackDepth
+  - sizeBytes、transferredBytes、resourceSizeBytes、timeMs
+  - startedAt、responseAt、finishedAt、remoteAddress
+  - failed、redirected、fromDiskCache、fromServiceWorker、hasRequestBody、hasResponseBody 等 flags
+- `devtools_network_log` 额外返回 `f12TableColumns`，让 Agent 知道这些列是稳定表格入口。
+- Managed Browser 和 Personal Chrome 都保持同一字段形状。
+- 该能力只是把 F12 Network 表格证据结构化，不判断请求是否异常或漏洞。

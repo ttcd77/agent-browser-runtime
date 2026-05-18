@@ -220,6 +220,8 @@ try {
   });
   assert(networkTimeline.timeline?.length > 0, "network timeline did not return requests");
   assert("initiatorType" in networkTimeline.timeline[0], "network timeline missing initiatorType");
+  assert(networkTimeline.timeline[0].f12Columns?.name, "network timeline missing F12 table columns");
+  assert(networkTimeline.timeline[0].f12Columns?.flags && typeof networkTimeline.timeline[0].f12Columns.flags === "object", "network timeline missing F12 flag columns");
   const detailRequest = networkTimeline.timeline.find((entry) => entry.requestId)?.requestId;
   const requestDetail = await callTool(baseUrl, "devtools_request_detail", {
     profile: "default",
@@ -833,6 +835,8 @@ try {
     limit: 10,
   });
   assert(filteredRedirects.requests?.some((entry) => entry.requestId === redirectRow.requestId), `network log filters missed redirect row: ${JSON.stringify(filteredRedirects)}`);
+  assert(Array.isArray(filteredRedirects.f12TableColumns) && filteredRedirects.f12TableColumns.includes("initiator"), "network log missing F12 table column list");
+  assert(filteredRedirects.requests?.every((entry) => entry.f12Columns?.name && entry.f12Columns?.flags), `network log rows missing F12 columns: ${JSON.stringify(filteredRedirects.requests)}`);
   const filteredTimeline = await callTool(baseUrl, "devtools_network_timeline", {
     profile: "default",
     url_contains: "/redirect-end",
@@ -842,6 +846,7 @@ try {
     limit: 10,
   });
   assert(filteredTimeline.timeline?.some((entry) => entry.requestId === redirectRow.requestId), `network timeline filters missed redirect row: ${JSON.stringify(filteredTimeline)}`);
+  assert(filteredTimeline.timeline?.every((entry) => entry.f12Columns?.name && entry.f12Columns?.flags), `network timeline rows missing F12 columns: ${JSON.stringify(filteredTimeline.timeline)}`);
   const requestGraph = await callTool(baseUrl, "devtools_request_correlation_graph", {
     profile: "default",
     limit: 200,
