@@ -311,6 +311,8 @@ try {
   assert(finalReadiness.routeSummary?.traceArtifact?.inspect?.tool === "devtools_artifact_inspect", `professional readiness missing trace artifact inspect route: ${JSON.stringify(finalReadiness.routeSummary)}`);
   assert(finalReadiness.routeSummary?.traceArtifact?.path === pack.summary.tracePath, `professional readiness trace artifact path mismatch: ${JSON.stringify(finalReadiness.routeSummary)}`);
   assert(finalReadiness.routeSummary?.traceQuery?.tool === "devtools_trace_query", `professional readiness missing trace query route: ${JSON.stringify(finalReadiness.routeSummary)}`);
+  assert(finalReadiness.routeSummary?.applicationExportArtifact?.inspect?.tool === "devtools_artifact_inspect", `professional readiness missing Application export artifact inspect route: ${JSON.stringify(finalReadiness.routeSummary)}`);
+  assert(finalReadiness.routeSummary?.applicationExportArtifact?.path === pack.summary.applicationExportPath, `professional readiness Application export artifact path mismatch: ${JSON.stringify(finalReadiness.routeSummary)}`);
   assert(finalReadiness.routeSummary?.f12NavigationArtifact?.inspect?.tool === "devtools_artifact_inspect", `professional readiness missing F12 navigation artifact inspect route: ${JSON.stringify(finalReadiness.routeSummary)}`);
   assert(finalReadiness.routeSummary?.f12NavigationArtifact?.path === pack.summary.f12NavigationPath, `professional readiness F12 navigation artifact path mismatch: ${JSON.stringify(finalReadiness.routeSummary)}`);
   assert(finalReadiness.routeSummary?.firstF12RequestDetailArtifact?.inspect?.tool === "devtools_artifact_inspect", `professional readiness missing first F12 request-detail artifact inspect route: ${JSON.stringify(finalReadiness.routeSummary)}`);
@@ -345,6 +347,7 @@ try {
   assert(finalReadiness.nextActions?.some((entry) => entry.tool === "devtools_artifact_inspect"), "professional readiness missing handoff inspect next action");
   assert(finalReadiness.nextActions?.some((entry) => entry.tool === "devtools_artifact_inspect" && entry.input?.path === pack.summary.harCompletenessPath), "professional readiness missing HAR completeness artifact next action");
   assert(finalReadiness.nextActions?.some((entry) => entry.tool === "devtools_trace_query" && entry.input?.tracePath === pack.summary.tracePath), "professional readiness missing trace query next action");
+  assert(finalReadiness.nextActions?.some((entry) => entry.tool === "devtools_artifact_inspect" && entry.input?.path === pack.summary.applicationExportPath), "professional readiness missing Application export artifact next action");
   assert(finalReadiness.nextActions?.some((entry) => entry.tool === "devtools_artifact_inspect" && entry.input?.path === pack.summary.f12NavigationPath), "professional readiness missing F12 navigation artifact next action");
   assert(finalReadiness.nextActions?.some((entry) => entry.tool === "devtools_artifact_inspect" && entry.input?.path === pack.summary.firstF12RequestDetailPath), "professional readiness missing first F12 request-detail artifact next action");
   assert(finalReadiness.nextActions?.some((entry) => entry.tool === "devtools_request_detail" && entry.input?.requestId), "professional readiness missing research-pack request-detail next action");

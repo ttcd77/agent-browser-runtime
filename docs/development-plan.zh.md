@@ -926,3 +926,12 @@
 - `devtools_professional_readiness.routeSummary.traceQuery` 和 `nextActions` 会直接给出 `devtools_trace_query` 输入，Agent 可以从 readiness 进入 Performance/Timeline 证据钻取。
 - Managed Browser / Personal Chrome smoke 都覆盖该路线。
 - 该路线只查询已保存 trace 事件和时间线证据，不判断性能风险或漏洞。
+
+### 2026-05-19: Readiness Application Export Artifact 路线完成
+
+已经完成:
+
+- `devtools_professional_readiness.routeSummary.applicationExportArtifact` 会直接返回 Application/Storage export artifact 的 inspect/read 路线。
+- `nextActions` 会包含该 artifact 的 `devtools_artifact_inspect` 下一步，Agent 可以从 readiness 进入 cookie、storage、cache、IndexedDB 等 F12 Application 证据。
+- Managed Browser / Personal Chrome smoke 都覆盖该路线。
+- 该路线只读取已保存 Application export，不判断数据是否构成安全问题。

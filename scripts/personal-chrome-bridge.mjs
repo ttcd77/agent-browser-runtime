@@ -2479,6 +2479,7 @@ function buildProfessionalReadiness({
   const f12NavigationPath = latestResearchPackSummary?.artifactPaths?.f12NavigationPath || null;
   const harCompletenessPath = latestResearchPackSummary?.artifactPaths?.harCompletenessPath || null;
   const tracePath = latestResearchPackSummary?.artifactPaths?.tracePath || null;
+  const applicationExportPath = latestResearchPackSummary?.artifactPaths?.applicationExportPath || null;
   const firstF12RequestDetailArtifact = firstF12RequestDetailPath ? {
     path: firstF12RequestDetailPath,
     inspect: { tool: "devtools_artifact_inspect", input: { path: firstF12RequestDetailPath, maxBytes: 120000 } },
@@ -2498,6 +2499,11 @@ function buildProfessionalReadiness({
     path: tracePath,
     inspect: { tool: "devtools_artifact_inspect", input: { path: tracePath, maxBytes: 160000 } },
     query: { tool: "devtools_trace_query", input: { tracePath, minDurationMs: 5, limit: 20 } },
+  } : null;
+  const applicationExportArtifact = applicationExportPath ? {
+    path: applicationExportPath,
+    inspect: { tool: "devtools_artifact_inspect", input: { path: applicationExportPath, maxBytes: 200000 } },
+    read: { tool: "devtools_artifact_read", input: { path: applicationExportPath, mode: "line", startLine: 1, lineCount: 180 } },
   } : null;
   const checks = [
     {
@@ -2625,6 +2631,18 @@ function buildProfessionalReadiness({
       seenNextActions.add(key);
     }
   }
+  if (applicationExportArtifact) {
+    const entry = {
+      tool: applicationExportArtifact.inspect.tool,
+      input: applicationExportArtifact.inspect.input,
+      why: "Inspect the saved Application/Storage export from the latest research pack.",
+    };
+    const key = actionKey(entry);
+    if (!seenNextActions.has(key)) {
+      nextActions.push(entry);
+      seenNextActions.add(key);
+    }
+  }
   if (f12NavigationArtifact) {
     const entry = {
       tool: f12NavigationArtifact.inspect.tool,
@@ -2699,6 +2717,7 @@ function buildProfessionalReadiness({
     harCompletenessArtifact,
     traceArtifact,
     traceQuery: traceArtifact?.query || null,
+    applicationExportArtifact,
     f12NavigationArtifact,
     firstF12RequestDetailArtifact,
     firstF12RequestDetail: f12NavigationDrilldowns[0] ? {
