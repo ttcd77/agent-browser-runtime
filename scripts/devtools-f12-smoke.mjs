@@ -661,6 +661,10 @@ try {
   assert(researchPack.summary?.correlationGraphPath, "security research pack missing correlation graph path");
   assert(researchPack.summary?.authBoundaryReportPath, "security research pack missing auth boundary report path");
   assert(researchPack.summary?.workerFrameReportPath, "security research pack missing worker/frame report path");
+  assert(researchPack.summary?.artifactFileCount >= 1, "security research pack missing artifact index count");
+  assert(researchPack.summary?.evidenceTimelineEventCount >= 1, "security research pack missing evidence timeline count");
+  assert(researchPack.summary?.f12ParityPanelCount >= 1, "security research pack missing F12 parity count");
+  assert(researchPack.parityMatrix?.summary?.strongestBackend === "managed-cdp", "security research pack missing Managed Browser parity snapshot");
   assert(typeof researchPack.summary?.requestCount === "number", "security research pack missing request count");
   assert(Array.isArray(researchPack.captureBoundaries), "security research pack missing capture boundaries");
   const toolCatalog = await callTool(baseUrl, "devtools_tool_catalog", {

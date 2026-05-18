@@ -2695,6 +2695,9 @@ async function securityResearchPack(params = {}) {
       artifacts.workerFrame?.reportPath,
     ].filter(Boolean),
   });
+  artifacts.artifactIndex = await safeBridgeTool("devtools_artifact_index", { maxFiles: 200 });
+  artifacts.evidenceTimeline = await safeBridgeTool("devtools_evidence_timeline", { maxEvents: 80, maxArtifacts: 120 });
+  const parityMatrix = await safeBridgeTool("devtools_f12_parity_matrix");
   const networkSummary = network?.evidence?.summary || {};
   const page = overview?.evidence?.diagnostics?.page || overview?.evidence?.backendCapabilities?.activeTab || {};
   return {
@@ -2717,6 +2720,9 @@ async function securityResearchPack(params = {}) {
       correlationGraphPath: artifacts.correlationGraph?.graphPath || null,
       authBoundaryReportPath: artifacts.authBoundary?.reportPath || null,
       workerFrameReportPath: artifacts.workerFrame?.reportPath || null,
+      artifactFileCount: artifacts.artifactIndex?.totalFileCount ?? null,
+      evidenceTimelineEventCount: artifacts.evidenceTimeline?.eventCount ?? null,
+      f12ParityPanelCount: parityMatrix?.summary?.panelCount ?? null,
     },
     steps,
     evidence: {
@@ -2728,6 +2734,7 @@ async function securityResearchPack(params = {}) {
       performance,
     },
     artifacts,
+    parityMatrix,
     captureBoundaries: [
       "Personal Chrome mode runs against the user's active browser profile after local extension authorization.",
       "This workflow records only evidence observable after capture starts and during the reload/reproduction window.",

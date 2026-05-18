@@ -162,6 +162,14 @@
 - 这个 smoke 启动本地授权 fixture，覆盖 redirect、cookie/storage、same-origin iframe、open shadow root、service worker/cache、source map、Application export、evidence pack、correlation graph、worker/frame report 和 F12 parity matrix。
 - 目标不是判断漏洞，而是证明 Managed Browser 主线可以把一组真实 AppSec 研究常见证据串成完整、可保存、可 drilldown 的工作流。
 
+### 2026-05-18: Security Research Pack Drilldown Index
+
+已经完成:
+
+- `devtools_security_research_pack` / `browser_security_pack` 现在直接返回 artifact index、evidence timeline 和 F12 parity snapshot。
+- `summary` 增加 `artifactFileCount`、`evidenceTimelineEventCount`、`f12ParityPanelCount`，方便 Agent 先判断证据包是否完整，再选择下一步 drilldown。
+- Managed Browser 和 Personal Chrome 都保持同合同；Personal 不支持的底层能力仍然通过 parity / notApplicable 边界表达。
+
 ### 2026-05-18: Evidence Timeline Filters
 
 已经完成:

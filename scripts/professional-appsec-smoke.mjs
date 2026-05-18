@@ -189,6 +189,12 @@ try {
   assert(pack.summary?.evidenceBundlePath, "professional pack missing evidence bundle path");
   assert(pack.summary?.correlationGraphPath, "professional pack missing correlation graph path");
   assert(pack.summary?.workerFrameReportPath, "professional pack missing worker/frame report path");
+  assert(pack.summary?.artifactFileCount >= 1, "professional pack missing artifact index count");
+  assert(pack.summary?.evidenceTimelineEventCount >= 1, "professional pack missing evidence timeline count");
+  assert(pack.summary?.f12ParityPanelCount >= 1, "professional pack missing F12 parity count");
+  assert(pack.parityMatrix?.summary?.strongestBackend === "managed-cdp", "professional pack missing Managed Browser parity snapshot");
+  assert(pack.artifacts?.artifactIndex?.totalFileCount >= 1, "professional pack missing artifact index payload");
+  assert(pack.artifacts?.evidenceTimeline?.eventCount >= 1, "professional pack missing evidence timeline payload");
 
   const parity = await callTool(baseUrl, "devtools_f12_parity_matrix", { profile: "professional" });
   assert(parity.summary?.strongestBackend === "managed-cdp", "parity matrix should point to Managed Browser as strongest backend");
@@ -245,6 +251,7 @@ try {
   console.log(`- Evidence bundle: ${pack.summary.evidenceBundlePath}`);
   console.log(`- Correlation graph: ${pack.summary.correlationGraphPath}`);
   console.log(`- Worker/frame report: ${pack.summary.workerFrameReportPath}`);
+  console.log(`- Pack artifact index/timeline/parity: ${pack.summary.artifactFileCount}/${pack.summary.evidenceTimelineEventCount}/${pack.summary.f12ParityPanelCount}`);
   console.log(`- F12 parity rows: ${parity.summary.panelCount}`);
   console.log(`- artifact files: ${artifactIndex.totalFileCount}`);
 } finally {

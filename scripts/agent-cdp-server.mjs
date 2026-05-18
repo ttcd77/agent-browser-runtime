@@ -10256,6 +10256,9 @@ function registerStandaloneBrowserTools(tools, cdpPort, profileRegistry, default
           artifacts.workerFrame?.reportPath,
         ].filter(Boolean),
       });
+      artifacts.artifactIndex = await safeCall("devtools_artifact_index", { maxFiles: 200 });
+      artifacts.evidenceTimeline = await safeCall("devtools_evidence_timeline", { maxEvents: 80, maxArtifacts: 120 });
+      const parityMatrix = await safeCall("devtools_f12_parity_matrix");
       const networkSummary = network?.evidence?.summary || {};
       const page = overview?.evidence?.diagnostics?.page || {};
       return toolResult({
@@ -10279,6 +10282,9 @@ function registerStandaloneBrowserTools(tools, cdpPort, profileRegistry, default
           correlationGraphPath: artifacts.correlationGraph?.graphPath || null,
           authBoundaryReportPath: artifacts.authBoundary?.reportPath || null,
           workerFrameReportPath: artifacts.workerFrame?.reportPath || null,
+          artifactFileCount: artifacts.artifactIndex?.totalFileCount ?? null,
+          evidenceTimelineEventCount: artifacts.evidenceTimeline?.eventCount ?? null,
+          f12ParityPanelCount: parityMatrix?.summary?.panelCount ?? null,
         },
         steps,
         evidence: {
@@ -10290,6 +10296,7 @@ function registerStandaloneBrowserTools(tools, cdpPort, profileRegistry, default
           performance,
         },
         artifacts,
+        parityMatrix,
         captureBoundaries: [
           "This workflow records only evidence observable after capture starts and during the reload/reproduction window.",
           "It organizes F12 evidence for security research but does not decide exploitability.",

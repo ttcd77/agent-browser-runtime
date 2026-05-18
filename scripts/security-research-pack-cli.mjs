@@ -112,6 +112,9 @@ function printSummary(pack) {
   console.log(`- requests: ${summary.requestCount ?? "(unknown)"}`);
   console.log(`- failed requests: ${summary.failedRequestCount ?? "(unknown)"}`);
   console.log(`- console entries: ${summary.consoleEntryCount ?? "(unknown)"}`);
+  console.log(`- artifact files: ${summary.artifactFileCount ?? "(unknown)"}`);
+  console.log(`- evidence timeline events: ${summary.evidenceTimelineEventCount ?? "(unknown)"}`);
+  console.log(`- F12 parity panels: ${summary.f12ParityPanelCount ?? "(unknown)"}`);
   console.log("- artifacts:");
   for (const [name, value] of Object.entries(artifacts)) {
     if (value) console.log(`  - ${name}: ${value}`);
