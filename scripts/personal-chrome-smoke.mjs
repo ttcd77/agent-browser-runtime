@@ -605,6 +605,8 @@ assert(professionalReadiness.timelineTypes?.artifact >= 1 || professionalReadine
 assert(professionalReadiness.f12Coverage?.panelCount >= 8, `Personal Chrome professional readiness missing F12 coverage summary: ${JSON.stringify(professionalReadiness.f12Coverage)}`);
 assert(professionalReadiness.f12Coverage?.strongPanels?.includes("Network"), `Personal Chrome professional readiness missing Network strong panel: ${JSON.stringify(professionalReadiness.f12Coverage)}`);
 assert(professionalReadiness.f12Coverage?.partialPanels?.includes("Performance / Memory"), `Personal Chrome professional readiness missing partial panel boundary: ${JSON.stringify(professionalReadiness.f12Coverage)}`);
+assert(professionalReadiness.captureBuckets?.networkRequestCount >= 1, `Personal Chrome professional readiness missing capture bucket summary: ${JSON.stringify(professionalReadiness.captureBuckets)}`);
+assert(professionalReadiness.checks?.some((check) => check.name === "captureBisectReachable" && check.present), `Personal Chrome professional readiness missing capture bisect check: ${JSON.stringify(professionalReadiness.checks)}`);
 assert(professionalReadiness.recommendedRoute?.some((step) => step.tool === "browser_security_pack"), "Personal Chrome professional readiness missing recommended route");
 assert(professionalReadiness.panelRoutes?.network?.some((step) => step.tool === "devtools_request_detail"), "Personal Chrome professional readiness missing network panel route");
 assert(professionalReadiness.artifactDrilldowns?.some((entry) => entry.tool === "devtools_artifact_inspect" && entry.input?.path), "Personal Chrome professional readiness missing artifact drilldown route");

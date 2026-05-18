@@ -3036,6 +3036,7 @@ function buildProfessionalReadiness({
   capabilityMap = {},
   parityMatrix = {},
   captureStatus = {},
+  captureBisect = null,
   artifactIndex = null,
   evidenceTimeline = null,
 } = {}) {
@@ -3052,6 +3053,16 @@ function buildProfessionalReadiness({
     partialPanels: parityRows.filter((row) => String(row.coverage || "").includes("partial") || row.managed === "partial" || row.personal === "partial").map((row) => row.panel),
     intentionalGapPanels: parityRows.filter((row) => row.coverage === "intentional-gap" || row.managed === "not-first-class" || row.personal === "not-first-class").map((row) => row.panel),
   };
+  const captureBuckets = captureBisect?.buckets ? {
+    bucketCount: captureBisect.bucketCount ?? Object.keys(captureBisect.buckets).length,
+    totalEvents: captureBisect.totalEvents ?? null,
+    networkRequestCount: captureBisect.buckets.network?.requestCount ?? 0,
+    networkFailedCount: captureBisect.buckets.network?.failedCount ?? 0,
+    pageCount: captureBisect.buckets.pages?.pageCount ?? 0,
+    websocketCount: captureBisect.buckets.realtime?.websocketCount ?? 0,
+    websocketFrameCount: captureBisect.buckets.realtime?.websocketFrameCount ?? 0,
+    eventSourceMessageCount: captureBisect.buckets.realtime?.eventSourceMessageCount ?? 0,
+  } : null;
   const agentUsage = capabilityMap?.agentUsage || null;
   const recommendedRoute = Array.isArray(agentUsage?.defaultRoute) ? agentUsage.defaultRoute : [];
   const artifactDrilldowns = Array.isArray(artifactIndex?.recommendedDrilldowns) ? artifactIndex.recommendedDrilldowns.slice(0, 8) : [];
@@ -3090,6 +3101,11 @@ function buildProfessionalReadiness({
       name: "captureStatusReachable",
       present: Boolean(captureStatus && !captureStatus.unavailable && !captureStatus.error),
       evidence: captureStatus?.unavailable ? captureStatus.error || "unavailable" : capture || null,
+    },
+    {
+      name: "captureBisectReachable",
+      present: captureBisect === null || Boolean(!captureBisect.unavailable && !captureBisect.error && captureBuckets),
+      evidence: captureBuckets,
     },
     {
       name: "artifactInventoryReachable",
@@ -3157,6 +3173,7 @@ function buildProfessionalReadiness({
     checks,
     missing,
     capture: capture || null,
+    captureBuckets,
     artifactCount,
     artifactKinds,
     timelineEventCount: timelineCount,
@@ -12490,6 +12507,7 @@ function registerStandaloneBrowserTools(tools, cdpPort, profileRegistry, default
       type: "object",
       properties: {
         profile: { type: "string" },
+        includeCaptureBisect: { type: "boolean" },
         includeArtifacts: { type: "boolean" },
         includeTimeline: { type: "boolean" },
       },
@@ -12508,6 +12526,7 @@ function registerStandaloneBrowserTools(tools, cdpPort, profileRegistry, default
       const capabilityMap = await parseTool("devtools_capability_map", {});
       const parityMatrix = await parseTool("devtools_f12_parity_matrix", {});
       const captureStatus = await parseTool("devtools_capture_status", { profile: profileName });
+      const captureBisect = params?.includeCaptureBisect === false ? null : await parseTool("devtools_capture_bisect", { profile: profileName, save: false, limit: 80 });
       const artifactIndex = params?.includeArtifacts === false ? null : await parseTool("devtools_artifact_index", { profile: profileName, maxFiles: 200 });
       const evidenceTimeline = params?.includeTimeline === false ? null : await parseTool("devtools_evidence_timeline", { profile: profileName, maxEvents: 80, maxArtifacts: 120 });
       return toolResult(buildProfessionalReadiness({
@@ -12517,6 +12536,7 @@ function registerStandaloneBrowserTools(tools, cdpPort, profileRegistry, default
         capabilityMap,
         parityMatrix,
         captureStatus,
+        captureBisect,
         artifactIndex,
         evidenceTimeline,
       }));

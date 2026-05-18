@@ -310,6 +310,16 @@
 - Personal Chrome smoke 覆盖 Network strong panel 和 Performance / Memory partial boundary。
 - 这只是 F12 能力边界摘要，不判断漏洞、不替 Agent 选择结论。
 
+### 2026-05-18: Readiness Capture Bucket Summary
+
+已经完成:
+
+- `devtools_professional_readiness` / `personal_chrome_professional_readiness` 现在会调用 capture bisect 并返回 `captureBuckets`。
+- Agent 可以从 readiness 直接看到当前录制证据里的 network request、failed request、page、WebSocket、SSE message 数量。
+- readiness 新增 `captureBisectReachable` 机械检查。
+- Managed Professional smoke 和 Personal Chrome smoke 都已覆盖 capture bucket summary。
+- 这只是已录制证据的客观分桶，不读取正文、不判断漏洞。
+
 ### 2026-05-18: Professional Readiness Tool
 
 已经完成:

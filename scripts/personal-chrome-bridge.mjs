@@ -2337,6 +2337,7 @@ function buildProfessionalReadiness({
   capabilityMap = {},
   parityMatrix = {},
   captureStatus = {},
+  captureBisect = null,
   artifactIndex = null,
   evidenceTimeline = null,
 } = {}) {
@@ -2353,6 +2354,16 @@ function buildProfessionalReadiness({
     partialPanels: parityRows.filter((row) => String(row.coverage || "").includes("partial") || row.managed === "partial" || row.personal === "partial").map((row) => row.panel),
     intentionalGapPanels: parityRows.filter((row) => row.coverage === "intentional-gap" || row.managed === "not-first-class" || row.personal === "not-first-class").map((row) => row.panel),
   };
+  const captureBuckets = captureBisect?.buckets ? {
+    bucketCount: captureBisect.bucketCount ?? Object.keys(captureBisect.buckets).length,
+    totalEvents: captureBisect.totalEvents ?? null,
+    networkRequestCount: captureBisect.buckets.network?.requestCount ?? 0,
+    networkFailedCount: captureBisect.buckets.network?.failedCount ?? 0,
+    pageCount: captureBisect.buckets.pages?.pageCount ?? 0,
+    websocketCount: captureBisect.buckets.realtime?.websocketCount ?? 0,
+    websocketFrameCount: captureBisect.buckets.realtime?.websocketFrameCount ?? 0,
+    eventSourceMessageCount: captureBisect.buckets.realtime?.eventSourceMessageCount ?? 0,
+  } : null;
   const agentUsage = capabilityMap?.agentUsage || null;
   const recommendedRoute = Array.isArray(agentUsage?.defaultRoute) ? agentUsage.defaultRoute : [];
   const artifactDrilldowns = Array.isArray(artifactIndex?.recommendedDrilldowns) ? artifactIndex.recommendedDrilldowns.slice(0, 8) : [];
@@ -2391,6 +2402,11 @@ function buildProfessionalReadiness({
       name: "captureStatusReachable",
       present: Boolean(captureStatus && !captureStatus.unavailable && !captureStatus.error),
       evidence: captureStatus?.unavailable ? captureStatus.error || "unavailable" : capture || null,
+    },
+    {
+      name: "captureBisectReachable",
+      present: captureBisect === null || Boolean(!captureBisect.unavailable && !captureBisect.error && captureBuckets),
+      evidence: captureBuckets,
     },
     {
       name: "artifactInventoryReachable",
@@ -2457,6 +2473,7 @@ function buildProfessionalReadiness({
     checks,
     missing,
     capture: capture || null,
+    captureBuckets,
     artifactCount,
     artifactKinds,
     timelineEventCount: timelineCount,
@@ -3141,6 +3158,7 @@ async function callBridgeTool(toolName, params = {}) {
     const capabilityMapResult = capabilityMap();
     const parityMatrix = f12ParityMatrix();
     const captureStatus = await safeBridgeTool("devtools_capture_status", params || {});
+    const captureBisect = params?.includeCaptureBisect === false ? null : await safeBridgeTool("devtools_capture_bisect", { ...(params || {}), save: false, limit: 80 });
     const artifactIndex = params?.includeArtifacts === false ? null : await safeBridgeTool("devtools_artifact_index", { maxFiles: 200 });
     const evidenceTimeline = params?.includeTimeline === false ? null : await safeBridgeTool("devtools_evidence_timeline", { maxEvents: 80, maxArtifacts: 120 });
     return buildProfessionalReadiness({
@@ -3149,6 +3167,7 @@ async function callBridgeTool(toolName, params = {}) {
       capabilityMap: capabilityMapResult,
       parityMatrix,
       captureStatus,
+      captureBisect,
       artifactIndex,
       evidenceTimeline,
     });

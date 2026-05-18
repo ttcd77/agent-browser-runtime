@@ -268,6 +268,8 @@ try {
   assert(finalReadiness.f12Coverage?.panelCount >= 8, `professional readiness missing F12 coverage summary: ${JSON.stringify(finalReadiness.f12Coverage)}`);
   assert(finalReadiness.f12Coverage?.strongPanels?.includes("Network"), `professional readiness missing Network strong panel: ${JSON.stringify(finalReadiness.f12Coverage)}`);
   assert(finalReadiness.f12Coverage?.intentionalGapPanels?.includes("DevTools UI Extras"), `professional readiness missing intentional gap panel: ${JSON.stringify(finalReadiness.f12Coverage)}`);
+  assert(finalReadiness.captureBuckets?.networkRequestCount >= 1, `professional readiness missing capture bucket summary: ${JSON.stringify(finalReadiness.captureBuckets)}`);
+  assert(finalReadiness.checks?.some((check) => check.name === "captureBisectReachable" && check.present), `professional readiness missing capture bisect check: ${JSON.stringify(finalReadiness.checks)}`);
   assert(finalReadiness.latestResearchPackHandoff?.path, "professional readiness missing latest research pack handoff route");
   assert(finalReadiness.latestResearchPackHandoff?.inspect?.tool === "devtools_artifact_inspect", "professional readiness missing latest handoff inspect route");
   assert(finalReadiness.checks?.some((check) => check.name === "artifactDrilldownsReachable" && check.present), `professional readiness missing artifact drilldown check: ${JSON.stringify(finalReadiness.checks)}`);
