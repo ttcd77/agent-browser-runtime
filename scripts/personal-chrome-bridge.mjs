@@ -740,6 +740,13 @@ function summarizeResearchPackHandoff(parsed) {
       requestNodeCount: f12Navigation.requestNodeCount ?? null,
       firstRequest: f12Navigation.firstRequest || null,
       firstDetailRoute: Array.isArray(f12Navigation.requests) ? f12Navigation.requests.find((row) => row?.detail)?.detail || null : null,
+      requestDrilldowns: Array.isArray(f12Navigation.requests) ? f12Navigation.requests.filter((row) => row?.detail).slice(0, 5).map((row) => ({
+        label: row.label || row.f12Columns?.name || row.url || row.requestId || "request detail",
+        tool: row.detail.tool,
+        input: row.detail.input || {},
+        requestId: row.requestId || null,
+        f12Columns: row.f12Columns || null,
+      })) : [],
       artifacts: f12Navigation.artifacts || null,
       sectionRoutes: f12Navigation.sectionRoutes || null,
       boundaries: f12Navigation.boundaries || [],
@@ -2450,6 +2457,8 @@ function buildProfessionalReadiness({
     }
   }
   const researchPackDrilldowns = Array.isArray(latestResearchPackSummary?.firstDrilldowns) ? latestResearchPackSummary.firstDrilldowns.slice(0, 6) : [];
+  const f12Navigation = latestResearchPackSummary?.f12Navigation || null;
+  const f12NavigationDrilldowns = Array.isArray(f12Navigation?.requestDrilldowns) ? f12Navigation.requestDrilldowns.slice(0, 5) : [];
   const latestResearchPackHandoff = latestResearchPack ? {
     path: latestResearchPack.path,
     bytes: latestResearchPack.bytes ?? null,
@@ -2504,6 +2513,11 @@ function buildProfessionalReadiness({
       evidence: researchPackDrilldowns.map((entry) => entry.tool),
     },
     {
+      name: "f12NavigationReachable",
+      present: !latestResearchPackSummary || !f12Navigation || Boolean(f12Navigation.requestNodeCount >= 0),
+      evidence: f12Navigation ? { requestNodeCount: f12Navigation.requestNodeCount, firstTool: f12Navigation.firstDetailRoute?.tool || null } : null,
+    },
+    {
       name: "artifactInventoryReachable",
       present: artifactIndex === null || Boolean(!artifactIndex.unavailable && !artifactIndex.error && artifactCount !== null),
       evidence: artifactCount,
@@ -2554,6 +2568,17 @@ function buildProfessionalReadiness({
   }
   const actionKey = (entry) => `${entry.tool}:${entry.input?.path || ""}:${entry.input?.requestId || ""}:${entry.input?.tracePath || ""}:${entry.input?.query || ""}`;
   const seenNextActions = new Set(nextActions.map(actionKey));
+  for (const entry of f12NavigationDrilldowns) {
+    const key = actionKey(entry);
+    if (seenNextActions.has(key)) continue;
+    nextActions.push({
+      tool: entry.tool,
+      input: entry.input || {},
+      why: entry.label ? `Continue from F12 navigation request: ${entry.label}.` : "Continue with a deterministic F12 request-detail route from the latest research pack.",
+    });
+    seenNextActions.add(key);
+    if (nextActions.length >= 8) break;
+  }
   for (const entry of researchPackDrilldowns) {
     const key = actionKey(entry);
     if (seenNextActions.has(key)) continue;
@@ -2590,6 +2615,12 @@ function buildProfessionalReadiness({
     firstStep: nextActions[0] ? { tool: nextActions[0].tool, input: nextActions[0].input || {} } : null,
     latestHandoffInspect: latestResearchPackHandoff?.inspect || null,
     latestHandoffRead: latestResearchPackHandoff?.read || null,
+    firstF12RequestDetail: f12NavigationDrilldowns[0] ? {
+      label: f12NavigationDrilldowns[0].label || null,
+      tool: f12NavigationDrilldowns[0].tool,
+      input: f12NavigationDrilldowns[0].input || {},
+      f12Columns: f12NavigationDrilldowns[0].f12Columns || null,
+    } : null,
     firstConcreteDrilldown: firstConcreteDrilldown ? {
       label: firstConcreteDrilldown.label || null,
       tool: firstConcreteDrilldown.tool,
@@ -2597,6 +2628,7 @@ function buildProfessionalReadiness({
     } : null,
     nextActionTools: nextActions.map((entry) => entry.tool),
     artifactEntrypointCount: evidenceEntrypoints ? Object.values(evidenceEntrypoints).filter(Boolean).length : 0,
+    f12NavigationRequestCount: f12Navigation?.requestNodeCount ?? null,
     researchPackDrilldownCount: researchPackDrilldowns.length,
     artifactDrilldownCount: artifactDrilldowns.length,
   };
@@ -2608,6 +2640,7 @@ function buildProfessionalReadiness({
     artifactCount,
     timelineEventCount: timelineCount,
     latestResearchPackReady: latestResearchPackSummary?.ready ?? null,
+    f12NavigationRequestCount: f12Navigation?.requestNodeCount ?? null,
     latestArtifactKinds: latestArtifacts ? Object.keys(latestArtifacts) : [],
     nextTool: nextActions[0]?.tool || null,
     nextActionCount: nextActions.length,
@@ -2634,6 +2667,8 @@ function buildProfessionalReadiness({
     f12Coverage,
     latestResearchPackHandoff,
     latestResearchPackSummary,
+    f12Navigation,
+    f12NavigationDrilldowns,
     researchPackDrilldowns,
     recommendedRoute,
     panelRoutes: agentUsage?.panelRoutes || null,

@@ -828,3 +828,13 @@
 - `f12Navigation` 从 correlation graph 的 request 节点提取 `f12Columns`，并给出 `devtools_request_detail` + `f12Sections` 的下一步读取路线。
 - `devtools_artifact_inspect` 读取 handoff JSON 时会返回压缩后的 `f12Navigation` 摘要，方便 Agent 从证据包继续钻取。
 - 该索引只是证据导航，不读取额外 artifact body，也不判断漏洞。
+
+### 2026-05-18: Readiness F12 Navigation 接入完成
+
+已经完成:
+
+- `devtools_professional_readiness` / `personal_chrome_professional_readiness` 会从最新 research-pack handoff 中读取 `f12Navigation`。
+- readiness 直接返回 `f12Navigation`、`f12NavigationDrilldowns`、`routeSummary.firstF12RequestDetail` 和 `summary.f12NavigationRequestCount`。
+- `nextActions` 会优先加入来自 `f12Navigation` 的 request-detail 路线，然后再补 research-pack drilldown 和 artifact drilldown。
+- Managed Browser 和 Personal Chrome smoke 都验证 readiness 能直接暴露 F12 request-detail 路线。
+- 该能力只是把最新证据包里的 F12 导航路线前置到 readiness，不判断请求是否重要或有漏洞。

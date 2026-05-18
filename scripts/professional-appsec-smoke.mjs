@@ -280,6 +280,7 @@ try {
   assert(finalReadiness.evidenceReady === true, `professional readiness missing evidence after pack: ${JSON.stringify(finalReadiness)}`);
   assert(finalReadiness.summary?.ready === true && finalReadiness.summary?.evidenceReady === true, `professional readiness summary not ready: ${JSON.stringify(finalReadiness.summary)}`);
   assert(finalReadiness.summary?.latestResearchPackReady === true, `professional readiness summary missing research-pack readiness: ${JSON.stringify(finalReadiness.summary)}`);
+  assert(finalReadiness.summary?.f12NavigationRequestCount >= 1, `professional readiness summary missing F12 navigation count: ${JSON.stringify(finalReadiness.summary)}`);
   assert(finalReadiness.summary?.latestArtifactKinds?.includes("har"), `professional readiness summary missing latest artifact kinds: ${JSON.stringify(finalReadiness.summary)}`);
   assert(finalReadiness.artifactCount >= 1, "professional readiness missing artifact count after pack");
   assert(finalReadiness.artifactKinds?.["research-pack"] >= 1, `professional readiness missing artifact kind distribution: ${JSON.stringify(finalReadiness.artifactKinds)}`);
@@ -291,6 +292,8 @@ try {
   assert(finalReadiness.evidenceEntrypoints?.workerFrameBoundary?.read?.tool === "devtools_artifact_read", `professional readiness missing worker/frame boundary entrypoint: ${JSON.stringify(finalReadiness.evidenceEntrypoints)}`);
   assert(finalReadiness.checks?.some((check) => check.name === "evidenceEntrypointsReachable" && check.present), `professional readiness missing evidence entrypoints check: ${JSON.stringify(finalReadiness.checks)}`);
   assert(finalReadiness.routeSummary?.latestHandoffInspect?.tool === "devtools_artifact_inspect", `professional readiness missing route handoff inspect: ${JSON.stringify(finalReadiness.routeSummary)}`);
+  assert(finalReadiness.routeSummary?.firstF12RequestDetail?.tool === "devtools_request_detail", `professional readiness missing F12 navigation request-detail route: ${JSON.stringify(finalReadiness.routeSummary)}`);
+  assert(finalReadiness.routeSummary?.firstF12RequestDetail?.f12Columns?.name, `professional readiness missing F12 navigation columns: ${JSON.stringify(finalReadiness.routeSummary)}`);
   assert(finalReadiness.routeSummary?.firstConcreteDrilldown?.tool === "devtools_request_detail", `professional readiness missing route concrete request drilldown: ${JSON.stringify(finalReadiness.routeSummary)}`);
   assert(finalReadiness.routeSummary?.artifactEntrypointCount >= 3, `professional readiness missing route entrypoint count: ${JSON.stringify(finalReadiness.routeSummary)}`);
   assert(finalReadiness.timelineEventCount >= 1, "professional readiness missing timeline count after pack");
@@ -308,6 +311,9 @@ try {
   assert(finalReadiness.latestResearchPackSummary?.handoffChecks?.some((check) => check.name === "agentUsageRoute" && check.present), `professional readiness missing latest research-pack handoff summary: ${JSON.stringify(finalReadiness.latestResearchPackSummary)}`);
   assert(finalReadiness.latestResearchPackSummary?.artifactCoverageRows?.some((row) => row.name === "har" && row.status === "present"), `professional readiness missing latest research-pack artifact coverage: ${JSON.stringify(finalReadiness.latestResearchPackSummary)}`);
   assert(finalReadiness.checks?.some((check) => check.name === "latestResearchPackSummaryReachable" && check.present), `professional readiness missing latest research-pack summary check: ${JSON.stringify(finalReadiness.checks)}`);
+  assert(finalReadiness.checks?.some((check) => check.name === "f12NavigationReachable" && check.present), `professional readiness missing F12 navigation check: ${JSON.stringify(finalReadiness.checks)}`);
+  assert(finalReadiness.f12Navigation?.requestNodeCount >= 1, `professional readiness missing F12 navigation: ${JSON.stringify(finalReadiness.f12Navigation)}`);
+  assert(finalReadiness.f12NavigationDrilldowns?.some((entry) => entry.tool === "devtools_request_detail" && entry.input?.requestId), `professional readiness missing F12 navigation drilldown: ${JSON.stringify(finalReadiness.f12NavigationDrilldowns)}`);
   assert(finalReadiness.researchPackDrilldowns?.some((entry) => entry.tool === "devtools_request_detail" && entry.input?.requestId), `professional readiness missing research-pack request drilldown: ${JSON.stringify(finalReadiness.researchPackDrilldowns)}`);
   assert(finalReadiness.checks?.some((check) => check.name === "researchPackDrilldownsReachable" && check.present), `professional readiness missing research-pack drilldown check: ${JSON.stringify(finalReadiness.checks)}`);
   assert(finalReadiness.checks?.some((check) => check.name === "artifactDrilldownsReachable" && check.present), `professional readiness missing artifact drilldown check: ${JSON.stringify(finalReadiness.checks)}`);
