@@ -156,7 +156,17 @@ Expose these facade tools to agents by default:
 | `browser_replay` | Replay one captured request or a batch of variants. |
 | `browser_raw` | Advanced escape hatch for one exact `devtools_*` tool. |
 
-The detailed `devtools_*` tools are still available for drill-down and parity with DevTools panels. The intended agent path is: `browser_open` -> `browser_capture start` -> interact through `browser_act` -> inspect with `browser_inspect` -> use `browser_raw` only when the facade cannot express the required F12 operation.
+Default professional workflow:
+
+```text
+browser_open -> browser_capture -> browser_inspect -> browser_security_pack -> drilldownPlan
+```
+
+Use `devtools_workflow_guide` with `task="professional-appsec"` to get this path
+as machine-readable steps and exit criteria. The detailed `devtools_*` tools are
+still available for drill-down and parity with DevTools panels, but they are not
+the first interface. Use `browser_raw` only when the facade cannot express the
+required F12 operation.
 
 Example tool calls:
 

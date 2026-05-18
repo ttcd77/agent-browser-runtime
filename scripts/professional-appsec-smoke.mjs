@@ -182,9 +182,12 @@ try {
   assert(capabilityMap.panels?.some((panel) => panel.category === "sources-debugger"), "professional capability map missing Sources route");
   const workflowGuide = await callTool(baseUrl, "devtools_workflow_guide", {
     profile: "professional",
-    task: "auth-boundary",
+    task: "professional-appsec",
   });
-  assert(workflowGuide.steps?.some((step) => step.tool === "devtools_auth_boundary_report"), "professional workflow guide missing auth boundary step");
+  assert(workflowGuide.defaultPath?.join(" -> ") === "browser_open -> browser_capture -> browser_inspect -> browser_security_pack -> drilldownPlan", `professional workflow guide default path is not fixed: ${JSON.stringify(workflowGuide.defaultPath)}`);
+  assert(workflowGuide.defaultTools?.includes("browser_raw"), "professional workflow guide missing browser_raw escape hatch");
+  assert(workflowGuide.steps?.some((step) => step.tool === "browser_security_pack"), "professional workflow guide missing browser_security_pack step");
+  assert(workflowGuide.exitCriteria?.some((entry) => String(entry).includes("drilldown plan")), "professional workflow guide missing drilldown exit criteria");
   const firstInspect = await callTool(baseUrl, "browser_inspect", {
     profile: "professional",
     mode: "overview",

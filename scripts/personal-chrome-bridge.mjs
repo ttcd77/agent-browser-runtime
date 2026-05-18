@@ -2228,6 +2228,28 @@ function buildResearchPackDrilldowns(artifacts = {}, options = {}) {
 function workflowGuide(task = "first-pass") {
   const key = String(task || "first-pass").trim().toLowerCase().replace(/[\s_]+/g, "-");
   const recipes = {
+    "professional-appsec": {
+      title: "Professional AppSec F12 workflow",
+      goal: "Use the small facade first, then drill into exact DevTools evidence only when needed.",
+      defaultPath: ["browser_open", "browser_capture", "browser_inspect", "browser_security_pack", "drilldownPlan"],
+      defaultTools: ["browser_open", "browser_capture", "browser_inspect", "browser_security_pack", "browser_raw"],
+      steps: [
+        { tool: "browser_open", input: { url: "https://example.com", waitMs: 1000 }, why: "Bind the authorized real Chrome tab to a page and collect page diagnostics." },
+        { tool: "browser_capture", input: { action: "start", label: "reproduce" }, why: "Start an explicit F12 recording window before the action." },
+        { tool: "browser_act", input: { action: "snapshot" }, why: "Interact or snapshot through the facade so the agent does not choose low-level UI tools first." },
+        { tool: "browser_inspect", input: { mode: "overview", limit: 10 }, why: "Read the first objective evidence set and next tool plan." },
+        { tool: "browser_security_pack", input: { url: "https://example.com", includeHar: true, includeTrace: true, includeApplicationExport: true }, why: "Save a portable evidence pack, manifest, timeline, and drilldown plan." },
+        { tool: "devtools_artifact_read", input: { path: "<researchPackPath>", mode: "line", startLine: 1, maxLines: 80 }, why: "Preview the handoff artifact without loading every saved file." },
+        { tool: "<drilldownPlan.tool>", input: "<drilldownPlan.input>", why: "Continue with concrete request, replay, trace, source, or artifact drilldowns returned by the evidence pack." },
+      ],
+      exitCriteria: [
+        "A research pack handoff file exists.",
+        "A drilldown plan exists and contains concrete request/trace/artifact routes.",
+        "HAR/Application/trace artifacts are saved when the backend exposes them.",
+        "All returned boundaries remain objective and do not classify vulnerabilities.",
+      ],
+      boundary: "This is the default professional path for agents. Low-level devtools_* calls are drilldowns, not the first interface.",
+    },
     "first-pass": {
       title: "First page inspection",
       goal: "Understand current page, backend layer, capture state, and first objective signals.",
