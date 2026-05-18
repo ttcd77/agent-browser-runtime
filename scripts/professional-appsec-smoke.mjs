@@ -292,6 +292,15 @@ try {
   });
   assert(drilldownPreview.json?.ok === true, "professional drilldown plan did not parse as JSON");
   assert(drilldownPreview.previewText?.includes("devtools_request_detail"), "professional drilldown preview missing request detail route");
+  const handoffInspect = await callTool(baseUrl, "devtools_artifact_inspect", {
+    profile: "professional",
+    path: pack.summary.researchPackPath,
+    maxBytes: 300000,
+  });
+  assert(handoffInspect.researchPackHandoff?.ready === true, `professional handoff inspect missing readiness summary: ${JSON.stringify(handoffInspect.researchPackHandoff)}`);
+  assert(handoffInspect.researchPackHandoff?.agentEntryMode === "facade-first", "professional handoff inspect missing agent route summary");
+  assert(handoffInspect.researchPackHandoff?.professionalPath?.includes("browser_security_pack"), "professional handoff inspect missing professional facade path");
+  assert(handoffInspect.researchPackHandoff?.objectiveBoundary?.includes("does not judge vulnerabilities"), "professional handoff inspect crossed objective boundary");
 
   const parity = await callTool(baseUrl, "devtools_f12_parity_matrix", { profile: "professional" });
   assert(parity.summary?.strongestBackend === "managed-cdp", "parity matrix should point to Managed Browser as strongest backend");

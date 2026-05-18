@@ -174,6 +174,16 @@
 - README 已同步说明 CLI 会展示 agent entry route。
 - 这仍然只是工具路线展示，不解释证据含义。
 
+### 2026-05-18: Research Pack Handoff Inspect
+
+已经完成:
+
+- `devtools_artifact_inspect` / `personal_chrome_artifact_inspect` 现在识别 `security-research-pack-handoff` JSON。
+- 当读取 research pack handoff 时，工具会返回 `researchPackHandoff` 摘要: ready、handoff/artifact coverage 缺失项、agent entry mode、recommended first call、professional path、drilldown rule、首批 drilldown 和 artifact paths。
+- Agent 可以用已有 artifact inspect 工具验证交接文件是否可读、是否包含可执行路线，而不需要加载完整 JSON 到上下文。
+- Managed Browser 和 Personal Chrome smoke 都已覆盖。
+- 这只是 handoff 结构检查和路线提取，不判断漏洞或安全影响。
+
 ### 2026-05-18: Professional Readiness Tool
 
 已经完成:

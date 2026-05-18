@@ -570,6 +570,45 @@ function readJsonFile(file) {
   return JSON.parse(readFileSync(file, "utf8"));
 }
 
+function summarizeResearchPackHandoff(parsed) {
+  if (!parsed || typeof parsed !== "object" || parsed.schema !== "agent-browser-runtime.security-research-pack-handoff.v1") return null;
+  const summary = parsed.summary || {};
+  const agentEntryPoints = parsed.agentEntryPoints || {};
+  const artifactPaths = parsed.artifactPaths || {};
+  const handoffCompleteness = parsed.handoffCompleteness || {};
+  const artifactCoverage = parsed.artifactCoverage || {};
+  return {
+    schema: parsed.schema,
+    backend: parsed.backend || null,
+    generatedAt: parsed.generatedAt || null,
+    profile: parsed.profile || null,
+    url: summary.url || parsed.page?.url || null,
+    ready: Boolean(handoffCompleteness.ready && artifactCoverage.ready !== false),
+    handoffReady: handoffCompleteness.ready ?? null,
+    artifactCoverageReady: artifactCoverage.ready ?? null,
+    handoffMissing: handoffCompleteness.missing || summary.handoffMissing || [],
+    artifactCoverageMissing: artifactCoverage.missing || summary.artifactCoverageMissing || [],
+    artifactCoverageSkipped: artifactCoverage.skipped || summary.artifactCoverageSkipped || [],
+    agentEntryMode: agentEntryPoints.defaultMode || null,
+    recommendedFirstCall: agentEntryPoints.recommendedFirstCall || null,
+    professionalPath: agentEntryPoints.professionalPath || [],
+    drilldownRule: agentEntryPoints.drilldownRule || null,
+    drilldownCount: parsed.drilldownPlan?.count ?? summary.drilldownCount ?? null,
+    firstDrilldowns: (parsed.drilldownPlan?.drilldowns || []).slice(0, 5).map((entry) => ({
+      label: entry.label,
+      tool: entry.tool,
+      input: entry.input,
+    })),
+    artifactPaths,
+    nextTools: parsed.nextTools || [],
+    nextRead: summary.researchPackPath ? {
+      tool: "devtools_artifact_read",
+      input: { path: summary.researchPackPath, mode: "line", startLine: 1, lineCount: 160 },
+    } : null,
+    objectiveBoundary: "This handoff summary checks saved evidence-pack structure and routes only; it does not judge vulnerabilities or security impact.",
+  };
+}
+
 function inspectArtifactFile(params = {}) {
   const artifactPath = params.path || params.artifactPath;
   if (!artifactPath) throw new Error("path is required");
@@ -638,6 +677,16 @@ function inspectArtifactFile(params = {}) {
         harEntryCount: Array.isArray(parsed?.log?.entries) ? parsed.log.entries.length : null,
         traceEventCount: Array.isArray(parsed?.traceEvents) ? parsed.traceEvents.length : null,
       };
+      const handoff = summarizeResearchPackHandoff(parsed);
+      if (handoff) {
+        out.researchPackHandoff = handoff;
+        out.nextTools = [
+          "devtools_artifact_read path=<researchPackPath> mode=line",
+          "devtools_artifact_inspect path=<drilldownPlanPath>",
+          "devtools_artifact_index kind=<artifact-kind>",
+          ...handoff.nextTools,
+        ];
+      }
     } catch (error) {
       out.json = { ok: false, error: String(error?.message || error) };
     }

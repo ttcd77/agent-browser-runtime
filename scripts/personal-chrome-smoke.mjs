@@ -424,6 +424,13 @@ assert(researchPack.artifacts?.artifactIndex?.kinds?.["research-pack"] >= 1, `Pe
 assert(researchPack.drilldownPlan?.drilldowns?.some((entry) => entry.tool === "devtools_evidence_timeline"), "Personal Chrome security research pack missing evidence timeline drilldown");
 assert(researchPack.drilldownPlan?.planPath === researchPack.summary.drilldownPlanPath, "Personal Chrome security research pack drilldown path mismatch");
 assert(typeof researchPack.summary?.requestCount === "number", "Personal Chrome security research pack missing request count");
+const researchPackInspect = await callTool("devtools_artifact_inspect", {
+  path: researchPack.summary.researchPackPath,
+  maxBytes: 300000,
+});
+assert(researchPackInspect.researchPackHandoff?.ready === true, `Personal Chrome handoff inspect missing readiness summary: ${JSON.stringify(researchPackInspect.researchPackHandoff)}`);
+assert(researchPackInspect.researchPackHandoff?.agentEntryMode === "facade-first", "Personal Chrome handoff inspect missing agent route summary");
+assert(researchPackInspect.researchPackHandoff?.professionalPath?.includes("browser_security_pack"), "Personal Chrome handoff inspect missing professional facade path");
 
 const facadeInspect = await callTool("browser_inspect", {
   mode: "overview",
