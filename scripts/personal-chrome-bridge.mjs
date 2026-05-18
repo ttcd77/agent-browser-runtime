@@ -2976,6 +2976,20 @@ async function securityResearchPack(params = {}) {
     bytes: statSync(researchPackPath).size,
     sha256: sha256File(researchPackPath),
   };
+  artifacts.artifactIndex = await safeBridgeTool("devtools_artifact_index", { maxFiles: 200 });
+  summary.artifactFileCount = artifacts.artifactIndex?.totalFileCount ?? summary.artifactFileCount;
+  summary.artifactKinds = artifacts.artifactIndex?.kinds || null;
+  researchPackHandoff.summary = { ...summary, researchPackPath };
+  researchPackHandoff.artifactIndexSummary = {
+    totalFileCount: artifacts.artifactIndex?.totalFileCount ?? null,
+    kinds: artifacts.artifactIndex?.kinds || null,
+  };
+  writeFileSync(researchPackPath, `${JSON.stringify(researchPackHandoff, null, 2)}\n`, "utf8");
+  artifacts.researchPack = {
+    path: researchPackPath,
+    bytes: statSync(researchPackPath).size,
+    sha256: sha256File(researchPackPath),
+  };
   return {
     backend: "personal-chrome",
     generatedAt,

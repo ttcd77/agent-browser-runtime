@@ -10646,6 +10646,20 @@ function registerStandaloneBrowserTools(tools, cdpPort, profileRegistry, default
         bytes: statSync(researchPackPath).size,
         sha256: fileSha256(researchPackPath),
       };
+      artifacts.artifactIndex = await safeCall("devtools_artifact_index", { maxFiles: 200 });
+      summary.artifactFileCount = artifacts.artifactIndex?.totalFileCount ?? summary.artifactFileCount;
+      summary.artifactKinds = artifacts.artifactIndex?.kinds || null;
+      researchPackHandoff.summary = { ...summary, researchPackPath };
+      researchPackHandoff.artifactIndexSummary = {
+        totalFileCount: artifacts.artifactIndex?.totalFileCount ?? null,
+        kinds: artifacts.artifactIndex?.kinds || null,
+      };
+      writeFileSync(researchPackPath, `${JSON.stringify(researchPackHandoff, null, 2)}\n`, "utf8");
+      artifacts.researchPack = {
+        path: researchPackPath,
+        bytes: statSync(researchPackPath).size,
+        sha256: fileSha256(researchPackPath),
+      };
       return toolResult({
         backend: "managed-cdp",
         profile: profile.name,
