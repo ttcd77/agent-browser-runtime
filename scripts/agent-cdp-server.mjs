@@ -747,6 +747,7 @@ function inferArtifactKind(file) {
   if (value.includes("/traces/") || value.includes("chrome-trace") || value.includes("trace")) return "trace";
   if (value.includes("/screenshots/") || ["png", "jpg", "jpeg", "webp"].includes(ext)) return "screenshot";
   if (value.includes("/application/") || value.includes("application-export")) return "application";
+  if (value.includes("/f12-navigation/") || value.includes("f12-navigation")) return "f12-navigation";
   if (value.includes("/drilldowns/") || value.includes("research-pack-drilldowns")) return "drilldown-plan";
   if (value.includes("/research-packs/") || value.includes("security-research-pack")) return "research-pack";
   if (value.includes("/bundles/") || value.includes("evidence-bundle") || value.includes("f12-evidence")) return "bundle";
@@ -3286,10 +3287,16 @@ function buildProfessionalReadiness({
     read: { tool: "devtools_artifact_read", input: { path: latestResearchPack.path, mode: "line", startLine: 1, lineCount: 160 } },
   } : null;
   const firstF12RequestDetailPath = latestResearchPackSummary?.artifactPaths?.firstF12RequestDetailPath || null;
+  const f12NavigationPath = latestResearchPackSummary?.artifactPaths?.f12NavigationPath || null;
   const firstF12RequestDetailArtifact = firstF12RequestDetailPath ? {
     path: firstF12RequestDetailPath,
     inspect: { tool: "devtools_artifact_inspect", input: { path: firstF12RequestDetailPath, maxBytes: 120000 } },
     read: { tool: "devtools_artifact_read", input: { path: firstF12RequestDetailPath, mode: "line", startLine: 1, lineCount: 120 } },
+  } : null;
+  const f12NavigationArtifact = f12NavigationPath ? {
+    path: f12NavigationPath,
+    inspect: { tool: "devtools_artifact_inspect", input: { path: f12NavigationPath, maxBytes: 160000 } },
+    read: { tool: "devtools_artifact_read", input: { path: f12NavigationPath, mode: "line", startLine: 1, lineCount: 160 } },
   } : null;
   const checks = [
     {
@@ -3393,6 +3400,18 @@ function buildProfessionalReadiness({
   }
   const actionKey = (entry) => `${entry.tool}:${entry.input?.path || ""}:${entry.input?.requestId || ""}:${entry.input?.tracePath || ""}:${entry.input?.query || ""}`;
   const seenNextActions = new Set(nextActions.map(actionKey));
+  if (f12NavigationArtifact) {
+    const entry = {
+      tool: f12NavigationArtifact.inspect.tool,
+      input: f12NavigationArtifact.inspect.input,
+      why: "Inspect the standalone F12 navigation index saved by the latest research pack.",
+    };
+    const key = actionKey(entry);
+    if (!seenNextActions.has(key)) {
+      nextActions.push(entry);
+      seenNextActions.add(key);
+    }
+  }
   if (firstF12RequestDetailArtifact) {
     const entry = {
       tool: firstF12RequestDetailArtifact.inspect.tool,
@@ -3452,6 +3471,7 @@ function buildProfessionalReadiness({
     firstStep: nextActions[0] ? { tool: nextActions[0].tool, input: nextActions[0].input || {} } : null,
     latestHandoffInspect: latestResearchPackHandoff?.inspect || null,
     latestHandoffRead: latestResearchPackHandoff?.read || null,
+    f12NavigationArtifact,
     firstF12RequestDetailArtifact,
     firstF12RequestDetail: f12NavigationDrilldowns[0] ? {
       label: f12NavigationDrilldowns[0].label || null,
@@ -11467,6 +11487,14 @@ function registerStandaloneBrowserTools(tools, cdpPort, profileRegistry, default
       const drilldownPlan = buildResearchPackDrilldowns(artifacts, { profile: profile.name, evidenceDir: profile.evidenceDir });
       artifacts.drilldownPlan = drilldownPlan;
       const f12Navigation = buildResearchPackF12Navigation(artifacts, { profile: profile.name, limit });
+      const f12NavigationPath = join(profile.evidenceDir, "f12-navigation", `${Date.now()}-f12-navigation.json`);
+      mkdirSync(dirname(f12NavigationPath), { recursive: true });
+      writeFileSync(f12NavigationPath, `${JSON.stringify(f12Navigation, null, 2)}\n`, "utf8");
+      artifacts.f12Navigation = {
+        path: f12NavigationPath,
+        bytes: statSync(f12NavigationPath).size,
+        sha256: fileSha256(f12NavigationPath),
+      };
       const firstF12DetailRoute = f12Navigation.requests.find((row) => row?.detail)?.detail || null;
       const firstF12RequestDetail = firstF12DetailRoute
         ? summarizeF12RequestDetail(await safeCall(firstF12DetailRoute.tool, firstF12DetailRoute.input), firstF12DetailRoute)
@@ -11494,6 +11522,7 @@ function registerStandaloneBrowserTools(tools, cdpPort, profileRegistry, default
           artifacts.authBoundary?.reportPath,
           artifacts.workerFrame?.reportPath,
           artifacts.drilldownPlan?.planPath,
+          artifacts.f12Navigation?.path,
           firstF12RequestDetailArtifact?.path,
         ].filter(Boolean),
       });
@@ -11517,6 +11546,7 @@ function registerStandaloneBrowserTools(tools, cdpPort, profileRegistry, default
         authBoundaryReportPath: artifacts.authBoundary?.reportPath || null,
         workerFrameReportPath: artifacts.workerFrame?.reportPath || null,
         drilldownPlanPath: drilldownPlan.planPath || null,
+        f12NavigationPath: artifacts.f12Navigation?.path || null,
         firstF12RequestDetailPath: firstF12RequestDetailArtifact?.path || null,
         artifactFileCount: artifacts.artifactIndex?.totalFileCount ?? null,
         evidenceTimelineEventCount: artifacts.evidenceTimeline?.eventCount ?? null,
@@ -11563,6 +11593,7 @@ function registerStandaloneBrowserTools(tools, cdpPort, profileRegistry, default
           authBoundaryReportPath: summary.authBoundaryReportPath,
           workerFrameReportPath: summary.workerFrameReportPath,
           drilldownPlanPath: summary.drilldownPlanPath,
+          f12NavigationPath: summary.f12NavigationPath,
           firstF12RequestDetailPath: summary.firstF12RequestDetailPath,
         },
         agentEntryPoints,

@@ -887,3 +887,13 @@
 - `nextActions` 会包含该 artifact 的 `devtools_artifact_inspect` 下一步，Agent 不必先读完整 research pack 才能找到首个 F12 detail 摘要。
 - Managed Browser / Personal Chrome smoke 都覆盖该路线。
 - 该路线只是读取已保存证据文件，不重新判断请求是否异常。
+
+### 2026-05-18: F12 Navigation 独立证据文件完成
+
+已经完成:
+
+- Managed Browser / Personal Chrome 都会把 `f12Navigation` 额外写成独立 JSON artifact。
+- `summary.f12NavigationPath` 和 handoff `artifactPaths.f12NavigationPath` 会返回该文件路径。
+- artifact index 会把该文件归类为 `f12-navigation`，方便 Agent 直接读取“请求列表 -> request detail / section route”的导航表。
+- `devtools_professional_readiness.routeSummary.f12NavigationArtifact` 和 `nextActions` 会暴露该 artifact 的 inspect/read 路线。
+- 该文件只保存客观导航路线，不判断请求是否异常。

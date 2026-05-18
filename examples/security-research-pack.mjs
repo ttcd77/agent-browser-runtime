@@ -101,6 +101,7 @@ console.log(JSON.stringify({
     correlationGraphPath: pack.summary?.correlationGraphPath,
     authBoundaryReportPath: pack.summary?.authBoundaryReportPath,
     workerFrameReportPath: pack.summary?.workerFrameReportPath,
+    f12NavigationPath: pack.summary?.f12NavigationPath,
     firstF12RequestDetailPath: pack.summary?.firstF12RequestDetailPath,
     researchPackPath: pack.summary?.researchPackPath,
     drilldownPlanPath: pack.summary?.drilldownPlanPath,

@@ -249,6 +249,8 @@ try {
   assert(pack.summary?.f12ParityPanelCount >= 1, "professional pack missing F12 parity count");
   assert(pack.summary?.drilldownCount >= 3, "professional pack missing drilldown count");
   assert(pack.summary?.f12NavigationRequestCount >= 1, "professional pack summary missing F12 navigation count");
+  assert(pack.summary?.f12NavigationPath, "professional pack missing standalone F12 navigation path");
+  assert(pack.artifacts?.f12Navigation?.sha256, "professional pack missing standalone F12 navigation artifact hash");
   assert(pack.f12Navigation?.requestNodeCount >= 1, `professional pack missing F12 navigation: ${JSON.stringify(pack.f12Navigation)}`);
   assert(pack.f12Navigation?.requests?.some((row) => row.f12Columns?.name && row.detail?.tool === "devtools_request_detail"), "professional pack missing F12 navigation request detail route");
   assert(pack.firstF12RequestDetail?.sectionAvailability?.headers === true, `professional pack missing first F12 request headers detail: ${JSON.stringify(pack.firstF12RequestDetail)}`);
@@ -277,6 +279,7 @@ try {
   assert(pack.parityMatrix?.summary?.strongestBackend === "managed-cdp", "professional pack missing Managed Browser parity snapshot");
   assert(pack.artifacts?.artifactIndex?.totalFileCount >= 1, "professional pack missing artifact index payload");
   assert(pack.artifacts?.artifactIndex?.kinds?.["research-pack"] >= 1, `professional pack artifact index missing handoff kind: ${JSON.stringify(pack.artifacts?.artifactIndex?.kinds)}`);
+  assert(pack.artifacts?.artifactIndex?.kinds?.["f12-navigation"] >= 1, `professional pack artifact index missing f12-navigation kind: ${JSON.stringify(pack.artifacts?.artifactIndex?.kinds)}`);
   assert(pack.artifacts?.artifactIndex?.kinds?.["request-detail"] >= 1, `professional pack artifact index missing request-detail kind: ${JSON.stringify(pack.artifacts?.artifactIndex?.kinds)}`);
   assert(pack.artifacts?.evidenceTimeline?.eventCount >= 1, "professional pack missing evidence timeline payload");
   const finalReadiness = await callTool(baseUrl, "devtools_professional_readiness", {
@@ -298,6 +301,8 @@ try {
   assert(finalReadiness.evidenceEntrypoints?.workerFrameBoundary?.read?.tool === "devtools_artifact_read", `professional readiness missing worker/frame boundary entrypoint: ${JSON.stringify(finalReadiness.evidenceEntrypoints)}`);
   assert(finalReadiness.checks?.some((check) => check.name === "evidenceEntrypointsReachable" && check.present), `professional readiness missing evidence entrypoints check: ${JSON.stringify(finalReadiness.checks)}`);
   assert(finalReadiness.routeSummary?.latestHandoffInspect?.tool === "devtools_artifact_inspect", `professional readiness missing route handoff inspect: ${JSON.stringify(finalReadiness.routeSummary)}`);
+  assert(finalReadiness.routeSummary?.f12NavigationArtifact?.inspect?.tool === "devtools_artifact_inspect", `professional readiness missing F12 navigation artifact inspect route: ${JSON.stringify(finalReadiness.routeSummary)}`);
+  assert(finalReadiness.routeSummary?.f12NavigationArtifact?.path === pack.summary.f12NavigationPath, `professional readiness F12 navigation artifact path mismatch: ${JSON.stringify(finalReadiness.routeSummary)}`);
   assert(finalReadiness.routeSummary?.firstF12RequestDetailArtifact?.inspect?.tool === "devtools_artifact_inspect", `professional readiness missing first F12 request-detail artifact inspect route: ${JSON.stringify(finalReadiness.routeSummary)}`);
   assert(finalReadiness.routeSummary?.firstF12RequestDetailArtifact?.path === pack.summary.firstF12RequestDetailPath, `professional readiness first F12 request-detail artifact path mismatch: ${JSON.stringify(finalReadiness.routeSummary)}`);
   assert(finalReadiness.routeSummary?.firstF12RequestDetail?.tool === "devtools_request_detail", `professional readiness missing F12 navigation request-detail route: ${JSON.stringify(finalReadiness.routeSummary)}`);
@@ -328,6 +333,7 @@ try {
   assert(finalReadiness.recommendedRoute?.some((step) => step.tool === "devtools_artifact_index"), "professional readiness missing artifact index in recommended route");
   assert(finalReadiness.artifactDrilldowns?.some((entry) => entry.tool === "devtools_artifact_inspect" && entry.input?.path), "professional readiness missing artifact drilldown route");
   assert(finalReadiness.nextActions?.some((entry) => entry.tool === "devtools_artifact_inspect"), "professional readiness missing handoff inspect next action");
+  assert(finalReadiness.nextActions?.some((entry) => entry.tool === "devtools_artifact_inspect" && entry.input?.path === pack.summary.f12NavigationPath), "professional readiness missing F12 navigation artifact next action");
   assert(finalReadiness.nextActions?.some((entry) => entry.tool === "devtools_artifact_inspect" && entry.input?.path === pack.summary.firstF12RequestDetailPath), "professional readiness missing first F12 request-detail artifact next action");
   assert(finalReadiness.nextActions?.some((entry) => entry.tool === "devtools_request_detail" && entry.input?.requestId), "professional readiness missing research-pack request-detail next action");
   assert(finalReadiness.nextActions?.some((entry) => entry.tool === "devtools_artifact_read" && entry.input?.path), "professional readiness missing artifact-read next action");
@@ -379,6 +385,7 @@ try {
   assert(handoffInspect.researchPackHandoff?.recommendedRoute?.some((step) => step.tool === "browser_security_pack"), "professional handoff inspect missing recommended agent route");
   assert(handoffInspect.researchPackHandoff?.panelRoutes?.network?.some((step) => step.tool === "devtools_request_detail"), "professional handoff inspect missing network panel route");
   assert(handoffInspect.researchPackHandoff?.f12Navigation?.requestNodeCount >= 1, "professional handoff inspect missing F12 navigation");
+  assert(handoffInspect.researchPackHandoff?.artifactPaths?.f12NavigationPath, "professional handoff inspect missing F12 navigation artifact path");
   assert(handoffInspect.researchPackHandoff?.firstF12RequestDetail?.sectionAvailability?.headers === true, "professional handoff inspect missing first F12 request detail summary");
   assert(handoffInspect.researchPackHandoff?.artifactPaths?.firstF12RequestDetailPath, "professional handoff inspect missing first F12 request detail artifact path");
   assert(handoffInspect.researchPackHandoff?.objectiveBoundary?.includes("does not judge vulnerabilities"), "professional handoff inspect crossed objective boundary");

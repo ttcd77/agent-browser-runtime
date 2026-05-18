@@ -71,6 +71,8 @@ Typical output includes:
   `present`, `skipped`, or `missing`,
 - `f12Navigation`, a deterministic index from captured request nodes to
   `devtools_request_detail` plus F12 request sections,
+- `summary.f12NavigationPath`, a standalone JSON artifact for the same F12
+  navigation index, indexed as `f12-navigation` for direct agent handoff,
 - `firstF12RequestDetail`, a compact objective summary of the first captured
   request's F12 detail sections, including section availability, header names,
   payload/body availability, cookie counts, timing, initiator, redirects, and
@@ -131,9 +133,9 @@ Transport boundaries:
 2. Call `devtools_security_research_pack`.
 3. Read `summary` and `steps`.
 4. Open the saved evidence bundle and manifest.
-5. Use `summary.firstF12RequestDetailPath`, `f12Navigation`, or readiness
-   `routeSummary.firstF12RequestDetail` for the first concrete request-detail
-   drill-down.
+5. Use `summary.f12NavigationPath`, `summary.firstF12RequestDetailPath`,
+   `f12Navigation`, or readiness `routeSummary.firstF12RequestDetail` for the
+   first concrete request-detail drill-down.
 6. Use the correlation graph and auth boundary report to choose deeper
    drill-down.
 7. Drill down with `devtools_request_detail`, `devtools_request_payload`,
