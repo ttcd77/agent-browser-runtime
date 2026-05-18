@@ -2355,6 +2355,11 @@ function buildProfessionalReadiness({
     inspect: artifact.inspectInput ? { tool: "devtools_artifact_inspect", input: artifact.inspectInput } : null,
     read: artifact.readInput ? { tool: "devtools_artifact_read", input: artifact.readInput } : null,
   }])) : null;
+  const evidenceEntrypoints = latestArtifacts ? {
+    correlationGraph: latestArtifacts.graph || null,
+    authBoundary: latestArtifacts["auth-boundary"] || null,
+    workerFrameBoundary: latestArtifacts.boundary || null,
+  } : null;
   const timelineCount = evidenceTimeline?.eventCount ?? evidenceTimeline?.summary?.eventCount ?? null;
   const timelineTypes = evidenceTimeline?.byType || evidenceTimeline?.summary?.byType || null;
   const parityRows = Array.isArray(parityMatrix?.rows) ? parityMatrix.rows : [];
@@ -2468,6 +2473,11 @@ function buildProfessionalReadiness({
       evidence: latestArtifacts ? Object.keys(latestArtifacts) : null,
     },
     {
+      name: "evidenceEntrypointsReachable",
+      present: artifactIndex === null || Boolean(!artifactIndex.unavailable && !artifactIndex.error && evidenceEntrypoints && (evidenceEntrypoints.correlationGraph || evidenceEntrypoints.authBoundary || evidenceEntrypoints.workerFrameBoundary)),
+      evidence: evidenceEntrypoints ? Object.keys(evidenceEntrypoints).filter((key) => evidenceEntrypoints[key]) : null,
+    },
+    {
       name: "artifactDrilldownsReachable",
       present: artifactIndex === null || artifactDrilldowns.length > 0,
       evidence: artifactDrilldowns.map((entry) => entry.tool),
@@ -2557,6 +2567,7 @@ function buildProfessionalReadiness({
     artifactCount,
     artifactKinds,
     latestArtifacts,
+    evidenceEntrypoints,
     timelineEventCount: timelineCount,
     timelineTypes,
     f12Coverage,

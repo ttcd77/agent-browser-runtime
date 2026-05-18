@@ -372,6 +372,16 @@
 - Personal Chrome smoke 覆盖完成后的 ready/evidenceReady/research-pack/artifact kinds。
 - 这只是 readiness 的低 token 路由摘要，不读取证据正文、不判断漏洞。
 
+### 2026-05-18: Readiness Evidence Entrypoints
+
+已经完成:
+
+- `devtools_professional_readiness` / `personal_chrome_professional_readiness` 现在返回 `evidenceEntrypoints`。
+- Agent 可以从 readiness 直接进入最新 correlation graph、auth boundary report、worker/frame boundary report。
+- readiness 新增 `evidenceEntrypointsReachable` 机械检查。
+- Managed Professional smoke 和 Personal Chrome smoke 都已覆盖 graph / auth boundary / worker-frame boundary 三类入口。
+- 这只是保存证据的导航入口，不读取正文、不判断漏洞。
+
 ### 2026-05-18: Professional Readiness Tool
 
 已经完成:
