@@ -66,6 +66,12 @@ printSummary({
     missing: [],
     skipped: ["trace"],
   },
+  professionalReadiness: {
+    ready: true,
+    evidenceReady: true,
+    missing: [],
+    nextActions: [{ tool: "devtools_workflow_guide" }],
+  },
   drilldownPlan: {
     drilldowns: [{ label: "Request detail", tool: "devtools_request_detail" }],
   },
@@ -78,6 +84,9 @@ assert(output.includes("present: 7"), "summary missing handoff present count");
 assert(output.includes("missing: (none)"), "summary missing handoff missing list");
 assert(output.includes("- artifact coverage ready: true"), "summary missing artifact coverage readiness");
 assert(output.includes("skipped: trace"), "summary missing artifact coverage skipped list");
+assert(output.includes("- professional readiness: true"), "summary missing professional readiness");
+assert(output.includes("evidence ready: true"), "summary missing professional evidence readiness");
+assert(output.includes("next action: devtools_workflow_guide"), "summary missing readiness next action");
 assert(output.includes("browser_open -> browser_capture -> browser_inspect -> browser_security_pack -> drilldownPlan"), "summary missing workflow path");
 assert(output.includes("- capture:"), "summary missing capture section");
 assert(output.includes("trafficCount: 2"), "summary missing capture traffic count");

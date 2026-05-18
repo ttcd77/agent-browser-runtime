@@ -154,6 +154,7 @@
 - 返回 `nextActions`，例如先开启 `browser_capture` 或生成 `browser_security_pack`。
 - readiness 只报告工作流和证据可用性，不判断漏洞或安全影响。
 - Managed Browser 和 Personal Chrome 合同保持一致，当前 `devtools_*` 合同为 100 / 100。
+- `npm run research:pack` CLI 已接入 readiness，生成证据包后会额外打印 professional readiness、evidence readiness、missing 和下一步工具。
 
 ### 2026-05-18: F12 Parity Matrix
 

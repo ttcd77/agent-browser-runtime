@@ -72,6 +72,11 @@ The saved paths are local files under the selected profile evidence directory.
 They are intentionally not hidden behind a UI because agents need direct,
 machine-readable artifacts.
 
+The CLI shortcut also calls `devtools_professional_readiness` after the pack is
+created. This gives the agent a separate mechanical check for workflow,
+capture, artifact inventory, and evidence timeline readiness. It is still only
+an evidence-readiness check, not a vulnerability judgment.
+
 ## Why This Helps Security Research
 
 Security research usually fails when weak signals are missed or when the

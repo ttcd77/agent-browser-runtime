@@ -138,6 +138,16 @@ export function printSummary(pack, output = console.log) {
     output(`  - missing: ${Array.isArray(missing) && missing.length ? missing.join(", ") : "(none)"}`);
     output(`  - skipped: ${Array.isArray(skipped) && skipped.length ? skipped.join(", ") : "(none)"}`);
   }
+  if (pack.professionalReadiness) {
+    const readiness = pack.professionalReadiness;
+    output(`- professional readiness: ${readiness.ready ?? "(unknown)"}`);
+    output(`  - evidence ready: ${readiness.evidenceReady ?? "(unknown)"}`);
+    const missing = readiness.missing || [];
+    output(`  - missing: ${Array.isArray(missing) && missing.length ? missing.join(", ") : "(none)"}`);
+    if (Array.isArray(readiness.nextActions) && readiness.nextActions.length) {
+      output(`  - next action: ${readiness.nextActions[0].tool}`);
+    }
+  }
   if (workflow.task || Array.isArray(workflow.defaultPath)) {
     output(`- workflow: ${workflow.task || "(unknown)"}`);
     if (Array.isArray(workflow.defaultPath)) output(`  - path: ${workflow.defaultPath.join(" -> ")}`);
@@ -198,6 +208,17 @@ async function main(argv = process.argv.slice(2)) {
     includeApplicationExport: args.includeApplicationExport,
     includeTokenScan: args.includeTokenScan,
   });
+  try {
+    pack.professionalReadiness = await callTool(server, "devtools_professional_readiness", {
+      profile: args.personal ? undefined : args.profile,
+    });
+  } catch (error) {
+    pack.professionalReadiness = {
+      unavailable: true,
+      error: String(error?.message || error),
+      objectiveBoundary: "Readiness check failed separately from the research pack; this does not change the captured evidence.",
+    };
+  }
 
   if (args.json) {
     console.log(JSON.stringify(pack, null, 2));
