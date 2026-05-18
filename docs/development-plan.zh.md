@@ -436,6 +436,15 @@
 - Managed Professional smoke 和 Personal Chrome smoke 都已覆盖 workflow guide route template。
 - 这是专业工作流的无状态路线模板；当前证据接手仍以 readiness `routeSummary` 为准，不读取证据正文、不判断漏洞。
 
+### 2026-05-18: Browser Inspect Professional Route Template
+
+已经完成:
+
+- `browser_inspect` / `agent_inspect` 返回的 `professionalWorkflow` 现在包含 `routeSummaryTemplate`。
+- Agent 第一屏只调用 facade inspect 时，也能看到 readiness、security pack、handoff inspect/read 和 first concrete drilldown 的接手路线。
+- Managed Professional smoke 和 Personal Chrome smoke 都已覆盖 facade inspect route template。
+- 这仍然只是无状态路线模板；当前证据接手以 readiness `routeSummary` 为准，不读取证据正文、不判断漏洞。
+
 ### 2026-05-18: Professional Readiness Tool
 
 已经完成:

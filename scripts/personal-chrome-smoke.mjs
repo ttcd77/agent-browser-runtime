@@ -445,6 +445,8 @@ const facadeInspect = await callTool("browser_inspect", {
 });
 assert(facadeInspect.facade === "browser_inspect", `Personal Chrome browser_inspect facade marker missing: ${JSON.stringify(facadeInspect)}`);
 assert(facadeInspect.result?.focus === "overview", "Personal Chrome browser_inspect did not route to agent_inspect overview");
+assert(facadeInspect.result?.professionalWorkflow?.routeSummaryTemplate?.firstStep?.tool === "devtools_professional_readiness", "Personal Chrome browser_inspect missing route template first step");
+assert(facadeInspect.result?.professionalWorkflow?.routeSummaryTemplate?.evidencePack?.tool === "browser_security_pack", "Personal Chrome browser_inspect missing route template evidence pack");
 const facadeCapture = await callTool("browser_capture", {
   action: "status",
 });

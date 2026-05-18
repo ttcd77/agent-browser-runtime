@@ -3663,6 +3663,13 @@ function professionalAppsecWorkflowSummary() {
     guideInput: { task: "professional-appsec" },
     readinessTool: "devtools_professional_readiness",
     readinessInput: {},
+    routeSummaryTemplate: {
+      firstStep: { tool: "devtools_professional_readiness", input: {} },
+      evidencePack: { tool: "browser_security_pack", input: { includeHar: true, includeTrace: true, includeApplicationExport: true } },
+      latestHandoffInspect: { tool: "devtools_artifact_inspect", input: { path: "<researchPackPath>" } },
+      latestHandoffRead: { tool: "devtools_artifact_read", input: { path: "<researchPackPath>", mode: "line", startLine: 1, maxLines: 120 } },
+      firstConcreteDrilldown: "Use devtools_professional_readiness.routeSummary.firstConcreteDrilldown after evidence exists.",
+    },
     firstInterface: "browser_* facade tools",
     drilldownBoundary: "Use devtools_* or browser_raw only after the facade returns concrete evidence or a drilldown route.",
     objectiveBoundary: "The workflow collects and routes F12 evidence; it does not classify vulnerabilities.",

@@ -221,6 +221,8 @@ try {
   assert(firstInspect.result?.toolPlan?.firstPass?.length >= 1, "professional browser_inspect missing first-pass tool plan");
   assert(firstInspect.result?.professionalWorkflow?.defaultPath?.join(" -> ") === "browser_open -> browser_capture -> browser_inspect -> browser_security_pack -> drilldownPlan", "professional browser_inspect missing professional workflow summary");
   assert(firstInspect.result?.professionalWorkflow?.readinessTool === "devtools_professional_readiness", "professional browser_inspect missing readiness tool route");
+  assert(firstInspect.result?.professionalWorkflow?.routeSummaryTemplate?.firstStep?.tool === "devtools_professional_readiness", "professional browser_inspect missing route template first step");
+  assert(firstInspect.result?.professionalWorkflow?.routeSummaryTemplate?.evidencePack?.tool === "browser_security_pack", "professional browser_inspect missing route template evidence pack");
   assert(firstInspect.result?.professionalWorkflow?.objectiveBoundary?.includes("does not classify vulnerabilities"), "professional browser_inspect workflow summary crossed objective-tool boundary");
   const captureStatus = await callTool(baseUrl, "browser_capture", {
     profile: "professional",
