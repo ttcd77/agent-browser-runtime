@@ -43,7 +43,7 @@
     "smoke:professional": "npm run build && node scripts/professional-appsec-smoke.mjs",
     "research:pack": "node scripts/security-research-pack-cli.mjs",
     "check": "npm run build && npm run test",
-    "check:devtools": "npm run contract:devtools && npm run smoke:f12 && npm run smoke:personal",
+    "check:devtools": "npm run contract:devtools && npm run smoke:f12 && npm run smoke:personal && npm run smoke:professional",
     "check:full": "npm run check && npm run check:devtools",
     "release:readiness": "node scripts/open-source-readiness.mjs",
     "check:release": "npm run release:readiness && npm run check:full",

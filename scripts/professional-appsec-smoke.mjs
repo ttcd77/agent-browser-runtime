@@ -174,6 +174,29 @@ try {
     url: fixture.url,
     waitMs: 1200,
   });
+  const capabilityMap = await callTool(baseUrl, "devtools_capability_map", {
+    profile: "professional",
+  });
+  assert(capabilityMap.panels?.some((panel) => panel.category === "network"), "professional capability map missing Network route");
+  assert(capabilityMap.panels?.some((panel) => panel.category === "evidence-workflow"), "professional capability map missing Evidence route");
+  assert(capabilityMap.panels?.some((panel) => panel.category === "sources-debugger"), "professional capability map missing Sources route");
+  const workflowGuide = await callTool(baseUrl, "devtools_workflow_guide", {
+    profile: "professional",
+    task: "auth-boundary",
+  });
+  assert(workflowGuide.steps?.some((step) => step.tool === "devtools_auth_boundary_report"), "professional workflow guide missing auth boundary step");
+  const firstInspect = await callTool(baseUrl, "browser_inspect", {
+    profile: "professional",
+    mode: "overview",
+    limit: 8,
+  });
+  assert(firstInspect.facade === "browser_inspect", "professional browser_inspect facade marker missing");
+  assert(firstInspect.result?.toolPlan?.firstPass?.length >= 1, "professional browser_inspect missing first-pass tool plan");
+  const captureStatus = await callTool(baseUrl, "browser_capture", {
+    profile: "professional",
+    action: "status",
+  });
+  assert(captureStatus.facade === "browser_capture", "professional browser_capture facade marker missing");
   const pack = await callTool(baseUrl, "devtools_security_research_pack", {
     profile: "professional",
     url: fixture.url,
@@ -202,6 +225,21 @@ try {
   assert(pack.artifacts?.evidenceTimeline?.eventCount >= 1, "professional pack missing evidence timeline payload");
   assert(pack.drilldownPlan?.drilldowns?.some((entry) => entry.tool === "devtools_request_detail"), "professional pack missing request-detail drilldown");
   assert(pack.drilldownPlan?.planPath === pack.summary.drilldownPlanPath, "professional pack drilldown path mismatch");
+  const handoffPreview = await callTool(baseUrl, "devtools_artifact_read", {
+    profile: "professional",
+    path: pack.summary.researchPackPath,
+    mode: "line",
+    startLine: 1,
+    maxLines: 80,
+  });
+  assert(handoffPreview.contentText?.includes("security-research-pack-handoff"), "professional handoff preview missing schema marker");
+  const drilldownPreview = await callTool(baseUrl, "devtools_artifact_inspect", {
+    profile: "professional",
+    path: pack.summary.drilldownPlanPath,
+    maxBytes: 12000,
+  });
+  assert(drilldownPreview.json?.ok === true, "professional drilldown plan did not parse as JSON");
+  assert(drilldownPreview.previewText?.includes("devtools_request_detail"), "professional drilldown preview missing request detail route");
 
   const parity = await callTool(baseUrl, "devtools_f12_parity_matrix", { profile: "professional" });
   assert(parity.summary?.strongestBackend === "managed-cdp", "parity matrix should point to Managed Browser as strongest backend");
@@ -243,6 +281,17 @@ try {
   });
   const sourceMapEntries = sourceMaps.results?.flatMap((entry) => entry.sources || []) || [];
   assert(sourceMapEntries.some((entry) => String(entry.source || "").includes("appsec-fixture")), `professional fixture missing source map evidence: ${JSON.stringify(sourceMaps)}`);
+  const sourceSearch = await callTool(baseUrl, "devtools_sources_search", {
+    profile: "professional",
+    query: "loadProfile",
+    reload: true,
+    ignoreCache: true,
+    waitMs: 800,
+    maxMatches: 10,
+  });
+  assert(sourceSearch.matchCount >= 1, `professional source search missing loadProfile marker: ${JSON.stringify(sourceSearch)}`);
+  assert(sourceSearch.recommendedDrilldowns?.some((entry) => entry.tool === "devtools_source_get"), "professional source search missing source_get drilldown");
+  assert(sourceSearch.recommendedDrilldowns?.some((entry) => entry.tool === "devtools_source_pretty_print"), "professional source search missing pretty-print drilldown");
 
   const artifactIndex = await callTool(baseUrl, "devtools_artifact_index", {
     profile: "professional",
@@ -265,6 +314,8 @@ try {
   console.log(`- Drilldown plan: ${pack.summary.drilldownPlanPath}`);
   console.log(`- Research pack handoff: ${pack.summary.researchPackPath}`);
   console.log(`- F12 parity rows: ${parity.summary.panelCount}`);
+  console.log(`- capability panels: ${capabilityMap.panelCount}`);
+  console.log(`- source search drilldowns: ${sourceSearch.recommendedDrilldowns.length}`);
   console.log(`- artifact files: ${artifactIndex.totalFileCount}`);
 } finally {
   await fetch(`http://127.0.0.1:${serverPort}/shutdown`, { method: "POST" }).catch(() => {});
