@@ -182,6 +182,11 @@ workflow, F12 parity map, capture status, artifact inventory, and evidence
 timeline are mechanically ready before continuing. It returns next tool calls;
 it does not classify vulnerabilities.
 
+When evidence already exists, read `routeSummary` first. It compresses the
+handoff path into the first step, latest handoff inspect/read commands, first
+concrete drilldown, and evidence entrypoint count. This is the fastest way for a
+new agent to resume work without scanning every tool or artifact.
+
 `browser_inspect` / `agent_inspect` also return this professional workflow
 summary, so a first-screen agent call can route itself without scanning the full
 tool catalog.
@@ -260,8 +265,8 @@ npm run research:pack -- --url https://example.com --profile researcher
 
 The CLI prints key artifact paths plus the professional workflow, agent entry
 route, handoff readiness, artifact coverage, professional readiness, capture
-status, artifact kind counts, and handoff read/inspect commands. Use `--json`
-when an agent or script needs the full response.
+status, artifact kind counts, route summary, and handoff read/inspect commands.
+Use `--json` when an agent or script needs the full response.
 
 Runnable example:
 

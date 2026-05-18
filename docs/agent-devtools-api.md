@@ -116,6 +116,19 @@ Tool usability helpers:
 - `devtools_workflow_guide`: return deterministic tool recipes for common tasks.
 - `devtools_professional_readiness`: report whether the professional evidence workflow is mechanically ready, which evidence pieces are present, and which objective tool to call next.
 
+`devtools_professional_readiness` also returns `routeSummary`. Agents should use
+it as the low-token resume map after evidence exists:
+
+- `firstStep`: the next deterministic tool call.
+- `latestHandoffInspect` / `latestHandoffRead`: bounded artifact commands for
+  the latest research-pack handoff.
+- `firstConcreteDrilldown`: the first drilldown with concrete input such as
+  `requestId`, `path`, or `tracePath`.
+- `artifactEntrypointCount`: how many high-level evidence entrypoints are ready.
+
+These fields are routing metadata only. They do not inspect artifact content and
+do not judge security impact.
+
 ## Unified Tools
 
 Page operation:

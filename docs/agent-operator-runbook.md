@@ -43,6 +43,11 @@ curl -X POST http://127.0.0.1:17335/tool/devtools_professional_readiness \
 This reports mechanical workflow/evidence readiness and next tool calls. It is
 not a vulnerability or impact assessment.
 
+If `routeSummary` is present, use it before scanning `nextActions` or the full
+artifact index. It gives the first step, latest handoff inspect/read commands,
+the first concrete drilldown, and the number of high-level evidence entrypoints.
+It is routing metadata only, not analysis.
+
 The same readiness tool is also listed by `devtools_workflow_guide` for
 `task="professional-appsec"` and by the `professionalWorkflow` summary returned
 from `browser_inspect`.
@@ -173,7 +178,9 @@ npm run check:professional
 
 This calls `devtools_security_research_pack` and prints local artifact paths,
 the workflow used, capture status, artifact kind counts, handoff readiness, and
-first drill-down tools. Use `--json` for the full response.
+first drill-down tools. It also prints the readiness route summary so the next
+agent can immediately inspect the latest handoff or run the first concrete
+drilldown. Use `--json` for the full response.
 
 When reading a returned pack, check these fields before deeper analysis:
 
@@ -185,6 +192,9 @@ When reading a returned pack, check these fields before deeper analysis:
 - `summary.researchPackPath`: the saved cross-session handoff JSON.
 - `summary.drilldownPlanPath`: deterministic next tool routes.
 - `summary.capture`: final capture status and observed traffic count.
+- `professionalReadiness.routeSummary`: the low-token resume map, including the
+  first step, latest handoff inspect/read commands, first concrete drilldown, and
+  evidence entrypoint count.
 
 Read the handoff file with bounded artifact tools instead of loading every
 artifact into context:

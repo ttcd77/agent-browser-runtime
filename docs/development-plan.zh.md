@@ -400,6 +400,15 @@
 - `smoke:cli` 已覆盖这些输出，保证命令行交接不会丢失 Agent 接手路线。
 - 这只是命令行路线摘要，不读取证据正文、不判断漏洞。
 
+### 2026-05-18: Route Summary Documentation Gate
+
+已经完成:
+
+- README、`docs/agent-devtools-api.md` 和 `docs/agent-operator-runbook.md` 现在都说明 `routeSummary` 的用途。
+- `scripts/open-source-readiness.mjs` 新增门禁，要求 README/API/runbook 持续保留 routeSummary 说明。
+- Agent 接手顺序更明确: 先读 readiness `routeSummary`，再按需读 `nextActions`、artifact index 或完整 handoff。
+- 这只是使用说明和发布门禁，不改变证据采集逻辑、不判断漏洞。
+
 ### 2026-05-18: Professional Readiness Tool
 
 已经完成:
