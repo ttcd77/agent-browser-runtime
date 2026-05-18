@@ -158,6 +158,7 @@
 - `devtools_workflow_guide task=professional-appsec` 和 `browser_inspect` 返回的 `professionalWorkflow` 现在都会显式暴露 `devtools_professional_readiness`，让 Agent 可以在开始和生成证据包后都做机械 readiness 检查。
 - `examples/security-research-pack.mjs` 已升级为专业示例，输出前后 readiness、handoff、artifact coverage 和首批 drilldown routes。
 - 新增 `npm run smoke:example`，自动启动 Managed Browser 和本地 fixture，真实运行 `examples/security-research-pack.mjs` 并验证 readiness、handoff、artifact coverage 和 drilldown 输出。
+- `npm run check:professional` 已纳入 `smoke:example`，专业门禁现在会真实运行公开示例，避免示例和主线能力漂移。
 
 ### 2026-05-18: F12 Parity Matrix
 

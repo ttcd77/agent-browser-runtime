@@ -107,6 +107,9 @@ Professional evidence-runtime gate:
 npm run check:professional
 ```
 
+This gate runs the build, schema tests, CLI handoff smoke, DevTools contract,
+F12 smoke, professional workflow smoke, and runnable example smoke.
+
 Open-source readiness gate:
 
 ```bash
@@ -274,6 +277,9 @@ Example smoke:
 ```bash
 npm run smoke:example
 ```
+
+`npm run check:professional` includes this example smoke so the public agent
+workflow stays executable, not just documented.
 
 ## Tools
 
