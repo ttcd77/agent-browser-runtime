@@ -274,6 +274,9 @@ try {
   assert(finalReadiness.evidenceEntrypoints?.authBoundary?.read?.tool === "devtools_artifact_read", `professional readiness missing auth boundary entrypoint: ${JSON.stringify(finalReadiness.evidenceEntrypoints)}`);
   assert(finalReadiness.evidenceEntrypoints?.workerFrameBoundary?.read?.tool === "devtools_artifact_read", `professional readiness missing worker/frame boundary entrypoint: ${JSON.stringify(finalReadiness.evidenceEntrypoints)}`);
   assert(finalReadiness.checks?.some((check) => check.name === "evidenceEntrypointsReachable" && check.present), `professional readiness missing evidence entrypoints check: ${JSON.stringify(finalReadiness.checks)}`);
+  assert(finalReadiness.routeSummary?.latestHandoffInspect?.tool === "devtools_artifact_inspect", `professional readiness missing route handoff inspect: ${JSON.stringify(finalReadiness.routeSummary)}`);
+  assert(finalReadiness.routeSummary?.firstConcreteDrilldown?.tool === "devtools_request_detail", `professional readiness missing route concrete request drilldown: ${JSON.stringify(finalReadiness.routeSummary)}`);
+  assert(finalReadiness.routeSummary?.artifactEntrypointCount >= 3, `professional readiness missing route entrypoint count: ${JSON.stringify(finalReadiness.routeSummary)}`);
   assert(finalReadiness.timelineEventCount >= 1, "professional readiness missing timeline count after pack");
   assert(finalReadiness.timelineTypes?.artifact >= 1 || finalReadiness.timelineTypes?.["network-request"] >= 1, `professional readiness missing timeline type distribution: ${JSON.stringify(finalReadiness.timelineTypes)}`);
   assert(finalReadiness.f12Coverage?.panelCount >= 8, `professional readiness missing F12 coverage summary: ${JSON.stringify(finalReadiness.f12Coverage)}`);

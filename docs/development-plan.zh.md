@@ -382,6 +382,15 @@
 - Managed Professional smoke 和 Personal Chrome smoke 都已覆盖 graph / auth boundary / worker-frame boundary 三类入口。
 - 这只是保存证据的导航入口，不读取正文、不判断漏洞。
 
+### 2026-05-18: Readiness Route Summary
+
+已经完成:
+
+- `devtools_professional_readiness` / `personal_chrome_professional_readiness` 现在返回 `routeSummary`。
+- Agent 可以从 readiness 直接看到第一步工具、最新 research-pack inspect/read、首个具体 drilldown、nextAction tool 列表和入口数量。
+- Managed Professional smoke 和 Personal Chrome smoke 都已覆盖 latest handoff inspect、first concrete request drilldown 和 artifact entrypoint count。
+- 这只是路线摘要，不读取证据正文、不判断漏洞。
+
 ### 2026-05-18: Professional Readiness Tool
 
 已经完成:

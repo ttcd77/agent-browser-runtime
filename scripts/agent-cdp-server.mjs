@@ -3239,6 +3239,25 @@ function buildProfessionalReadiness({
     input: { task: "professional-appsec" },
     why: "Re-read the deterministic workflow if the agent needs the full route.",
   });
+  const isConcreteDrilldown = (entry) => {
+    const input = entry?.input || {};
+    return Boolean(input.requestId || input.path || input.tracePath || input.query);
+  };
+  const firstConcreteDrilldown = researchPackDrilldowns.find((entry) => entry?.tool && isConcreteDrilldown(entry)) || null;
+  const routeSummary = {
+    firstStep: nextActions[0] ? { tool: nextActions[0].tool, input: nextActions[0].input || {} } : null,
+    latestHandoffInspect: latestResearchPackHandoff?.inspect || null,
+    latestHandoffRead: latestResearchPackHandoff?.read || null,
+    firstConcreteDrilldown: firstConcreteDrilldown ? {
+      label: firstConcreteDrilldown.label || null,
+      tool: firstConcreteDrilldown.tool,
+      input: firstConcreteDrilldown.input || {},
+    } : null,
+    nextActionTools: nextActions.map((entry) => entry.tool),
+    artifactEntrypointCount: evidenceEntrypoints ? Object.values(evidenceEntrypoints).filter(Boolean).length : 0,
+    researchPackDrilldownCount: researchPackDrilldowns.length,
+    artifactDrilldownCount: artifactDrilldowns.length,
+  };
   const readinessSummary = {
     ready: missing.length === 0,
     evidenceReady: Boolean(artifactCount && timelineCount),
@@ -3257,6 +3276,7 @@ function buildProfessionalReadiness({
     profile,
     generatedAt: new Date().toISOString(),
     summary: readinessSummary,
+    routeSummary,
     ready: missing.length === 0,
     evidenceReady: Boolean(artifactCount && timelineCount),
     checks,
