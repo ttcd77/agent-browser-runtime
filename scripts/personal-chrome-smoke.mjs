@@ -594,6 +594,9 @@ assert(parityMatrix.rows?.some((row) => row.panel === "Raw CDP / Escape Hatch" &
 assert(parityMatrix.objectiveBoundaries?.some((entry) => String(entry).includes("does not classify vulnerabilities")), "Personal Chrome F12 parity matrix missing objective boundary");
 const professionalReadiness = await callTool("devtools_professional_readiness", {});
 assert(professionalReadiness.backend === "personal-chrome", `Personal Chrome professional readiness wrong backend: ${JSON.stringify(professionalReadiness)}`);
+assert(professionalReadiness.summary?.ready === true && professionalReadiness.summary?.evidenceReady === true, `Personal Chrome professional readiness summary not ready: ${JSON.stringify(professionalReadiness.summary)}`);
+assert(professionalReadiness.summary?.latestResearchPackReady === true, `Personal Chrome professional readiness summary missing research-pack readiness: ${JSON.stringify(professionalReadiness.summary)}`);
+assert(professionalReadiness.summary?.latestArtifactKinds?.includes("har"), `Personal Chrome professional readiness summary missing latest artifact kinds: ${JSON.stringify(professionalReadiness.summary)}`);
 assert(professionalReadiness.workflowPath?.includes("browser_security_pack"), `Personal Chrome professional readiness missing workflow path: ${JSON.stringify(professionalReadiness)}`);
 assert(professionalReadiness.checks?.some((check) => check.name === "f12ParityMatrix" && check.present), `Personal Chrome professional readiness missing parity check: ${JSON.stringify(professionalReadiness.checks)}`);
 assert(professionalReadiness.checks?.some((check) => check.name === "agentUsageRoute" && check.present), `Personal Chrome professional readiness missing agent usage route check: ${JSON.stringify(professionalReadiness.checks)}`);

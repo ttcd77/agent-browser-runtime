@@ -361,6 +361,17 @@
 - Managed Professional smoke 和 Personal Chrome smoke 都已覆盖 HAR 与 research-pack 最新指针。
 - 这只是 artifact 导航元数据，不读取正文、不判断漏洞。
 
+### 2026-05-18: Readiness Low-Token Summary
+
+已经完成:
+
+- `devtools_professional_readiness` / `personal_chrome_professional_readiness` 现在返回 `summary`。
+- summary 压缩暴露 ready、evidenceReady、missingCount、captureEnabled、artifactCount、timelineEventCount、latestResearchPackReady、latestArtifactKinds、nextTool 和 nextActionCount。
+- Agent 可以先读 summary 决定下一步，再按需读取 checks、nextActions、latestArtifacts 或 researchPackDrilldowns。
+- Managed Professional smoke 覆盖初始 nextTool 和完成后的 ready/evidenceReady/research-pack/artifact kinds。
+- Personal Chrome smoke 覆盖完成后的 ready/evidenceReady/research-pack/artifact kinds。
+- 这只是 readiness 的低 token 路由摘要，不读取证据正文、不判断漏洞。
+
 ### 2026-05-18: Professional Readiness Tool
 
 已经完成:

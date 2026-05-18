@@ -198,6 +198,7 @@ try {
   assert(initialReadiness.checks?.some((check) => check.name === "agentUsageRoute" && check.present), `professional readiness missing agent usage route check: ${JSON.stringify(initialReadiness.checks)}`);
   assert(initialReadiness.recommendedRoute?.some((step) => step.tool === "browser_security_pack"), `professional readiness missing recommended route: ${JSON.stringify(initialReadiness.recommendedRoute)}`);
   assert(initialReadiness.panelRoutes?.network?.some((step) => step.tool === "devtools_request_detail"), "professional readiness missing network panel route");
+  assert(initialReadiness.summary?.nextTool === "browser_capture", `professional initial readiness summary missing capture next tool: ${JSON.stringify(initialReadiness.summary)}`);
   assert(initialReadiness.nextActions?.some((entry) => entry.tool === "browser_security_pack"), `professional readiness missing evidence-pack next action: ${JSON.stringify(initialReadiness.nextActions)}`);
   assert(initialReadiness.objectiveBoundary?.includes("does not judge vulnerabilities"), "professional readiness crossed objective boundary");
   const firstInspect = await callTool(baseUrl, "browser_inspect", {
@@ -261,6 +262,9 @@ try {
   });
   assert(finalReadiness.ready === true, `professional readiness not mechanically ready after pack: ${JSON.stringify(finalReadiness.missing)}`);
   assert(finalReadiness.evidenceReady === true, `professional readiness missing evidence after pack: ${JSON.stringify(finalReadiness)}`);
+  assert(finalReadiness.summary?.ready === true && finalReadiness.summary?.evidenceReady === true, `professional readiness summary not ready: ${JSON.stringify(finalReadiness.summary)}`);
+  assert(finalReadiness.summary?.latestResearchPackReady === true, `professional readiness summary missing research-pack readiness: ${JSON.stringify(finalReadiness.summary)}`);
+  assert(finalReadiness.summary?.latestArtifactKinds?.includes("har"), `professional readiness summary missing latest artifact kinds: ${JSON.stringify(finalReadiness.summary)}`);
   assert(finalReadiness.artifactCount >= 1, "professional readiness missing artifact count after pack");
   assert(finalReadiness.artifactKinds?.["research-pack"] >= 1, `professional readiness missing artifact kind distribution: ${JSON.stringify(finalReadiness.artifactKinds)}`);
   assert(finalReadiness.latestArtifacts?.har?.inspect?.tool === "devtools_artifact_inspect", `professional readiness missing latest HAR artifact pointer: ${JSON.stringify(finalReadiness.latestArtifacts)}`);

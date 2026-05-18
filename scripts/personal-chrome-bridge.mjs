@@ -2530,10 +2530,23 @@ function buildProfessionalReadiness({
     input: { task: "professional-appsec" },
     why: "Re-read the deterministic workflow if the agent needs the full route.",
   });
+  const readinessSummary = {
+    ready: missing.length === 0,
+    evidenceReady: Boolean(artifactCount && timelineCount),
+    missingCount: missing.length,
+    captureEnabled,
+    artifactCount,
+    timelineEventCount: timelineCount,
+    latestResearchPackReady: latestResearchPackSummary?.ready ?? null,
+    latestArtifactKinds: latestArtifacts ? Object.keys(latestArtifacts) : [],
+    nextTool: nextActions[0]?.tool || null,
+    nextActionCount: nextActions.length,
+  };
   return {
     schema: "agent-browser-runtime.professional-readiness.v1",
     backend,
     generatedAt: new Date().toISOString(),
+    summary: readinessSummary,
     ready: missing.length === 0,
     evidenceReady: Boolean(artifactCount && timelineCount),
     checks,
