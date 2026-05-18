@@ -225,6 +225,21 @@ try {
   assert(pack.artifacts?.evidenceTimeline?.eventCount >= 1, "professional pack missing evidence timeline payload");
   assert(pack.drilldownPlan?.drilldowns?.some((entry) => entry.tool === "devtools_request_detail"), "professional pack missing request-detail drilldown");
   assert(pack.drilldownPlan?.planPath === pack.summary.drilldownPlanPath, "professional pack drilldown path mismatch");
+  const requestDetailStep = pack.drilldownPlan.drilldowns.find((entry) => entry.tool === "devtools_request_detail");
+  const requestDetail = await callTool(baseUrl, requestDetailStep.tool, requestDetailStep.input);
+  assert(requestDetail.detail?.requestId || requestDetail.requestId, `professional request-detail drilldown returned no request id: ${JSON.stringify(requestDetail)}`);
+  assert(requestDetail.detail?.url || requestDetail.url, `professional request-detail drilldown returned no URL: ${JSON.stringify(requestDetail)}`);
+  const replayStep = pack.drilldownPlan.drilldowns.find((entry) => entry.tool === "devtools_request_replay_batch");
+  assert(replayStep, "professional pack missing replay-batch drilldown");
+  const replayBatch = await callTool(baseUrl, replayStep.tool, replayStep.input);
+  assert(Array.isArray(replayBatch.results) || Array.isArray(replayBatch.replays), `professional replay-batch drilldown missing replay results: ${JSON.stringify(replayBatch)}`);
+  assert(replayBatch.replayBoundary || replayBatch.boundaries || replayBatch.results?.some((entry) => entry.replayBoundary), `professional replay-batch missing replay boundary: ${JSON.stringify(replayBatch)}`);
+  const traceStep = pack.drilldownPlan.drilldowns.find((entry) => entry.tool === "devtools_trace_query");
+  assert(traceStep, "professional pack missing trace-query drilldown");
+  const traceDrilldown = await callTool(baseUrl, traceStep.tool, traceStep.input);
+  assert(traceDrilldown.backend === "managed-cdp", `professional trace drilldown wrong backend: ${JSON.stringify(traceDrilldown)}`);
+  assert(typeof traceDrilldown.totalEvents === "number", "professional trace drilldown missing total event count");
+  assert(traceDrilldown.recommendedDrilldowns?.some((entry) => entry.tool === "devtools_chrome_trace"), "professional trace drilldown missing fresh trace recommendation");
   const handoffPreview = await callTool(baseUrl, "devtools_artifact_read", {
     profile: "professional",
     path: pack.summary.researchPackPath,
@@ -292,6 +307,18 @@ try {
   assert(sourceSearch.matchCount >= 1, `professional source search missing loadProfile marker: ${JSON.stringify(sourceSearch)}`);
   assert(sourceSearch.recommendedDrilldowns?.some((entry) => entry.tool === "devtools_source_get"), "professional source search missing source_get drilldown");
   assert(sourceSearch.recommendedDrilldowns?.some((entry) => entry.tool === "devtools_source_pretty_print"), "professional source search missing pretty-print drilldown");
+  const debuggerProbe = await callTool(baseUrl, "devtools_debugger_control", {
+    profile: "professional",
+    action: "pauseOnExpression",
+    expression: "const professionalDebuggerMarker = 42; debugger; professionalDebuggerMarker;",
+    waitMs: 600,
+    autoResume: true,
+    evaluateExpressions: ["professionalDebuggerMarker"],
+    maxFrames: 4,
+  });
+  assert(debuggerProbe.action === "pauseOnExpression", "professional debugger probe did not run pauseOnExpression");
+  assert(debuggerProbe.paused?.callFrames?.length >= 1, `professional debugger probe missing paused call frames: ${JSON.stringify(debuggerProbe)}`);
+  assert(debuggerProbe.autoResumed === true, "professional debugger probe did not auto resume");
 
   const artifactIndex = await callTool(baseUrl, "devtools_artifact_index", {
     profile: "professional",
@@ -316,6 +343,8 @@ try {
   console.log(`- F12 parity rows: ${parity.summary.panelCount}`);
   console.log(`- capability panels: ${capabilityMap.panelCount}`);
   console.log(`- source search drilldowns: ${sourceSearch.recommendedDrilldowns.length}`);
+  console.log(`- trace drilldown events: ${traceDrilldown.totalEvents}`);
+  console.log(`- debugger paused frames: ${debuggerProbe.paused.callFrames.length}`);
   console.log(`- artifact files: ${artifactIndex.totalFileCount}`);
 } finally {
   await fetch(`http://127.0.0.1:${serverPort}/shutdown`, { method: "POST" }).catch(() => {});

@@ -3114,6 +3114,7 @@ function buildResearchPackDrilldowns(artifacts = {}, options = {}) {
   const firstRequest = timelineEvents.find((event) => event.type === "network-request" && event.requestId);
   const harArtifact = artifactRows.find((artifact) => artifact.kind === "har" || String(artifact.path || "").toLowerCase().endsWith(".har"));
   const traceArtifact = artifactRows.find((artifact) => artifact.kind === "trace" || String(artifact.path || "").toLowerCase().includes("\\traces\\") || String(artifact.path || "").toLowerCase().includes("/traces/"));
+  const tracePath = artifacts.trace?.tracePath || traceArtifact?.path || null;
   const bundleArtifact = artifactRows.find((artifact) => artifact.kind === "bundle" || String(artifact.path || "").toLowerCase().includes("\\bundles\\") || String(artifact.path || "").toLowerCase().includes("/bundles/"));
   const rows = [
     {
@@ -3157,11 +3158,11 @@ function buildResearchPackDrilldowns(artifacts = {}, options = {}) {
       why: "Inspect HAR entry/body/timing structure without reading the full file into context.",
     });
   }
-  if (traceArtifact?.path) {
+  if (tracePath) {
     rows.push({
       label: "Trace event drilldown",
       tool: "devtools_trace_query",
-      input: { tracePath: traceArtifact.path, minDurationMs: 5, limit: 20 },
+      input: { tracePath, minDurationMs: 5, limit: 20 },
       why: "Query saved Chrome trace events by duration/name/category for performance or execution timing evidence.",
     });
   }
