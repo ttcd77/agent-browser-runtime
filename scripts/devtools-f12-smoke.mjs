@@ -381,6 +381,19 @@ try {
         document.getElementById("agent-listener-button").addEventListener("click", function agentListenerSmoke() {
           window.AGENT_EVENT_LISTENER_MARKER = true;
         });
+        const reactInput = document.getElementById("agent-react-input");
+        const reactJoin = document.getElementById("agent-react-join");
+        reactInput.addEventListener("input", () => {
+          if (reactInput.value.trim()) {
+            reactJoin.setAttribute("aria-disabled", "false");
+            reactJoin.dataset.enabled = "yes";
+          }
+        });
+        reactJoin.addEventListener("click", () => {
+          if (reactJoin.getAttribute("aria-disabled") !== "true") {
+            reactJoin.dataset.clicked = "yes";
+          }
+        });
         const frame = document.getElementById("agent-frame");
         const marker = "FRAME_" + "SECRET_MARKER";
         frame.contentDocument.open();
@@ -397,6 +410,8 @@ try {
     </script>
     <h1>Source Search Smoke</h1>
     <button id="agent-listener-button">Listener Smoke</button>
+    <label>React-like input <input id="agent-react-input" aria-label="React Like Input"></label>
+    <div id="agent-react-join" role="button" aria-label="Join meeting" aria-disabled="true">Join meeting</div>
     <div id="agent-shadow-host"></div>
     <iframe id="agent-frame"></iframe>
     <iframe id="opaque-frame" sandbox srcdoc="<p>Opaque frame</p>"></iframe>`)}`;
@@ -458,6 +473,32 @@ try {
   });
   const frameStateValue = frameState.page || frameState.result;
   assert(frameStateValue?.clicked === "yes" && frameStateValue?.value === "typed-in-frame", `iframe action state mismatch: ${JSON.stringify(frameState)}`);
+  const keyboardType = await callTool(baseUrl, "devtools_type", {
+    profile: "default",
+    selector: "#agent-react-input",
+    text: "AgentBrowserEvidence",
+    inputMode: "keyboard",
+    waitMs: 100,
+  });
+  assert(keyboardType.ok === true && keyboardType.inputMode === "keyboard", `keyboard type failed: ${JSON.stringify(keyboardType)}`);
+  const keyboardState = await callTool(baseUrl, "devtools_eval", {
+    profile: "default",
+    expression: "(() => ({ value: document.getElementById('agent-react-input').value, enabled: document.getElementById('agent-react-join').dataset.enabled, disabled: document.getElementById('agent-react-join').getAttribute('aria-disabled') }))()",
+  });
+  const keyboardStateValue = keyboardState.page || keyboardState.result;
+  assert(keyboardStateValue?.value === "AgentBrowserEvidence" && keyboardStateValue?.enabled === "yes" && keyboardStateValue?.disabled === "false", `keyboard input did not unlock React-like button: ${JSON.stringify(keyboardState)}`);
+  const textClick = await callTool(baseUrl, "devtools_click", {
+    profile: "default",
+    text: "Join meeting",
+    waitMs: 100,
+  });
+  assert(textClick.ok === true && textClick.mode === "text", `text click failed: ${JSON.stringify(textClick)}`);
+  const textClickState = await callTool(baseUrl, "devtools_eval", {
+    profile: "default",
+    expression: "(() => ({ clicked: document.getElementById('agent-react-join').dataset.clicked }))()",
+  });
+  const textClickStateValue = textClickState.page || textClickState.result;
+  assert(textClickStateValue?.clicked === "yes", `text click did not trigger React-like button: ${JSON.stringify(textClickState)}`);
   const frameTree = await callTool(baseUrl, "devtools_frame_tree", {
     profile: "default",
   });
