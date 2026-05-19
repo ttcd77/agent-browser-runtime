@@ -672,6 +672,7 @@ See `examples/openclaw.config.example.json`.
 | `CDP_BROWSER_EXECUTABLE` | Explicit Edge/Chrome executable path. | auto-detected |
 | `CDP_BROWSER_USER_DATA_DIR` | Browser user-data directory when launching a browser. | `$CDP_SECURITY_DATA_DIR/browser-identities/$CDP_AGENT_PROFILE` |
 | `CDP_BROWSER_HEADLESS` | Use headless mode for test runs. | unset |
+| `CDP_BROWSER_EXTRA_ARGS` | Extra Chrome/Edge launch flags for target-specific browser conditions. Accepts a JSON array or shell-friendly `--flag --flag=value` string. | unset |
 | `CDP_SECURITY_DATA_DIR` | Base data directory for captured bodies, events, profiles, and logs. | `~/.agent-browser-runtime` |
 | `CDP_PROFILE_REGISTRY_FILE` | Standalone server profile registry. | `$CDP_SECURITY_DATA_DIR/profiles.json` |
 | `CDP_SECURITY_BODY_STORE_DIR` | Response body storage directory for CDP evidence tools. | `$CDP_SECURITY_DATA_DIR/cdp-traffic` |

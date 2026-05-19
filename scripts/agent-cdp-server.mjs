@@ -83,6 +83,20 @@ function browserExecutable() {
   return candidates.find((candidate) => existsSync(candidate));
 }
 
+function parseBrowserExtraArgs(value) {
+  if (!value) return [];
+  try {
+    const parsed = JSON.parse(value);
+    if (Array.isArray(parsed)) return parsed.map(String).filter(Boolean);
+  } catch {
+    // Fall through to shell-friendly parsing.
+  }
+  return String(value)
+    .split(/[,\r\n]+|\s+(?=--)/)
+    .map((part) => part.trim())
+    .filter(Boolean);
+}
+
 async function waitForCdp(port) {
   const url = `http://127.0.0.1:${port}/json/version`;
   for (let i = 0; i < 80; i++) {
@@ -13795,6 +13809,7 @@ async function main() {
         "--no-first-run",
         "--no-default-browser-check",
         ...(process.env.CDP_BROWSER_HEADLESS === "1" ? ["--headless=new"] : []),
+        ...parseBrowserExtraArgs(process.env.CDP_BROWSER_EXTRA_ARGS),
         "about:blank",
       ],
       { stdio: "ignore", detached: false },
