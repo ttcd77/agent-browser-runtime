@@ -179,19 +179,21 @@ export function printSummary(pack, output = console.log) {
     if (typeof route.artifactEntrypointCount === "number") {
       output(`  - route evidence entrypoints: ${route.artifactEntrypointCount}`);
     }
+    const compactRouteArtifacts = readiness.routeArtifacts || {};
     const routeArtifacts = [
-      ["F12 navigation", route.f12NavigationArtifact],
-      ["first F12 request detail", route.firstF12RequestDetailArtifact],
-      ["HAR completeness", route.harCompletenessArtifact],
-      ["trace", route.traceArtifact],
-      ["Application export", route.applicationExportArtifact],
-      ["evidence bundle", route.evidenceBundleArtifact],
-      ["drilldown plan", route.drilldownPlanArtifact],
-      ["evidence manifest", route.evidenceManifestArtifact],
-      ["correlation graph", route.correlationGraphArtifact],
-      ["auth boundary", route.authBoundaryArtifact],
-      ["worker/frame boundary", route.workerFrameArtifact],
-    ].filter(([, artifact]) => artifact?.inspect?.tool || artifact?.read?.tool);
+      ["f12Navigation", "F12 navigation", route.f12NavigationArtifact],
+      ["firstF12RequestDetail", "first F12 request detail", route.firstF12RequestDetailArtifact],
+      ["harCompleteness", "HAR completeness", route.harCompletenessArtifact],
+      ["trace", "trace", route.traceArtifact],
+      ["applicationExport", "Application export", route.applicationExportArtifact],
+      ["evidenceBundle", "evidence bundle", route.evidenceBundleArtifact],
+      ["drilldownPlan", "drilldown plan", route.drilldownPlanArtifact],
+      ["evidenceManifest", "evidence manifest", route.evidenceManifestArtifact],
+      ["correlationGraph", "correlation graph", route.correlationGraphArtifact],
+      ["authBoundary", "auth boundary", route.authBoundaryArtifact],
+      ["workerFrameBoundary", "worker/frame boundary", route.workerFrameArtifact],
+    ].map(([key, label, fallback]) => [label, compactRouteArtifacts[key] || fallback])
+      .filter(([, artifact]) => artifact?.inspect?.tool || artifact?.read?.tool);
     if (routeArtifacts.length) {
       output("  - route artifacts:");
       for (const [label, artifact] of routeArtifacts) {

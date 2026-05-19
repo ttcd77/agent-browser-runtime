@@ -111,6 +111,18 @@ printSummary({
     evidenceReady: true,
     missing: [],
     nextActions: [{ tool: "devtools_workflow_guide" }],
+    routeArtifacts: {
+      f12Navigation: {
+        path: "tmp/f12-navigation-compact.json",
+        inspect: { tool: "devtools_artifact_inspect", input: { path: "tmp/f12-navigation-compact.json" } },
+        read: { tool: "devtools_artifact_read", input: { path: "tmp/f12-navigation-compact.json" } },
+      },
+      harCompleteness: {
+        path: "tmp/har-completeness.json",
+        inspect: { tool: "devtools_artifact_inspect", input: { path: "tmp/har-completeness.json" } },
+        read: { tool: "devtools_artifact_read", input: { path: "tmp/har-completeness.json" } },
+      },
+    },
     routeSummary: {
       firstStep: { tool: "devtools_artifact_inspect", input: { path: "tmp/security-research-pack.json" } },
       latestHandoffInspect: { tool: "devtools_artifact_inspect", input: { path: "tmp/security-research-pack.json" } },
@@ -164,7 +176,8 @@ assert(output.includes("route first F12 request: data: devtools_request_detail r
 assert(output.includes("route F12 navigation requests: 2"), "summary missing route F12 navigation count");
 assert(output.includes("route evidence entrypoints: 3"), "summary missing route evidence entrypoint count");
 assert(output.includes("- route artifacts:"), "summary missing route artifact section");
-assert(output.includes("F12 navigation: tmp/f12-navigation.json"), "summary missing F12 navigation artifact route");
+assert(output.includes("F12 navigation: tmp/f12-navigation-compact.json"), "summary missing compact F12 navigation artifact route");
+assert(output.includes("HAR completeness: tmp/har-completeness.json"), "summary missing compact HAR completeness artifact route");
 assert(output.includes("correlation graph: tmp/correlation-graph.json"), "summary missing correlation graph artifact route");
 assert(output.includes("auth boundary: tmp/auth-boundary.json"), "summary missing auth boundary artifact route");
 assert(output.includes("worker/frame boundary: tmp/worker-frame.json"), "summary missing worker/frame artifact route");

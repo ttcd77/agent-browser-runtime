@@ -1009,3 +1009,11 @@
 - `routeArtifacts` 是 `routeSummary.*Artifact` 的压缩索引，按 f12Navigation、harCompleteness、correlationGraph、authBoundary、workerFrameBoundary 等名字组织。
 - 每个条目保留 path、inspect、read 路线，Agent 不必手动遍历完整 `routeSummary`。
 - Managed Professional smoke、Personal Chrome smoke、公开 example 都覆盖该压缩路线。
+
+### 2026-05-19: CLI 使用 Compact Route Artifacts
+
+已经完成:
+
+- `npm run research:pack` 摘要现在优先读取 readiness `routeArtifacts`。
+- 如果 `routeArtifacts` 不存在，CLI 会回退到 `routeSummary.*Artifact`，保持兼容。
+- `smoke:cli` 覆盖 compact route artifact 优先级和 `routeSummary` fallback。
