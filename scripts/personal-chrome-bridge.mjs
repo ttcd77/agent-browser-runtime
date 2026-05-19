@@ -2832,6 +2832,19 @@ function buildProfessionalReadiness({
     researchPackDrilldownCount: researchPackDrilldowns.length,
     artifactDrilldownCount: artifactDrilldowns.length,
   };
+  const routeArtifacts = Object.fromEntries([
+    ["f12Navigation", f12NavigationArtifact],
+    ["firstF12RequestDetail", firstF12RequestDetailArtifact],
+    ["harCompleteness", harCompletenessArtifact],
+    ["trace", traceArtifact],
+    ["applicationExport", applicationExportArtifact],
+    ["evidenceBundle", evidenceBundleArtifact],
+    ["drilldownPlan", drilldownPlanArtifact],
+    ["evidenceManifest", evidenceManifestArtifact],
+    ["correlationGraph", correlationGraphArtifact],
+    ["authBoundary", authBoundaryArtifact],
+    ["workerFrameBoundary", workerFrameArtifact],
+  ].filter(([, artifact]) => artifact?.path || artifact?.inspect || artifact?.read));
   const readinessSummary = {
     ready: missing.length === 0,
     evidenceReady: Boolean(artifactCount && timelineCount),
@@ -2851,6 +2864,7 @@ function buildProfessionalReadiness({
     generatedAt: new Date().toISOString(),
     summary: readinessSummary,
     routeSummary,
+    routeArtifacts,
     ready: missing.length === 0,
     evidenceReady: Boolean(artifactCount && timelineCount),
     checks,

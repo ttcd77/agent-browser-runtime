@@ -1000,3 +1000,12 @@
 - 每个 route artifact 包含 path、inspect、read 三类字段，方便 Agent 从示例输出直接接手。
 - `smoke:example` 会验证 F12 navigation、HAR completeness、correlation graph、auth boundary、worker/frame boundary 的压缩路线。
 - `docs/agent-devtools-api.md` 现在明确说明 `routeSummary.*Artifact` 的用途。
+
+### 2026-05-19: Readiness Compact Route Artifacts
+
+已经完成:
+
+- `devtools_professional_readiness` / `personal_chrome_professional_readiness` 现在直接返回 `routeArtifacts`。
+- `routeArtifacts` 是 `routeSummary.*Artifact` 的压缩索引，按 f12Navigation、harCompleteness、correlationGraph、authBoundary、workerFrameBoundary 等名字组织。
+- 每个条目保留 path、inspect、read 路线，Agent 不必手动遍历完整 `routeSummary`。
+- Managed Professional smoke、Personal Chrome smoke、公开 example 都覆盖该压缩路线。

@@ -85,7 +85,7 @@ console.log(JSON.stringify({
     routeSummary: afterReadiness.routeSummary,
     f12NavigationRequestCount: afterReadiness.summary?.f12NavigationRequestCount ?? afterReadiness.f12Navigation?.requestNodeCount ?? null,
     firstF12RequestDetail: afterReadiness.routeSummary?.firstF12RequestDetail || null,
-    routeArtifacts: compactRouteArtifacts(afterReadiness.routeSummary),
+    routeArtifacts: afterReadiness.routeArtifacts || compactRouteArtifacts(afterReadiness.routeSummary),
     objectiveBoundary: afterReadiness.objectiveBoundary,
   },
   f12Navigation: {

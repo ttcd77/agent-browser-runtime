@@ -133,6 +133,12 @@ it as the low-token resume map after evidence exists:
 These fields are routing metadata only. They do not inspect artifact content and
 do not judge security impact.
 
+For simpler consumers, readiness also returns `routeArtifacts`: a compact map
+from evidence names such as `f12Navigation`, `harCompleteness`,
+`correlationGraph`, `authBoundary`, and `workerFrameBoundary` to `{ path,
+inspect, read }` routes. Use it when the next step is to open one saved F12
+artifact without parsing the full `routeSummary`.
+
 ## Unified Tools
 
 Page operation:
