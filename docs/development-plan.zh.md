@@ -944,3 +944,12 @@
 - `nextActions` 会包含该 artifact 的 `devtools_artifact_inspect` 下一步，Agent 可以从 readiness 进入一次性证据包，再按需钻取 Network、Console、Storage、Sources、Performance 等分区。
 - Managed Browser / Personal Chrome smoke 都覆盖该路线。
 - 该路线只读取已保存 evidence bundle，不做漏洞判断。
+
+### 2026-05-19: Readiness Drilldown Plan Artifact 路线完成
+
+已经完成:
+
+- `devtools_professional_readiness.routeSummary.drilldownPlanArtifact` 会直接返回 research pack drilldown plan 的 inspect/read 路线。
+- `nextActions` 会包含该 artifact 的 `devtools_artifact_inspect` 下一步，Agent 可以从 readiness 进入完整行动路线表，而不是只依赖截断后的首批 drilldown。
+- Managed Browser / Personal Chrome smoke 都覆盖该路线。
+- 该路线只读取保存的工具路线计划，不判断漏洞。

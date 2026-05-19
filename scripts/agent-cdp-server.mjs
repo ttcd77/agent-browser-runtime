@@ -3299,6 +3299,7 @@ function buildProfessionalReadiness({
   const tracePath = latestResearchPackSummary?.artifactPaths?.tracePath || null;
   const applicationExportPath = latestResearchPackSummary?.artifactPaths?.applicationExportPath || null;
   const evidenceBundlePath = latestResearchPackSummary?.artifactPaths?.evidenceBundlePath || null;
+  const drilldownPlanPath = latestResearchPackSummary?.artifactPaths?.drilldownPlanPath || null;
   const firstF12RequestDetailArtifact = firstF12RequestDetailPath ? {
     path: firstF12RequestDetailPath,
     inspect: { tool: "devtools_artifact_inspect", input: { path: firstF12RequestDetailPath, maxBytes: 120000 } },
@@ -3328,6 +3329,11 @@ function buildProfessionalReadiness({
     path: evidenceBundlePath,
     inspect: { tool: "devtools_artifact_inspect", input: { path: evidenceBundlePath, maxBytes: 220000 } },
     read: { tool: "devtools_artifact_read", input: { path: evidenceBundlePath, mode: "line", startLine: 1, lineCount: 180 } },
+  } : null;
+  const drilldownPlanArtifact = drilldownPlanPath ? {
+    path: drilldownPlanPath,
+    inspect: { tool: "devtools_artifact_inspect", input: { path: drilldownPlanPath, maxBytes: 160000 } },
+    read: { tool: "devtools_artifact_read", input: { path: drilldownPlanPath, mode: "line", startLine: 1, lineCount: 180 } },
   } : null;
   const checks = [
     {
@@ -3479,6 +3485,18 @@ function buildProfessionalReadiness({
       seenNextActions.add(key);
     }
   }
+  if (drilldownPlanArtifact) {
+    const entry = {
+      tool: drilldownPlanArtifact.inspect.tool,
+      input: drilldownPlanArtifact.inspect.input,
+      why: "Inspect the saved drilldown plan artifact from the latest research pack.",
+    };
+    const key = actionKey(entry);
+    if (!seenNextActions.has(key)) {
+      nextActions.push(entry);
+      seenNextActions.add(key);
+    }
+  }
   if (f12NavigationArtifact) {
     const entry = {
       tool: f12NavigationArtifact.inspect.tool,
@@ -3555,6 +3573,7 @@ function buildProfessionalReadiness({
     traceQuery: traceArtifact?.query || null,
     applicationExportArtifact,
     evidenceBundleArtifact,
+    drilldownPlanArtifact,
     f12NavigationArtifact,
     firstF12RequestDetailArtifact,
     firstF12RequestDetail: f12NavigationDrilldowns[0] ? {
