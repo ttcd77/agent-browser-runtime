@@ -991,3 +991,12 @@
 - README、`docs/security-research-pack.md` 和 `docs/agent-operator-runbook.md` 现在都说明 CLI `route artifacts` 的用途。
 - `scripts/open-source-readiness.mjs` 会检查 README / runbook 持续保留 `route artifacts` 说明。
 - 这保证 Agent 交接文档不会退回到“读完整 JSON 再找路径”的低效模式。
+
+### 2026-05-19: Example Compact Route Artifacts
+
+已经完成:
+
+- `examples/security-research-pack.mjs` 现在在 `afterReadiness.routeArtifacts` 中输出压缩后的 artifact 路线。
+- 每个 route artifact 包含 path、inspect、read 三类字段，方便 Agent 从示例输出直接接手。
+- `smoke:example` 会验证 F12 navigation、HAR completeness、correlation graph、auth boundary、worker/frame boundary 的压缩路线。
+- `docs/agent-devtools-api.md` 现在明确说明 `routeSummary.*Artifact` 的用途。

@@ -124,6 +124,10 @@ it as the low-token resume map after evidence exists:
   the latest research-pack handoff.
 - `firstConcreteDrilldown`: the first drilldown with concrete input such as
   `requestId`, `path`, or `tracePath`.
+- `*Artifact`: direct `devtools_artifact_inspect` / `devtools_artifact_read`
+  routes for saved evidence files such as F12 navigation, HAR completeness,
+  trace, Application export, evidence bundle, correlation graph, auth boundary,
+  and worker/frame boundary reports.
 - `artifactEntrypointCount`: how many high-level evidence entrypoints are ready.
 
 These fields are routing metadata only. They do not inspect artifact content and

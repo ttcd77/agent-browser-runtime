@@ -132,6 +132,11 @@ try {
   assert(output.afterReadiness?.routeSummary?.latestHandoffRead?.tool === "devtools_artifact_read", `example missing routeSummary handoff read: ${JSON.stringify(output.afterReadiness?.routeSummary)}`);
   assert(output.afterReadiness?.routeSummary?.firstF12RequestDetail?.tool === "devtools_request_detail", `example missing routeSummary F12 request detail: ${JSON.stringify(output.afterReadiness?.routeSummary)}`);
   assert(output.afterReadiness?.routeSummary?.firstConcreteDrilldown?.tool === "devtools_request_detail", `example missing routeSummary concrete drilldown: ${JSON.stringify(output.afterReadiness?.routeSummary)}`);
+  assert(output.afterReadiness?.routeArtifacts?.f12Navigation?.inspect?.tool === "devtools_artifact_inspect", `example missing compact F12 navigation route artifact: ${JSON.stringify(output.afterReadiness?.routeArtifacts)}`);
+  assert(output.afterReadiness?.routeArtifacts?.harCompleteness?.read?.tool === "devtools_artifact_read", `example missing compact HAR completeness route artifact: ${JSON.stringify(output.afterReadiness?.routeArtifacts)}`);
+  assert(output.afterReadiness?.routeArtifacts?.correlationGraph?.inspect?.tool === "devtools_artifact_inspect", `example missing compact correlation graph route artifact: ${JSON.stringify(output.afterReadiness?.routeArtifacts)}`);
+  assert(output.afterReadiness?.routeArtifacts?.authBoundary?.read?.tool === "devtools_artifact_read", `example missing compact auth boundary route artifact: ${JSON.stringify(output.afterReadiness?.routeArtifacts)}`);
+  assert(output.afterReadiness?.routeArtifacts?.workerFrameBoundary?.inspect?.tool === "devtools_artifact_inspect", `example missing compact worker/frame route artifact: ${JSON.stringify(output.afterReadiness?.routeArtifacts)}`);
   assert(output.afterReadiness?.f12NavigationRequestCount >= 1, `example missing readiness F12 navigation count: ${JSON.stringify(output.afterReadiness)}`);
   assert(output.f12Navigation?.requestNodeCount >= 1, `example missing pack F12 navigation: ${JSON.stringify(output.f12Navigation)}`);
   assert(output.f12Navigation?.firstDetailRoute?.tool === "devtools_request_detail", `example missing pack F12 detail route: ${JSON.stringify(output.f12Navigation)}`);
@@ -148,6 +153,7 @@ try {
   console.log(`- requests: ${output.summary.requestCount}`);
   console.log(`- research pack: ${output.artifactPaths.researchPackPath}`);
   console.log(`- drilldowns: ${output.firstDrilldowns.length}`);
+  console.log(`- route artifacts: ${Object.keys(output.afterReadiness.routeArtifacts || {}).length}`);
 } finally {
   await fetch(`http://127.0.0.1:${serverPort}/shutdown`, { method: "POST" }).catch(() => {});
   setTimeout(() => runtime.kill(), 500);

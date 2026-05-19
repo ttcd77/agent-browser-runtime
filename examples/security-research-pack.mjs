@@ -43,6 +43,27 @@ const afterReadiness = await callTool("devtools_professional_readiness", {
   profile,
 });
 
+function compactRouteArtifacts(routeSummary = {}) {
+  const entries = [
+    ["f12Navigation", routeSummary.f12NavigationArtifact],
+    ["firstF12RequestDetail", routeSummary.firstF12RequestDetailArtifact],
+    ["harCompleteness", routeSummary.harCompletenessArtifact],
+    ["trace", routeSummary.traceArtifact],
+    ["applicationExport", routeSummary.applicationExportArtifact],
+    ["evidenceBundle", routeSummary.evidenceBundleArtifact],
+    ["drilldownPlan", routeSummary.drilldownPlanArtifact],
+    ["evidenceManifest", routeSummary.evidenceManifestArtifact],
+    ["correlationGraph", routeSummary.correlationGraphArtifact],
+    ["authBoundary", routeSummary.authBoundaryArtifact],
+    ["workerFrameBoundary", routeSummary.workerFrameArtifact],
+  ].filter(([, artifact]) => artifact?.path || artifact?.inspect || artifact?.read);
+  return Object.fromEntries(entries.map(([name, artifact]) => [name, {
+    path: artifact.path || artifact.inspect?.input?.path || artifact.read?.input?.path || null,
+    inspect: artifact.inspect || null,
+    read: artifact.read || null,
+  }]));
+}
+
 console.log(JSON.stringify({
   backend: pack.backend,
   profile: pack.profile,
@@ -64,6 +85,7 @@ console.log(JSON.stringify({
     routeSummary: afterReadiness.routeSummary,
     f12NavigationRequestCount: afterReadiness.summary?.f12NavigationRequestCount ?? afterReadiness.f12Navigation?.requestNodeCount ?? null,
     firstF12RequestDetail: afterReadiness.routeSummary?.firstF12RequestDetail || null,
+    routeArtifacts: compactRouteArtifacts(afterReadiness.routeSummary),
     objectiveBoundary: afterReadiness.objectiveBoundary,
   },
   f12Navigation: {
