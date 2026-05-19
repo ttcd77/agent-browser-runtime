@@ -11639,6 +11639,11 @@ function registerStandaloneBrowserTools(tools, cdpPort, profileRegistry, default
       const network = await safeCall("agent_inspect", { focus: "network", limit });
       const storage = await safeCall("agent_inspect", { focus: "storage", limit, includeHeavy: true });
       const consoleEvidence = await safeCall("agent_inspect", { focus: "console", limit });
+      // Read the persistent console buffer captured by the traffic-capture plugin.
+      // This buffer is populated via Runtime.consoleAPICalled + Log.entryAdded on the
+      // persistent CDP connection, so it captures events emitted during hard_reload
+      // (before any per-call connection is opened).
+      const persistentConsole = await safeCall("cdp_query", { type: "console", limit: Math.max(limit, 100) });
       const sources = await safeCall("agent_inspect", { focus: "sources", limit });
       const performance = await safeCall("agent_inspect", { focus: "performance", limit, includeHeavy: Boolean(params?.includePerformanceHeavy) });
       const artifacts = {};
@@ -11737,11 +11742,10 @@ function registerStandaloneBrowserTools(tools, cdpPort, profileRegistry, default
         );
       };
       const consoleEntryCount =
-        countConsoleEntries(consoleEvidence) ||
-        countConsoleEntries(consoleReloadCapture) ||
-        overview?.evidence?.console?.entryCount ||
-        overview?.evidence?.console?.entries?.length ||
-        0;
+        // Prefer the persistent traffic-capture buffer (populated during hard_reload).
+        // Fall back to per-call browser_console_log counts if the plugin isn't active.
+        (typeof persistentConsole?.total === "number" ? persistentConsole.total : null) ??
+        (countConsoleEntries(consoleEvidence) || countConsoleEntries(consoleReloadCapture) || 0);
       const page = overview?.evidence?.diagnostics?.page || {};
       const generatedAt = new Date().toISOString();
       const summary = {
@@ -11896,6 +11900,7 @@ function registerStandaloneBrowserTools(tools, cdpPort, profileRegistry, default
           storage,
           console: consoleEvidence,
           consoleReloadCapture,
+          persistentConsole,
           sources,
           performance,
         },

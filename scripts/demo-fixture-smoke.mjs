@@ -358,14 +358,25 @@ try {
   );
 
   // Console coverage: log/warn/error signals must be real CDP Console evidence.
+  // Primary source: persistentConsole.logs — populated by Runtime.consoleAPICalled on the
+  // persistent traffic-capture connection (active before hard_reload, so all page-load events
+  // are captured). Fallback: per-call browser_console_log arrays.
+  const persistentLogs = pack.evidence?.persistentConsole?.logs || [];
   const consoleEvents =
     pack.evidence?.consoleReloadCapture?.console ||
     pack.evidence?.console?.evidence?.console?.console ||
     pack.evidence?.console?.console ||
     [];
-  const consoleTexts = consoleEvents
-    .flatMap((entry) => entry.args || entry.text || [])
-    .map((value) => String(value));
+  const consoleTexts = [
+    // Persistent buffer: each entry has args[].value (string) from Runtime.consoleAPICalled
+    ...persistentLogs.flatMap((entry) =>
+      (entry.args || []).map((a) => String(a.value ?? a.description ?? "")),
+    ),
+    // Per-call fallback: browser_console_log already maps args to primitive values
+    ...consoleEvents
+      .flatMap((entry) => entry.args || entry.text || [])
+      .map((value) => String(value)),
+  ];
   assert(
     (summary.consoleEntryCount ?? 0) >= 3,
     `expected >= 3 console entries (log/warn/error), got: ${summary.consoleEntryCount}`,
@@ -409,7 +420,7 @@ try {
   console.log(`- fixture url:          ${fixture.url}`);
   console.log(`- requests:             ${summary.requestCount}`);
   console.log(`- failed requests:      ${summary.failedRequestCount ?? 0}`);
-  console.log(`- console entries:      ${summary.consoleEntryCount}`);
+  console.log(`- console entries:      ${summary.consoleEntryCount} (persistent buffer: ${pack.evidence?.persistentConsole?.bufferSize ?? "n/a"})`);
   console.log(`- artifact files:       ${summary.artifactFileCount}`);
   console.log(`- research pack:        ${summary.researchPackPath}`);
   console.log(`- har:                  ${summary.harPath}`);
