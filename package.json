@@ -46,6 +46,7 @@
     "smoke:professional": "npm run build && node scripts/professional-appsec-smoke.mjs",
     "smoke:cli": "node scripts/research-pack-cli-smoke.mjs",
     "smoke:example": "node scripts/example-security-research-pack-smoke.mjs",
+    "smoke:demo": "node scripts/demo-fixture-smoke.mjs",
     "research:pack": "node scripts/security-research-pack-cli.mjs",
     "check": "npm run build && npm run test && npm run smoke:cli",
     "check:devtools": "npm run contract:devtools && npm run smoke:f12 && npm run smoke:personal && npm run smoke:professional",
