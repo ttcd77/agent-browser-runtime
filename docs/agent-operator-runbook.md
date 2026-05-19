@@ -180,7 +180,11 @@ This calls `devtools_security_research_pack` and prints local artifact paths,
 the workflow used, capture status, artifact kind counts, handoff readiness, and
 first drill-down tools. It also prints the readiness route summary so the next
 agent can immediately inspect the latest handoff or run the first concrete
-drilldown. Use `--json` for the full response.
+drilldown. The CLI summary also prints route artifacts for direct
+`devtools_artifact_inspect` / `devtools_artifact_read` follow-up into F12
+navigation, HAR completeness, trace, Application export, evidence bundle,
+drilldown plan, evidence manifest, correlation graph, auth boundary, and
+worker/frame boundary evidence. Use `--json` for the full response.
 
 When reading a returned pack, check these fields before deeper analysis:
 
@@ -195,6 +199,9 @@ When reading a returned pack, check these fields before deeper analysis:
 - `professionalReadiness.routeSummary`: the low-token resume map, including the
   first step, latest handoff inspect/read commands, first concrete drilldown, and
   evidence entrypoint count.
+- `professionalReadiness.routeSummary.*Artifact`: direct inspect/read routes for
+  saved F12 artifacts; use these before loading the full research pack when the
+  next question is about one evidence area.
 
 Read the handoff file with bounded artifact tools instead of loading every
 artifact into context:

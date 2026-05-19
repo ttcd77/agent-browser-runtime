@@ -42,6 +42,7 @@ const requiredReadmePhrases = [
   "devtools_security_research_pack",
   "devtools_professional_readiness",
   "routeSummary",
+  "route artifacts",
   "browser_inspect",
 ];
 
@@ -112,7 +113,7 @@ if (existsSync("docs/agent-devtools-api.md")) {
 
 if (existsSync("docs/agent-operator-runbook.md")) {
   const runbook = readText("docs/agent-operator-runbook.md");
-  for (const phrase of ["professional-appsec", "devtools_professional_readiness", "routeSummary", "handoffReady", "devtools_artifact_read"]) {
+  for (const phrase of ["professional-appsec", "devtools_professional_readiness", "routeSummary", "route artifacts", "handoffReady", "devtools_artifact_read"]) {
     if (!runbook.includes(phrase)) failures.push(`agent-operator-runbook.md missing operator phrase: ${phrase}`);
   }
 }

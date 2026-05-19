@@ -983,3 +983,11 @@
 - 每个 artifact 会直接显示 `devtools_artifact_inspect` / `devtools_artifact_read` 入口，Agent 不需要先读取完整 JSON 才能进入证据。
 - `smoke:cli` 覆盖 route artifact 摘要输出。
 - 这仍然是客观证据路线输出，不做漏洞判断。
+
+### 2026-05-19: Route Artifact 文档门禁
+
+已经完成:
+
+- README、`docs/security-research-pack.md` 和 `docs/agent-operator-runbook.md` 现在都说明 CLI `route artifacts` 的用途。
+- `scripts/open-source-readiness.mjs` 会检查 README / runbook 持续保留 `route artifacts` 说明。
+- 这保证 Agent 交接文档不会退回到“读完整 JSON 再找路径”的低效模式。

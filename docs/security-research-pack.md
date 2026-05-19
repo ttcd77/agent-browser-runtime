@@ -96,7 +96,12 @@ capture, artifact inventory, evidence timeline, and the first F12 request-detail
 route. It is still only an evidence-readiness check, not a vulnerability
 judgment. The human-readable CLI summary also prints the first captured request's
 available F12 detail sections, header counts, and body availability so an agent
-can orient itself without immediately loading the full request detail.
+can orient itself without immediately loading the full request detail. It also
+prints route artifacts for saved F12 evidence, including F12 navigation, HAR
+completeness, trace, Application export, evidence bundle, drilldown plan,
+evidence manifest, correlation graph, auth boundary, and worker/frame boundary
+reports. Each route artifact includes bounded `devtools_artifact_inspect` /
+`devtools_artifact_read` follow-up tools.
 
 ## Why This Helps Security Research
 
@@ -140,9 +145,11 @@ Transport boundaries:
 5. Use `summary.f12NavigationPath`, `summary.firstF12RequestDetailPath`,
    `f12Navigation`, or readiness `routeSummary.firstF12RequestDetail` for the
    first concrete request-detail drill-down.
-6. Use the correlation graph and auth boundary report to choose deeper
+6. Use readiness `routeSummary.*Artifact` entries for direct inspect/read routes
+   into the saved F12 evidence files.
+7. Use the correlation graph and auth boundary report to choose deeper
    drill-down.
-7. Drill down with `devtools_request_detail`, `devtools_request_payload`,
+8. Drill down with `devtools_request_detail`, `devtools_request_payload`,
    `devtools_capture_diff`, `devtools_token_scan`, `devtools_storage_snapshot`,
    `devtools_source_get`, or `devtools_trace_query` only when needed.
 
