@@ -3,10 +3,11 @@
 import { spawn } from "node:child_process";
 import http from "node:http";
 import net from "node:net";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { platform } from "node:process";
+import { buildOperatorDemoReport } from "./security-research-demo-report.mjs";
 
 function assert(condition, message) {
   if (!condition) throw new Error(message);
@@ -212,6 +213,42 @@ try {
       output.operatorHandoff.objectiveBoundary?.toLowerCase().includes("does not classify"),
     `operatorHandoff crossed objective boundary: ${output.operatorHandoff?.objectiveBoundary}`,
   );
+  // ── Demo report generation and assertions ──────────────────────────────────
+  const demoReportPath = join(tempDir, "operator-demo-report.md");
+  const demoReportMd = buildOperatorDemoReport(output);
+  writeFileSync(demoReportPath, demoReportMd, "utf8");
+
+  assert(demoReportMd.length > 0, "demo report is empty");
+  assert(
+    demoReportMd.includes("## Operator Handoff"),
+    "demo report missing Operator Handoff section",
+  );
+  assert(
+    demoReportMd.includes("## Objective Boundary"),
+    "demo report missing Objective Boundary section",
+  );
+  assert(
+    demoReportMd.includes(output.artifactPaths.researchPackPath),
+    "demo report missing at least one artifact path",
+  );
+  assert(
+    demoReportMd.includes("devtools_artifact_read"),
+    "demo report missing devtools_artifact_read tool reference",
+  );
+  // Confirm forbidden content is absent
+  assert(
+    !demoReportMd.toLowerCase().includes("vulnerability found"),
+    "demo report contains forbidden text 'vulnerability found'",
+  );
+  assert(
+    !demoReportMd.toLowerCase().includes("high risk"),
+    "demo report contains forbidden text 'high risk'",
+  );
+  assert(
+    !demoReportMd.toLowerCase().includes("exploitable"),
+    "demo report contains forbidden text 'exploitable'",
+  );
+
   console.log("Security research pack example smoke passed:");
   console.log(`- fixture: ${fixture.url}`);
   console.log(`- requests: ${output.summary.requestCount}`);
@@ -221,6 +258,7 @@ try {
   console.log(`- operatorHandoff.routeArtifacts: ${output.operatorHandoff.routeArtifacts.length}`);
   console.log(`- operatorHandoff.firstRequest.tool: ${output.operatorHandoff.firstRequest?.tool}`);
   console.log(`- operatorHandoff.drilldowns: ${output.operatorHandoff.drilldowns.length}`);
+  console.log(`- demo report: ${demoReportPath} (${demoReportMd.length} chars)`);
 } finally {
   // 1. Ask the agent server to shut down gracefully.
   await fetch(`http://127.0.0.1:${serverPort}/shutdown`, { method: "POST" }).catch(() => {});
