@@ -148,12 +148,35 @@ try {
   assert(output.artifactPaths?.drilldownPlanPath, "example missing drilldown plan path");
   assert(Array.isArray(output.firstDrilldowns) && output.firstDrilldowns.length >= 1, "example missing drilldown routes");
   assert(output.objectiveBoundary?.includes("does not judge vulnerabilities"), "example crossed objective boundary");
+  // operatorHandoff assertions
+  assert(output.operatorHandoff, "missing operatorHandoff");
+  assert(output.operatorHandoff.firstRead, "operatorHandoff missing firstRead");
+  assert(
+    Array.isArray(output.operatorHandoff.routeArtifacts) && output.operatorHandoff.routeArtifacts.length >= 1,
+    `operatorHandoff missing routeArtifacts: ${JSON.stringify(output.operatorHandoff?.routeArtifacts)}`,
+  );
+  assert(
+    output.operatorHandoff.firstRequest?.tool === "devtools_request_detail",
+    `operatorHandoff firstRequest must be devtools_request_detail: ${JSON.stringify(output.operatorHandoff?.firstRequest)}`,
+  );
+  assert(
+    Array.isArray(output.operatorHandoff.drilldowns) && output.operatorHandoff.drilldowns.length >= 1,
+    `operatorHandoff missing drilldowns: ${JSON.stringify(output.operatorHandoff?.drilldowns)}`,
+  );
+  assert(
+    output.operatorHandoff.objectiveBoundary?.toLowerCase().includes("collect browser evidence") ||
+      output.operatorHandoff.objectiveBoundary?.toLowerCase().includes("does not classify"),
+    `operatorHandoff crossed objective boundary: ${output.operatorHandoff?.objectiveBoundary}`,
+  );
   console.log("Security research pack example smoke passed:");
   console.log(`- fixture: ${fixture.url}`);
   console.log(`- requests: ${output.summary.requestCount}`);
   console.log(`- research pack: ${output.artifactPaths.researchPackPath}`);
   console.log(`- drilldowns: ${output.firstDrilldowns.length}`);
   console.log(`- route artifacts: ${Object.keys(output.afterReadiness.routeArtifacts || {}).length}`);
+  console.log(`- operatorHandoff.routeArtifacts: ${output.operatorHandoff.routeArtifacts.length}`);
+  console.log(`- operatorHandoff.firstRequest.tool: ${output.operatorHandoff.firstRequest?.tool}`);
+  console.log(`- operatorHandoff.drilldowns: ${output.operatorHandoff.drilldowns.length}`);
 } finally {
   await fetch(`http://127.0.0.1:${serverPort}/shutdown`, { method: "POST" }).catch(() => {});
   setTimeout(() => runtime.kill(), 500);

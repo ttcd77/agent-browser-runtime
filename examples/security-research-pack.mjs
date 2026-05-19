@@ -64,6 +64,55 @@ function compactRouteArtifacts(routeSummary = {}) {
   }]));
 }
 
+const _routeArtifactsMap =
+  afterReadiness.routeArtifacts || compactRouteArtifacts(afterReadiness.routeSummary);
+
+const _firstRequestRoute =
+  pack.f12Navigation?.requests?.find((r) => r?.detail)?.detail ||
+  afterReadiness.routeSummary?.firstF12RequestDetail ||
+  null;
+
+const _drilldownItems = (pack.drilldownPlan?.drilldowns || [])
+  .slice(0, 3)
+  .map((d) => ({
+    label: d.label || d.tool || "drilldown",
+    tool: d.tool,
+    input: d.input || {},
+  }));
+
+const operatorHandoff = {
+  firstRead: {
+    tool: afterReadiness.routeSummary?.latestHandoffRead?.tool || "devtools_artifact_read",
+    route:
+      afterReadiness.routeSummary?.latestHandoffRead ||
+      (pack.summary?.researchPackPath
+        ? {
+            tool: "devtools_artifact_read",
+            input: {
+              profile,
+              path: pack.summary.researchPackPath,
+              mode: "line",
+              startLine: 1,
+              maxLines: 120,
+            },
+          }
+        : null),
+    purpose:
+      "Bounded read of the research pack summary; start here before loading other artifacts",
+  },
+  routeArtifacts: Object.entries(_routeArtifactsMap)
+    .filter(([, art]) => art?.inspect || art?.read)
+    .map(([name, art]) => ({
+      name,
+      inspectRoute: art.inspect || null,
+      readRoute: art.read || null,
+    })),
+  firstRequest: _firstRequestRoute,
+  drilldowns: _drilldownItems,
+  objectiveBoundary:
+    "Collect browser evidence only; do not classify findings as vulnerabilities.",
+};
+
 console.log(JSON.stringify({
   backend: pack.backend,
   profile: pack.profile,
@@ -130,5 +179,6 @@ console.log(JSON.stringify({
     drilldownPlanPath: pack.summary?.drilldownPlanPath,
   },
   firstDrilldowns: pack.drilldownPlan?.drilldowns?.slice(0, 5),
+  operatorHandoff,
   objectiveBoundary: "This example prints evidence workflow readiness and artifact paths only; it does not judge vulnerabilities.",
 }, null, 2));

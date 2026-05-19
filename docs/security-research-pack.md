@@ -138,19 +138,63 @@ Transport boundaries:
 - Both modes keep the same `devtools_*` names and return capture boundaries so
   agents can distinguish complete evidence from unavailable or uncaptured data.
 
+## Operator Handoff
+
+The example output (`examples/security-research-pack.mjs`) includes a compact
+`operatorHandoff` field. A new agent can start from this field without loading
+the full research pack JSON.
+
+```json
+{
+  "operatorHandoff": {
+    "firstRead": {
+      "tool": "devtools_artifact_read",
+      "route": { "tool": "devtools_artifact_read", "input": { "profile": "researcher", "path": "<researchPackPath>", "mode": "line", "startLine": 1, "maxLines": 120 } },
+      "purpose": "Bounded read of the research pack summary; start here before loading other artifacts"
+    },
+    "routeArtifacts": [
+      { "name": "f12Navigation",    "inspectRoute": { "tool": "devtools_artifact_inspect", "input": { "profile": "researcher", "path": "<f12NavigationPath>" } }, "readRoute": null },
+      { "name": "harCompleteness",  "inspectRoute": null, "readRoute": { "tool": "devtools_artifact_read",   "input": { "profile": "researcher", "path": "<harCompletenessPath>", "mode": "line", "startLine": 1, "maxLines": 60 } } }
+    ],
+    "firstRequest": {
+      "tool": "devtools_request_detail",
+      "input": { "profile": "researcher", "requestId": "<first-request-id>" }
+    },
+    "drilldowns": [
+      { "label": "First request detail", "tool": "devtools_request_detail", "input": { "profile": "researcher", "requestId": "<id>" } }
+    ],
+    "objectiveBoundary": "Collect browser evidence only; do not classify findings as vulnerabilities."
+  }
+}
+```
+
+How to consume it:
+
+1. Read `operatorHandoff.firstRead.route` to get a bounded view of the research
+   pack. Do not load the full file into context.
+2. Scan `operatorHandoff.routeArtifacts` to find which evidence areas have
+   ready-to-use `devtools_artifact_inspect` or `devtools_artifact_read` calls.
+3. Call `operatorHandoff.firstRequest` to get the first captured request's
+   F12 detail sections, headers, cookies, timing, and initiator.
+4. Extend with `operatorHandoff.drilldowns` when a specific evidence area
+   needs deeper investigation.
+5. Keep `operatorHandoff.objectiveBoundary` in context: the tools collect
+   evidence; vulnerability conclusions are the agent's separate reasoning step.
+
+The handoff is deterministic and stable across runs — it does not include large
+bodies, full HAR entries, or trace events.
+
 ## Recommended Agent Flow
 
 1. Call `devtools_backend_capabilities`.
 2. Call `devtools_security_research_pack`.
-3. Read `summary` and `steps`.
-4. Open the saved evidence bundle and manifest.
-5. Use `summary.f12NavigationPath`, `summary.firstF12RequestDetailPath`,
-   `f12Navigation`, or readiness `routeSummary.firstF12RequestDetail` for the
-   first concrete request-detail drill-down.
-6. Use readiness `routeSummary.*Artifact` entries for direct inspect/read routes
-   into the saved F12 evidence files.
-7. Use the correlation graph and auth boundary report to choose deeper
-   drill-down.
+3. Read `operatorHandoff` first for a compact orientation map.
+4. Follow `operatorHandoff.firstRead.route` to read the research pack summary.
+5. Use `operatorHandoff.firstRequest` for the first concrete request drill-down.
+6. Expand `operatorHandoff.routeArtifacts` entries via their `inspectRoute` or
+   `readRoute` when a specific evidence area needs investigation.
+7. Follow `operatorHandoff.drilldowns` or the full `drilldownPlan` for deeper
+   investigation paths.
 8. Drill down with `devtools_request_detail`, `devtools_request_payload`,
    `devtools_capture_diff`, `devtools_token_scan`, `devtools_storage_snapshot`,
    `devtools_source_get`, or `devtools_trace_query` only when needed.

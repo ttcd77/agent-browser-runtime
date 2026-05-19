@@ -161,6 +161,45 @@ curl -X POST http://127.0.0.1:17335/tool/devtools_trace_query \
 first matched events. Use it like the Performance panel's local context: helpful
 for orientation, but not causal proof by itself.
 
+## Consuming the Operator Handoff
+
+When the example or another orchestrator passes an `operatorHandoff` object, use
+it as the entry point instead of scanning the full research pack JSON.
+
+```
+operatorHandoff.firstRead.route       → call this first (bounded artifact read)
+operatorHandoff.routeArtifacts[]      → pick the evidence area you need, call inspectRoute or readRoute
+operatorHandoff.firstRequest          → devtools_request_detail for the first captured request
+operatorHandoff.drilldowns[]          → concrete tool calls for deeper investigation
+operatorHandoff.objectiveBoundary     → reminder: evidence only, no vulnerability conclusions
+```
+
+Step-by-step:
+
+1. **Orient**: call `operatorHandoff.firstRead.route`. This gives the first 120
+   lines of the research pack — enough to see request counts, artifact paths,
+   and capture boundaries without loading the whole file.
+
+2. **Pick an evidence area**: scan `operatorHandoff.routeArtifacts`. Each entry
+   has a `name` (e.g. `f12Navigation`, `harCompleteness`, `correlationGraph`),
+   an `inspectRoute`, and a `readRoute`. Call the route you need.
+
+3. **First request detail**: call `operatorHandoff.firstRequest` directly. It is
+   a ready-to-execute `devtools_request_detail` call with the correct profile and
+   requestId already populated.
+
+4. **Drilldowns**: `operatorHandoff.drilldowns` contains up to three concrete
+   tool calls with labels, tool names, and populated inputs. Use them when the
+   first-pass evidence points to a specific request or artifact.
+
+5. **Objective boundary**: `operatorHandoff.objectiveBoundary` is always
+   `"Collect browser evidence only; do not classify findings as vulnerabilities."`
+   Keep this rule active when reasoning over the evidence.
+
+Do not paste large JSON blobs (full HAR, full trace, full research pack) into
+model context. Use `devtools_artifact_read` with `mode: "line"` and bounded
+`maxLines`, or `devtools_artifact_inspect` to get a structural summary first.
+
 ## One-Call Evidence Pack
 
 For a repeatable first-pass evidence package:
