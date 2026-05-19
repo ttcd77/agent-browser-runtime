@@ -1,6 +1,6 @@
-# Agent Browser Runtime: Portfolio One-Pager
+# Project Overview
 
-Agent Browser Runtime is a local DevTools evidence runtime for AI agents. It gives an agent a professional browser workbench that is closer to how an application security researcher uses Chrome DevTools: open a page, start capture, reproduce behavior, collect objective evidence, and drill into the exact browser facts behind an observation.
+Agent Browser Runtime is a local DevTools evidence runtime for AI agents. It gives an agent a browser workbench that is closer to how an application security researcher uses Chrome DevTools: open a page, start capture, reproduce behavior, collect objective evidence, and drill into the exact browser facts behind an observation.
 
 The project is intentionally not a vulnerability scanner. It does not decide whether something is exploitable or assign severity. Its job is to expose browser evidence clearly enough that a human researcher or an AI agent can reason from facts rather than screenshots, guesses, or incomplete page state.
 
@@ -28,22 +28,11 @@ Without this layer, an agent can interact with a website but still fail to under
 - **Profile-scoped operating spaces**: each profile owns its browser tab, evidence directory, traffic journal, event journal, screenshots, and snapshots.
 - **Objective boundary**: readiness and evidence tools return facts, routes, and artifact paths. They do not classify vulnerabilities.
 
-## Professional Signals
-
-This repository is meant to demonstrate:
-
-- product thinking around agent usability, not just browser automation,
-- Chrome DevTools Protocol and browser-debugging engineering,
-- structured evidence capture for security research workflows,
-- testable contracts that keep Managed Browser and Personal Chrome behavior aligned,
-- practical handling of iframe, shadow DOM, redirect, realtime, trace, and storage boundaries,
-- awareness that browser evidence may contain sensitive data and must stay local unless explicitly sanitized.
-
 ## Current Maturity
 
 Current status: **professional core ready, active development**.
 
-The Managed Browser path is the primary supported workflow. It has release readiness checks, contract checks, unit tests, F12 smoke tests, professional workflow smoke tests, and a scorecard. Personal Chrome mode exists for local authorized debugging but should be treated as beta.
+The Managed Browser path is the primary supported workflow. It has release readiness checks, contract checks, unit tests, F12 smoke tests, professional workflow smoke tests, example workflow smoke tests, and a scorecard. Personal Chrome mode exists for local authorized debugging but should be treated as beta.
 
 Known boundaries are documented rather than hidden. For example, historical browser data cannot be recovered if capture was not enabled before the action, and browser replay is not raw socket-level replay.
 

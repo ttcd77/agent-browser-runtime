@@ -99,9 +99,9 @@ available.
 For agent operators, start with `docs/agent-operator-runbook.md`. For the
 complete product contract, read `docs/agent-devtools-api.md`.
 
-For portfolio review, read `docs/portfolio-one-pager.md`. For publishing this
-repository safely, read `docs/github-publish-guide.md` and
-`docs/safety-boundaries.md`.
+For a compact project summary, read `docs/project-overview.md`. For the current
+public work-in-progress status, read `docs/public-release-notes.md`. Safety
+boundaries are documented in `docs/safety-boundaries.md`.
 
 Run all local checks:
 

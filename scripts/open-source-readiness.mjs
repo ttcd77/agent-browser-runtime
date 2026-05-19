@@ -11,6 +11,8 @@ const requiredFiles = [
   "docs/devtools-panel-map.md",
   "docs/competitor-research.md",
   "docs/open-source-release-checklist.md",
+  "docs/project-overview.md",
+  "docs/public-release-notes.md",
   "examples/agent-devtools-workflows.md",
   "examples/mcp-adapter-sketch.mjs",
   "examples/security-research-pack.mjs",
@@ -153,6 +155,7 @@ for (const path of tracked) {
 }
 
 const internalWording = tracked.filter((path) => /\.(md|json|mjs|ts)$/i.test(path)).flatMap((path) => {
+  if (!existsSync(path)) return [];
   const text = readText(path);
   if (!/OpenClaw/i.test(text)) return [];
   if (/compat|adapter|shim|openclaw\.plugin|without OpenClaw|OpenClaw-compatible|OpenClaw config|createMockOpenClawApi|plugin SDK|OPENCLAW_CONFIG_PATH|OPENCLAW_GATEWAY_TOKEN/i.test(text)) return [];
