@@ -3,6 +3,7 @@ import { createHash, randomUUID } from "node:crypto";
 import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve, sep } from "node:path";
 import { WebSocketServer } from "ws";
+import { buildArtifactIndex as buildSharedArtifactIndex, inferArtifactKind as inferSharedArtifactKind } from "./lib/artifact-index.mjs";
 
 const httpPort = Number.parseInt(process.env.PERSONAL_CHROME_HTTP_PORT || "17337", 10);
 const wsPort = Number.parseInt(process.env.PERSONAL_CHROME_WS_PORT || "17336", 10);
@@ -872,6 +873,7 @@ function inspectArtifactFile(params = {}) {
 }
 
 function inferArtifactKind(file) {
+  return inferSharedArtifactKind(file);
   const value = String(file || "").replace(/\\/g, "/").toLowerCase();
   const ext = value.split(".").pop() || "";
   if (value.includes("har-completeness")) return "har-completeness";
@@ -898,6 +900,7 @@ function inferArtifactKind(file) {
 }
 
 function buildArtifactIndex(files = [], params = {}) {
+  return buildSharedArtifactIndex(files, params);
   const query = String(params.query || "").trim().toLowerCase();
   const kindFilter = String(params.kind || "").trim().toLowerCase();
   const maxFiles = Math.max(1, Math.min(Number(params.maxFiles) || 200, 2000));

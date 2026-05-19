@@ -6,6 +6,7 @@ import { spawn } from "node:child_process";
 import { createHash } from "node:crypto";
 import http from "node:http";
 import CDP from "chrome-remote-interface";
+import { buildArtifactIndex as buildSharedArtifactIndex, inferArtifactKind as inferSharedArtifactKind } from "./lib/artifact-index.mjs";
 
 const root = process.cwd();
 const DIRECT_CDP_CORE_DOMAINS = [
@@ -755,6 +756,7 @@ function inspectArtifactFile(params = {}) {
 }
 
 function inferArtifactKind(file) {
+  return inferSharedArtifactKind(file);
   const value = String(file || "").replace(/\\/g, "/").toLowerCase();
   const ext = value.split(".").pop() || "";
   if (value.includes("har-completeness")) return "har-completeness";
@@ -783,6 +785,7 @@ function inferArtifactKind(file) {
 }
 
 function buildArtifactIndex(files = [], params = {}) {
+  return buildSharedArtifactIndex(files, params);
   const query = String(params.query || "").trim().toLowerCase();
   const kindFilter = String(params.kind || "").trim().toLowerCase();
   const maxFiles = Math.max(1, Math.min(Number(params.maxFiles) || 200, 2000));

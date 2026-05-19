@@ -31,7 +31,7 @@
   },
   "scripts": {
     "build": "tsc && node scripts/copy-plugin-manifests.mjs",
-    "test": "vitest run src/plugins/cdp-traffic-capture/schemas.test.ts src/plugins/browser-profile-pool/lease-store.test.ts",
+    "test": "vitest run src/plugins/cdp-traffic-capture/schemas.test.ts src/plugins/browser-profile-pool/lease-store.test.ts scripts/lib/artifact-index.test.mjs",
     "test:schemas": "vitest run src/plugins/cdp-traffic-capture/schemas.test.ts",
     "smoke:product": "npm run build && node scripts/product-smoke.mjs",
     "smoke:browser": "npm run build && node scripts/live-browser-smoke.mjs",
