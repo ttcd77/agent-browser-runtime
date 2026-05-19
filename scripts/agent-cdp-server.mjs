@@ -768,6 +768,7 @@ function inferArtifactKind(file) {
   if (value.includes("/bundles/") || value.includes("evidence-bundle") || value.includes("f12-evidence")) return "bundle";
   if (value.includes("/manifests/") || value.includes("manifest")) return "manifest";
   if (value.includes("/graphs/") || value.includes("graph")) return "graph";
+  if (value.includes("/realtime/") || value.includes("realtime")) return "realtime";
   if (value.includes("/diffs/") || value.includes("diff")) return "diff";
   if (value.includes("/auth/") || value.includes("auth-boundary")) return "auth-boundary";
   if (value.includes("/boundaries/") || value.includes("worker-frame")) return "boundary";
@@ -817,7 +818,7 @@ function buildArtifactIndex(files = [], params = {}) {
       };
     }
   }
-  const recommendedKindOrder = ["research-pack", "drilldown-plan", "har", "application", "bundle", "manifest", "graph", "auth-boundary", "boundary", "trace"];
+  const recommendedKindOrder = ["research-pack", "drilldown-plan", "har", "realtime", "application", "bundle", "manifest", "graph", "auth-boundary", "boundary", "trace"];
   const recommendedDrilldowns = recommendedKindOrder
     .filter((kind) => latestByKind[kind])
     .flatMap((kind) => {
@@ -828,7 +829,7 @@ function buildArtifactIndex(files = [], params = {}) {
         input: artifact.inspectInput,
         path: artifact.path,
       }];
-      if (["research-pack", "drilldown-plan", "har", "application", "bundle", "manifest", "graph", "auth-boundary", "boundary"].includes(kind)) {
+      if (["research-pack", "drilldown-plan", "har", "realtime", "application", "bundle", "manifest", "graph", "auth-boundary", "boundary"].includes(kind)) {
         drilldowns.push({
           label: `Read latest ${kind} artifact`,
           tool: "devtools_artifact_read",
@@ -3156,6 +3157,7 @@ function buildResearchPackHandoffCompleteness(summary = {}, artifacts = {}, work
     { name: "agentUsageRoute", present: Boolean(defaultRoute.some((step) => step.tool === "browser_security_pack") && panelRoutes.network?.some((step) => step.tool === "devtools_request_detail")), evidence: defaultRoute.map((step) => step.tool) },
     { name: "researchPack", present: Boolean(summary.researchPackPath && artifacts.researchPack?.sha256), evidence: summary.researchPackPath || null },
     { name: "drilldownPlan", present: Boolean(summary.drilldownPlanPath && drilldownPlan?.count >= 1), evidence: summary.drilldownPlanPath || null },
+    { name: "realtimeLog", present: Boolean(summary.realtimeLogPath && artifacts.realtime?.reportSha256), evidence: summary.realtimeLogPath || null },
     { name: "artifactIndex", present: Boolean(artifacts.artifactIndex?.totalFileCount >= 1), evidence: artifacts.artifactIndex?.totalFileCount ?? null },
     { name: "evidenceTimeline", present: Boolean(artifacts.evidenceTimeline?.eventCount >= 1), evidence: artifacts.evidenceTimeline?.eventCount ?? null },
     { name: "captureStatus", present: Boolean(artifacts.captureStatus?.capture), evidence: summary.capture || null },
@@ -3175,6 +3177,7 @@ function buildResearchPackArtifactCoverage(summary = {}, options = {}) {
   const requested = {
     har: options.includeHar !== false,
     harCompleteness: options.includeHar !== false,
+    realtime: true,
     application: options.includeApplicationExport !== false,
     trace: options.includeTrace !== false,
     bundle: true,
@@ -3190,6 +3193,7 @@ function buildResearchPackArtifactCoverage(summary = {}, options = {}) {
   const paths = {
     har: summary.harPath,
     harCompleteness: summary.harCompletenessPath,
+    realtime: summary.realtimeLogPath,
     application: summary.applicationExportPath,
     trace: summary.tracePath,
     bundle: summary.evidenceBundlePath,
@@ -3310,6 +3314,7 @@ function buildProfessionalReadiness({
   const firstF12RequestDetailPath = latestResearchPackSummary?.artifactPaths?.firstF12RequestDetailPath || null;
   const f12NavigationPath = latestResearchPackSummary?.artifactPaths?.f12NavigationPath || null;
   const harCompletenessPath = latestResearchPackSummary?.artifactPaths?.harCompletenessPath || null;
+  const realtimeLogPath = latestResearchPackSummary?.artifactPaths?.realtimeLogPath || null;
   const tracePath = latestResearchPackSummary?.artifactPaths?.tracePath || null;
   const applicationExportPath = latestResearchPackSummary?.artifactPaths?.applicationExportPath || null;
   const evidenceBundlePath = latestResearchPackSummary?.artifactPaths?.evidenceBundlePath || null;
@@ -3332,6 +3337,11 @@ function buildProfessionalReadiness({
     path: harCompletenessPath,
     inspect: { tool: "devtools_artifact_inspect", input: { path: harCompletenessPath, maxBytes: 160000 } },
     read: { tool: "devtools_artifact_read", input: { path: harCompletenessPath, mode: "line", startLine: 1, lineCount: 160 } },
+  } : null;
+  const realtimeLogArtifact = realtimeLogPath ? {
+    path: realtimeLogPath,
+    inspect: { tool: "devtools_artifact_inspect", input: { path: realtimeLogPath, maxBytes: 160000 } },
+    read: { tool: "devtools_artifact_read", input: { path: realtimeLogPath, mode: "line", startLine: 1, lineCount: 160 } },
   } : null;
   const traceArtifact = tracePath ? {
     path: tracePath,
@@ -3668,6 +3678,7 @@ function buildProfessionalReadiness({
     ["f12Navigation", f12NavigationArtifact],
     ["firstF12RequestDetail", firstF12RequestDetailArtifact],
     ["harCompleteness", harCompletenessArtifact],
+    ["realtimeLog", realtimeLogArtifact],
     ["trace", traceArtifact],
     ["applicationExport", applicationExportArtifact],
     ["evidenceBundle", evidenceBundleArtifact],
@@ -4108,6 +4119,7 @@ function buildResearchPackDrilldowns(artifacts = {}, options = {}) {
   const timelineEvents = Array.isArray(artifacts.evidenceTimeline?.events) ? artifacts.evidenceTimeline.events : [];
   const firstRequest = timelineEvents.find((event) => event.type === "network-request" && event.requestId);
   const harArtifact = artifactRows.find((artifact) => artifact.kind === "har" || String(artifact.path || "").toLowerCase().endsWith(".har"));
+  const realtimeArtifact = artifacts.realtime?.reportPath ? { path: artifacts.realtime.reportPath } : artifactRows.find((artifact) => artifact.kind === "realtime" || String(artifact.path || "").toLowerCase().includes("\\realtime\\") || String(artifact.path || "").toLowerCase().includes("/realtime/"));
   const traceArtifact = artifactRows.find((artifact) => artifact.kind === "trace" || String(artifact.path || "").toLowerCase().includes("\\traces\\") || String(artifact.path || "").toLowerCase().includes("/traces/"));
   const tracePath = artifacts.trace?.tracePath || traceArtifact?.path || null;
   const bundleArtifact = artifactRows.find((artifact) => artifact.kind === "bundle" || String(artifact.path || "").toLowerCase().includes("\\bundles\\") || String(artifact.path || "").toLowerCase().includes("/bundles/"));
@@ -4151,6 +4163,20 @@ function buildResearchPackDrilldowns(artifacts = {}, options = {}) {
       tool: "devtools_artifact_inspect",
       input: { path: harArtifact.path, maxBytes: 8000 },
       why: "Inspect HAR entry/body/timing structure without reading the full file into context.",
+    });
+  }
+  if (realtimeArtifact?.path) {
+    rows.push({
+      label: "Realtime WebSocket/SSE evidence",
+      tool: "devtools_artifact_read",
+      input: { path: realtimeArtifact.path, mode: "line", startLine: 1, maxLines: 120 },
+      why: "Read saved WebSocket/SSE evidence without loading the full realtime stream into context.",
+    });
+    rows.push({
+      label: "Realtime payload drilldown",
+      tool: "devtools_realtime_log",
+      input: { ...profileInput, payload_contains: "<literal-protocol-marker>", limit: 50 },
+      why: "Filter WebSocket/SSE payloads by a concrete marker such as an XMPP error, room name, or protocol token.",
     });
   }
   if (tracePath) {
@@ -7323,6 +7349,8 @@ function registerStandaloneBrowserTools(tools, cdpPort, profileRegistry, default
         direction: { type: "string" },
         limit: { type: "number" },
         maxPayloadChars: { type: "number" },
+        save: { type: "boolean" },
+        path: { type: "string" },
       },
     },
     async execute(_id, params) {
@@ -7398,7 +7426,7 @@ function registerStandaloneBrowserTools(tools, cdpPort, profileRegistry, default
           why: "Narrow WebSocket/SSE evidence by concrete channel id without loading unrelated realtime traffic.",
         });
       }
-      return toolResult({
+      const report = {
         backend: "managed-cdp",
         profile: profile.name,
         evidenceDir: profile.evidenceDir,
@@ -7416,7 +7444,20 @@ function registerStandaloneBrowserTools(tools, cdpPort, profileRegistry, default
         recommendedDrilldowns,
         websockets,
         eventSources,
-      });
+        boundaries: [
+          "Realtime evidence is limited to WebSocket/SSE activity observed after capture/listener attachment.",
+          "Payload filtering is literal string matching only; it does not classify protocol messages or security impact.",
+        ],
+      };
+      if (params?.save) {
+        const reportPath = params?.path || join(profile.evidenceDir, "realtime", `${Date.now()}-realtime-log.json`);
+        mkdirSync(dirname(reportPath), { recursive: true });
+        writeFileSync(reportPath, `${JSON.stringify(report, null, 2)}\n`, "utf8");
+        report.reportPath = reportPath;
+        report.reportBytes = statSync(reportPath).size;
+        report.reportSha256 = fileSha256(reportPath);
+      }
+      return toolResult(report);
     },
   });
 
@@ -11745,6 +11786,7 @@ function registerStandaloneBrowserTools(tools, cdpPort, profileRegistry, default
       const sources = await safeCall("agent_inspect", { focus: "sources", limit });
       const performance = await safeCall("agent_inspect", { focus: "performance", limit, includeHeavy: Boolean(params?.includePerformanceHeavy) });
       const artifacts = {};
+      artifacts.realtime = await safeCall("devtools_realtime_log", { limit: 500, save: true });
       if (params?.includeHar !== false) {
         artifacts.har = await safeCall("devtools_save_har", { limit: 500, includeBodies: false });
         artifacts.harCompleteness = await safeCall("devtools_har_completeness", {
@@ -11814,6 +11856,7 @@ function registerStandaloneBrowserTools(tools, cdpPort, profileRegistry, default
         save: true,
         artifactPaths: [
           artifacts.har?.harPath,
+          artifacts.realtime?.reportPath,
           artifacts.harCompleteness?.reportPath,
           artifacts.application?.exportPath,
           artifacts.trace?.tracePath,
@@ -11856,6 +11899,7 @@ function registerStandaloneBrowserTools(tools, cdpPort, profileRegistry, default
         performanceObserverEntryCount: performance?.evidence?.observer?.summary?.entryCount ?? null,
         tracePath: artifacts.trace?.tracePath || null,
         harPath: artifacts.har?.harPath || null,
+        realtimeLogPath: artifacts.realtime?.reportPath || null,
         harCompletenessPath: artifacts.harCompleteness?.reportPath || null,
         applicationExportPath: artifacts.application?.exportPath || null,
         evidenceBundlePath: artifacts.bundle?.bundlePath || null,
@@ -11904,6 +11948,7 @@ function registerStandaloneBrowserTools(tools, cdpPort, profileRegistry, default
         summary: { ...summary, researchPackPath },
         artifactPaths: {
           harPath: summary.harPath,
+          realtimeLogPath: summary.realtimeLogPath,
           harCompletenessPath: summary.harCompletenessPath,
           tracePath: summary.tracePath,
           applicationExportPath: summary.applicationExportPath,

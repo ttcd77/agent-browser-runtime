@@ -29,6 +29,10 @@ make them objectively retrievable.
   - `matchingWebsocketFrameCount`
   - per-socket `matchingFrameCount`
   - concrete `recommendedDrilldowns`
+- Managed Browser `devtools_realtime_log` can now save a realtime artifact with
+  `save: true`.
+- `devtools_security_research_pack` now includes the realtime artifact in its
+  artifact coverage, manifest, handoff, and drilldown routes.
 
 ## Regression
 

@@ -240,9 +240,11 @@ try {
   });
   assert(pack.backend === "managed-cdp", `professional pack wrong backend: ${JSON.stringify(pack)}`);
   assert(pack.summary?.harPath, "professional pack missing HAR path");
+  assert(pack.summary?.realtimeLogPath, "professional pack missing realtime log path");
   assert(pack.summary?.harCompletenessPath, "professional pack missing HAR completeness path");
   assert(pack.summary?.tracePath, "professional pack missing trace path");
   assert(pack.artifacts?.harCompleteness?.entryCount >= 1, `professional pack missing HAR completeness artifact: ${JSON.stringify(pack.artifacts?.harCompleteness)}`);
+  assert(pack.artifacts?.realtime?.reportSha256, `professional pack missing realtime artifact hash: ${JSON.stringify(pack.artifacts?.realtime)}`);
   assert(pack.summary?.applicationExportPath, "professional pack missing Application export path");
   assert(pack.summary?.evidenceBundlePath, "professional pack missing evidence bundle path");
   assert(pack.summary?.correlationGraphPath, "professional pack missing correlation graph path");
@@ -269,6 +271,7 @@ try {
   assert(pack.handoffCompleteness?.checks?.some((check) => check.name === "agentUsageRoute" && check.present), `professional pack handoff completeness missing agent route check: ${JSON.stringify(pack.handoffCompleteness?.checks)}`);
   assert(pack.summary?.artifactCoverageReady === true, `professional pack artifact coverage not ready: ${JSON.stringify(pack.summary?.artifactCoverageMissing)}`);
   assert(pack.artifactCoverage?.rows?.some((row) => row.name === "har" && row.status === "present"), `professional pack missing HAR artifact coverage: ${JSON.stringify(pack.artifactCoverage)}`);
+  assert(pack.artifactCoverage?.rows?.some((row) => row.name === "realtime" && row.status === "present"), `professional pack missing realtime artifact coverage: ${JSON.stringify(pack.artifactCoverage)}`);
   assert(pack.artifactCoverage?.rows?.some((row) => row.name === "harCompleteness" && row.status === "present"), `professional pack missing HAR completeness artifact coverage: ${JSON.stringify(pack.artifactCoverage)}`);
   assert(pack.summary?.drilldownPlanPath, "professional pack missing drilldown plan path");
   assert(pack.summary?.researchPackPath, "professional pack missing handoff path");
@@ -284,6 +287,7 @@ try {
   assert(pack.artifacts?.artifactIndex?.totalFileCount >= 1, "professional pack missing artifact index payload");
   assert(pack.artifacts?.artifactIndex?.kinds?.["research-pack"] >= 1, `professional pack artifact index missing handoff kind: ${JSON.stringify(pack.artifacts?.artifactIndex?.kinds)}`);
   assert(pack.artifacts?.artifactIndex?.kinds?.["har-completeness"] >= 1, `professional pack artifact index missing HAR completeness kind: ${JSON.stringify(pack.artifacts?.artifactIndex?.kinds)}`);
+  assert(pack.artifacts?.artifactIndex?.kinds?.realtime >= 1, `professional pack artifact index missing realtime kind: ${JSON.stringify(pack.artifacts?.artifactIndex?.kinds)}`);
   assert(pack.artifacts?.artifactIndex?.kinds?.["f12-navigation"] >= 1, `professional pack artifact index missing f12-navigation kind: ${JSON.stringify(pack.artifacts?.artifactIndex?.kinds)}`);
   assert(pack.artifacts?.artifactIndex?.kinds?.["request-detail"] >= 1, `professional pack artifact index missing request-detail kind: ${JSON.stringify(pack.artifacts?.artifactIndex?.kinds)}`);
   assert(pack.artifacts?.evidenceTimeline?.eventCount >= 1, "professional pack missing evidence timeline payload");
@@ -309,6 +313,7 @@ try {
   assert(finalReadiness.checks?.some((check) => check.name === "evidenceEntrypointsReachable" && check.present), `professional readiness missing evidence entrypoints check: ${JSON.stringify(finalReadiness.checks)}`);
   assert(finalReadiness.routeSummary?.latestHandoffInspect?.tool === "devtools_artifact_inspect", `professional readiness missing route handoff inspect: ${JSON.stringify(finalReadiness.routeSummary)}`);
   assert(finalReadiness.routeArtifacts?.f12Navigation?.inspect?.tool === "devtools_artifact_inspect", `professional readiness missing compact F12 navigation route artifact: ${JSON.stringify(finalReadiness.routeArtifacts)}`);
+  assert(finalReadiness.routeArtifacts?.realtimeLog?.read?.tool === "devtools_artifact_read", `professional readiness missing compact realtime route artifact: ${JSON.stringify(finalReadiness.routeArtifacts)}`);
   assert(finalReadiness.routeArtifacts?.harCompleteness?.read?.tool === "devtools_artifact_read", `professional readiness missing compact HAR completeness route artifact: ${JSON.stringify(finalReadiness.routeArtifacts)}`);
   assert(finalReadiness.routeArtifacts?.correlationGraph?.inspect?.tool === "devtools_artifact_inspect", `professional readiness missing compact correlation graph route artifact: ${JSON.stringify(finalReadiness.routeArtifacts)}`);
   assert(finalReadiness.routeArtifacts?.authBoundary?.read?.tool === "devtools_artifact_read", `professional readiness missing compact auth boundary route artifact: ${JSON.stringify(finalReadiness.routeArtifacts)}`);

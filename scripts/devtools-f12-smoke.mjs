@@ -850,11 +850,13 @@ try {
     payload_contains: "AGENT_WS_MARKER",
     direction: "sent",
     limit: 20,
+    save: true,
   });
   assert(realtimePayloadFilter.filters?.payload_contains === "AGENT_WS_MARKER", `realtime payload filter not echoed: ${JSON.stringify(realtimePayloadFilter.filters)}`);
   assert(realtimePayloadFilter.matchingWebsocketFrameCount >= 1, `realtime payload filter found no matching frames: ${JSON.stringify(realtimePayloadFilter)}`);
   assert(realtimePayloadFilter.websockets?.every((socket) => socket.frames?.every((frame) => String(frame.payloadData || "").includes("AGENT_WS_MARKER"))), `realtime payload filter returned unrelated frames: ${JSON.stringify(realtimePayloadFilter.websockets)}`);
   assert(realtimePayloadFilter.recommendedDrilldowns?.some((entry) => entry.tool === "devtools_realtime_log" && entry.input?.requestId), `realtime payload filter missing concrete drilldown: ${JSON.stringify(realtimePayloadFilter.recommendedDrilldowns)}`);
+  assert(realtimePayloadFilter.reportPath && realtimePayloadFilter.reportSha256, `realtime payload filter did not save artifact: ${JSON.stringify(realtimePayloadFilter)}`);
   const realtimeSseFilter = await callTool(baseUrl, "devtools_realtime_log", {
     profile: "default",
     payload_contains: "AGENT_SSE_MARKER",
