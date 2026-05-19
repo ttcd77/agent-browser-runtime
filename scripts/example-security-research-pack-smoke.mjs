@@ -6,6 +6,7 @@ import net from "node:net";
 import { mkdtempSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
+import { platform } from "node:process";
 
 function assert(condition, message) {
   if (!condition) throw new Error(message);
@@ -13,6 +14,49 @@ function assert(condition, message) {
 
 function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+// Wait for a child process to exit, with a hard timeout fallback.
+function waitForChildExit(child, timeoutMs = 5000) {
+  return new Promise((resolve) => {
+    if (child.exitCode !== null || child.killed) {
+      resolve();
+      return;
+    }
+    const timer = setTimeout(resolve, timeoutMs);
+    child.once("exit", () => {
+      clearTimeout(timer);
+      resolve();
+    });
+  });
+}
+
+// Remove a directory with limited retries to handle Windows EBUSY / EPERM
+// caused by browser processes that haven't released file handles yet.
+// If all retries are exhausted the failure is warned but not thrown, because
+// a cleanup race must not mask a passing test result.
+async function removePathWithRetry(dirPath, { maxRetries = 8, baseDelayMs = 250 } = {}) {
+  const isWindows = platform === "win32";
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      rmSync(dirPath, { recursive: true, force: true });
+      return;
+    } catch (err) {
+      const retryable = err.code === "EBUSY" || err.code === "EPERM" || err.code === "ENOTEMPTY";
+      if (retryable && attempt < maxRetries) {
+        // Exponential backoff; Windows needs more time for handle release.
+        const delay = baseDelayMs * (attempt + 1) * (isWindows ? 2 : 1);
+        await sleep(delay);
+        continue;
+      }
+      // Final attempt failed — warn so it is visible but do not rethrow.
+      console.warn(
+        `[cleanup] Warning: could not fully remove ${dirPath} after ${attempt + 1} attempt(s): ` +
+          `${err.code || err.message}. Temp files may remain. This does not affect test results.`,
+      );
+      return;
+    }
+  }
 }
 
 function freePort() {
@@ -178,8 +222,19 @@ try {
   console.log(`- operatorHandoff.firstRequest.tool: ${output.operatorHandoff.firstRequest?.tool}`);
   console.log(`- operatorHandoff.drilldowns: ${output.operatorHandoff.drilldowns.length}`);
 } finally {
+  // 1. Ask the agent server to shut down gracefully.
   await fetch(`http://127.0.0.1:${serverPort}/shutdown`, { method: "POST" }).catch(() => {});
-  setTimeout(() => runtime.kill(), 500);
+  // 2. Give the server a moment to begin closing before we kill the child.
+  await sleep(300);
+  // 3. Kill the browser / runtime child process.
+  runtime.kill();
+  // 4. Close the fixture HTTP server.
   fixture.server.close();
-  setTimeout(() => rmSync(tempDir, { recursive: true, force: true }), 1000);
+  // 5. Wait for the child process to actually exit so the OS can release its
+  //    file handles before we try to delete the temp directory.
+  await waitForChildExit(runtime, 5000);
+  // 6. Extra grace period on Windows where handle release is asynchronous.
+  await sleep(platform === "win32" ? 400 : 100);
+  // 7. Remove temp dir with retry; EBUSY on Windows is handled inside.
+  await removePathWithRetry(tempDir);
 }
