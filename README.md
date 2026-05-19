@@ -110,6 +110,17 @@ npm run check:professional
 This gate runs the build, schema tests, CLI handoff smoke, DevTools contract,
 F12 smoke, professional workflow smoke, and runnable example smoke.
 
+Professional capability scorecard:
+
+```bash
+npm run professional:scorecard
+```
+
+This starts a temporary Managed Browser and returns a machine-readable F12
+AppSec scorecard: panel coverage, facade-first route status, evidence-pack
+route status, objective-boundary status, and the remaining intentional browser
+boundaries. It is a tool maturity check, not a vulnerability scanner.
+
 Open-source readiness gate:
 
 ```bash

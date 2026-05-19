@@ -29,6 +29,7 @@ const requiredPackageScripts = [
   "check:devtools",
   "check:professional",
   "check:full",
+  "professional:scorecard",
   "research:pack",
   "release:readiness",
 ];
