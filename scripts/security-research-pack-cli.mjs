@@ -179,6 +179,28 @@ export function printSummary(pack, output = console.log) {
     if (typeof route.artifactEntrypointCount === "number") {
       output(`  - route evidence entrypoints: ${route.artifactEntrypointCount}`);
     }
+    const routeArtifacts = [
+      ["F12 navigation", route.f12NavigationArtifact],
+      ["first F12 request detail", route.firstF12RequestDetailArtifact],
+      ["HAR completeness", route.harCompletenessArtifact],
+      ["trace", route.traceArtifact],
+      ["Application export", route.applicationExportArtifact],
+      ["evidence bundle", route.evidenceBundleArtifact],
+      ["drilldown plan", route.drilldownPlanArtifact],
+      ["evidence manifest", route.evidenceManifestArtifact],
+      ["correlation graph", route.correlationGraphArtifact],
+      ["auth boundary", route.authBoundaryArtifact],
+      ["worker/frame boundary", route.workerFrameArtifact],
+    ].filter(([, artifact]) => artifact?.inspect?.tool || artifact?.read?.tool);
+    if (routeArtifacts.length) {
+      output("  - route artifacts:");
+      for (const [label, artifact] of routeArtifacts) {
+        const path = artifact.path || artifact.inspect?.input?.path || artifact.read?.input?.path || "(unknown)";
+        output(`    - ${label}: ${path}`);
+        if (artifact.inspect?.tool) output(`      inspect: ${artifact.inspect.tool}`);
+        if (artifact.read?.tool) output(`      read: ${artifact.read.tool}`);
+      }
+    }
   }
   if (workflow.task || Array.isArray(workflow.defaultPath)) {
     output(`- workflow: ${workflow.task || "(unknown)"}`);

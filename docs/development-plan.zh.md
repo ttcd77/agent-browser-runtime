@@ -973,3 +973,13 @@
 - `nextActions` 会包含这三类 artifact 的 `devtools_artifact_inspect` 下一步，Agent 可以从 readiness 进入跨请求关系、权限边界、worker/frame 边界证据。
 - Managed Browser / Personal Chrome smoke 都覆盖这些路线。
 - 这些路线只读取已保存的客观证据图和边界报告，不判断漏洞。
+
+### 2026-05-19: Research Pack CLI Route Artifacts
+
+已经完成:
+
+- `npm run research:pack` 的人类/Agent 摘要现在会打印 `route artifacts`。
+- 摘要会列出 F12 navigation、HAR completeness、trace、Application export、evidence bundle、drilldown plan、evidence manifest、correlation graph、auth boundary、worker/frame boundary 等 artifact 的路径。
+- 每个 artifact 会直接显示 `devtools_artifact_inspect` / `devtools_artifact_read` 入口，Agent 不需要先读取完整 JSON 才能进入证据。
+- `smoke:cli` 覆盖 route artifact 摘要输出。
+- 这仍然是客观证据路线输出，不做漏洞判断。
