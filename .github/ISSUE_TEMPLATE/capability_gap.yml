@@ -1,0 +1,49 @@
+name: Capability gap
+description: Report missing or weak F12/AppSec evidence support.
+title: "[Gap]: "
+labels: ["capability-gap"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        A capability gap means browser evidence exists or should be routable, but Agent Browser Runtime does not expose it clearly enough.
+        Do not include secrets, real target HARs, private screenshots, or authenticated response bodies.
+  - type: dropdown
+    id: panel
+    attributes:
+      label: F12 area
+      options:
+        - Network
+        - Elements / DOM / Frames
+        - Application / Storage
+        - Sources / Source Maps
+        - Console / Issues / Security
+        - WebSocket / SSE
+        - Performance / Memory
+        - Evidence workflow / Handoff
+        - MCP / SDK integration
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: need
+    attributes:
+      label: What did the agent need?
+    validations:
+      required: true
+  - type: textarea
+    id: current
+    attributes:
+      label: What happened instead?
+    validations:
+      required: true
+  - type: textarea
+    id: proposed
+    attributes:
+      label: Proposed tool behavior
+      description: Describe objective evidence or route improvements, not vulnerability judgement.
+  - type: textarea
+    id: safe_repro
+    attributes:
+      label: Public-safe reproduction or fixture idea
+

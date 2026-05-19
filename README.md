@@ -98,7 +98,9 @@ available.
 
 For agent operators, start with `docs/agent-operator-runbook.md`. For the
 complete product contract, read `docs/agent-devtools-api.md`.
+For a Codex-first operating manual, read `docs/codex-agent-manual.md`.
 For cross-agent and SDK integration, read `docs/browser-worker-integration.md`.
+For bug reports and capability gaps, read `docs/feedback-and-gaps.md`.
 
 For a compact project summary, read `docs/project-overview.md`. For the current
 public work-in-progress status, read `docs/public-release-notes.md`. Safety

@@ -53,6 +53,7 @@
     "smoke:demo": "node scripts/demo-fixture-smoke.mjs",
     "professional:scorecard": "node scripts/professional-scorecard.mjs",
     "worker:doctor": "node scripts/browser-worker-doctor.mjs",
+    "feedback:note": "node scripts/feedback-note.mjs",
     "research:pack": "node scripts/security-research-pack-cli.mjs",
     "check": "npm run build && npm run test && npm run smoke:cli",
     "check:devtools": "npm run contract:devtools && npm run smoke:f12 && npm run smoke:personal && npm run smoke:professional",

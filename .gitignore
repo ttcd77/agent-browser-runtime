@@ -26,3 +26,5 @@ research-packs/
 *.webm
 research/competitors/
 logs/
+feedback/*.md
+!feedback/README.md

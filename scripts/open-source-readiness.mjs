@@ -9,6 +9,8 @@ const requiredFiles = [
   "docs/safety-boundaries.md",
   "docs/agent-devtools-api.md",
   "docs/browser-worker-integration.md",
+  "docs/codex-agent-manual.md",
+  "docs/feedback-and-gaps.md",
   "docs/devtools-panel-map.md",
   "docs/competitor-research.md",
   "docs/open-source-release-checklist.md",
@@ -37,6 +39,7 @@ const requiredPackageScripts = [
   "check:full",
   "professional:scorecard",
   "worker:doctor",
+  "feedback:note",
   "research:pack",
   "release:readiness",
 ];
