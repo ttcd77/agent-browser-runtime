@@ -953,3 +953,12 @@
 - `nextActions` 会包含该 artifact 的 `devtools_artifact_inspect` 下一步，Agent 可以从 readiness 进入完整行动路线表，而不是只依赖截断后的首批 drilldown。
 - Managed Browser / Personal Chrome smoke 都覆盖该路线。
 - 该路线只读取保存的工具路线计划，不判断漏洞。
+
+### 2026-05-19: Readiness Evidence Manifest Artifact 路线完成
+
+已经完成:
+
+- `devtools_professional_readiness.routeSummary.evidenceManifestArtifact` 会直接返回 evidence manifest 的 inspect/read 路线。
+- `nextActions` 会包含该 artifact 的 `devtools_artifact_inspect` 下一步，Agent 可以从 readiness 校验本轮保存了哪些证据文件及其 hash。
+- Managed Browser / Personal Chrome smoke 都覆盖该路线。
+- 该路线只读取证据清单和文件完整性元数据，不判断漏洞。

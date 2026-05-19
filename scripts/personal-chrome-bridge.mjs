@@ -2482,6 +2482,7 @@ function buildProfessionalReadiness({
   const applicationExportPath = latestResearchPackSummary?.artifactPaths?.applicationExportPath || null;
   const evidenceBundlePath = latestResearchPackSummary?.artifactPaths?.evidenceBundlePath || null;
   const drilldownPlanPath = latestResearchPackSummary?.artifactPaths?.drilldownPlanPath || null;
+  const evidenceManifestPath = latestResearchPackSummary?.artifactPaths?.evidenceManifestPath || null;
   const firstF12RequestDetailArtifact = firstF12RequestDetailPath ? {
     path: firstF12RequestDetailPath,
     inspect: { tool: "devtools_artifact_inspect", input: { path: firstF12RequestDetailPath, maxBytes: 120000 } },
@@ -2516,6 +2517,11 @@ function buildProfessionalReadiness({
     path: drilldownPlanPath,
     inspect: { tool: "devtools_artifact_inspect", input: { path: drilldownPlanPath, maxBytes: 160000 } },
     read: { tool: "devtools_artifact_read", input: { path: drilldownPlanPath, mode: "line", startLine: 1, lineCount: 180 } },
+  } : null;
+  const evidenceManifestArtifact = evidenceManifestPath ? {
+    path: evidenceManifestPath,
+    inspect: { tool: "devtools_artifact_inspect", input: { path: evidenceManifestPath, maxBytes: 160000 } },
+    read: { tool: "devtools_artifact_read", input: { path: evidenceManifestPath, mode: "line", startLine: 1, lineCount: 180 } },
   } : null;
   const checks = [
     {
@@ -2679,6 +2685,18 @@ function buildProfessionalReadiness({
       seenNextActions.add(key);
     }
   }
+  if (evidenceManifestArtifact) {
+    const entry = {
+      tool: evidenceManifestArtifact.inspect.tool,
+      input: evidenceManifestArtifact.inspect.input,
+      why: "Inspect the saved evidence manifest for artifact paths and hashes.",
+    };
+    const key = actionKey(entry);
+    if (!seenNextActions.has(key)) {
+      nextActions.push(entry);
+      seenNextActions.add(key);
+    }
+  }
   if (f12NavigationArtifact) {
     const entry = {
       tool: f12NavigationArtifact.inspect.tool,
@@ -2756,6 +2774,7 @@ function buildProfessionalReadiness({
     applicationExportArtifact,
     evidenceBundleArtifact,
     drilldownPlanArtifact,
+    evidenceManifestArtifact,
     f12NavigationArtifact,
     firstF12RequestDetailArtifact,
     firstF12RequestDetail: f12NavigationDrilldowns[0] ? {
