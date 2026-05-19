@@ -98,6 +98,7 @@ available.
 
 For agent operators, start with `docs/agent-operator-runbook.md`. For the
 complete product contract, read `docs/agent-devtools-api.md`.
+For cross-agent and SDK integration, read `docs/browser-worker-integration.md`.
 
 For a compact project summary, read `docs/project-overview.md`. For the current
 public work-in-progress status, read `docs/public-release-notes.md`. Safety

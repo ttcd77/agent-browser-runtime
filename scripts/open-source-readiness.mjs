@@ -8,6 +8,7 @@ const requiredFiles = [
   "LICENSE",
   "docs/safety-boundaries.md",
   "docs/agent-devtools-api.md",
+  "docs/browser-worker-integration.md",
   "docs/devtools-panel-map.md",
   "docs/competitor-research.md",
   "docs/open-source-release-checklist.md",
@@ -15,6 +16,7 @@ const requiredFiles = [
   "docs/public-release-notes.md",
   "examples/agent-devtools-workflows.md",
   "examples/mcp-adapter-sketch.mjs",
+  "examples/sdk-browser-worker-requests.json",
   "examples/security-research-pack.mjs",
   "extension/manifest.json",
 ];
@@ -32,6 +34,7 @@ const requiredPackageScripts = [
   "check:professional",
   "check:full",
   "professional:scorecard",
+  "worker:doctor",
   "research:pack",
   "release:readiness",
 ];
