@@ -184,7 +184,9 @@ drilldown. The CLI summary also prints route artifacts for direct
 `devtools_artifact_inspect` / `devtools_artifact_read` follow-up into F12
 navigation, HAR completeness, trace, Application export, evidence bundle,
 drilldown plan, evidence manifest, correlation graph, auth boundary, and
-worker/frame boundary evidence. Use `--json` for the full response.
+worker/frame boundary evidence. It also prints `routeArtifactCount` and
+`routeArtifactNames` as a low-token check before expanding the full route map.
+Use `--json` for the full response.
 
 When reading a returned pack, check these fields before deeper analysis:
 
@@ -202,6 +204,9 @@ When reading a returned pack, check these fields before deeper analysis:
 - `professionalReadiness.routeSummary.*Artifact`: direct inspect/read routes for
   saved F12 artifacts; use these before loading the full research pack when the
   next question is about one evidence area.
+- `professionalReadiness.summary.routeArtifactCount` and
+  `professionalReadiness.summary.routeArtifactNames`: quick signal for whether
+  route artifacts exist and which evidence areas are available.
 
 Read the handoff file with bounded artifact tools instead of loading every
 artifact into context:

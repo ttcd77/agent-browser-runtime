@@ -1033,3 +1033,11 @@
 - `npm run research:pack` 摘要现在打印 readiness summary 的 `route artifact count` 和 `route artifact names`。
 - Agent 不需要先展开完整 route artifacts，就能判断本轮证据包是否有可接手 artifact 路线。
 - `smoke:cli` 覆盖该输出。
+
+### 2026-05-19: Route Artifact Summary 文档门禁
+
+已经完成:
+
+- README 和 operator runbook 现在明确记录 `routeArtifactCount` / `routeArtifactNames`。
+- `scripts/open-source-readiness.mjs` 会检查 README、API 文档、runbook 是否持续保留 compact route artifact 说明。
+- 这防止 Agent 接手路线退回到必须读取完整 `routeSummary` 或完整 handoff 的模式。

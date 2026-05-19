@@ -268,8 +268,10 @@ route, handoff readiness, artifact coverage, professional readiness, capture
 status, artifact kind counts, route summary, F12 request-detail navigation, and
 route artifacts for direct `devtools_artifact_inspect` /
 `devtools_artifact_read` follow-up. It also prints the first F12 request-detail
-section summary plus handoff read/inspect commands. Use `--json` when an agent
-or script needs the full response.
+section summary plus handoff read/inspect commands. The readiness summary also
+prints `routeArtifactCount` and `routeArtifactNames`, so an agent can decide
+whether artifact routes exist before expanding the full map. Use `--json` when
+an agent or script needs the full response.
 
 Runnable example:
 
