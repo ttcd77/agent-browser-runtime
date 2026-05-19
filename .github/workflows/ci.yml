@@ -22,6 +22,10 @@ jobs:
       - name: Install
         run: npm ci
 
+      - name: Install Linux rolldown native binding
+        if: runner.os == 'Linux'
+        run: npm install --no-save @rolldown/binding-linux-x64-gnu@1.0.1
+
       - name: Release readiness
         run: npm run release:readiness
 
