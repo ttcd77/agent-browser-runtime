@@ -221,6 +221,10 @@ curl -X POST http://127.0.0.1:17335/tool/browser_act \
   -H "content-type: application/json" \
   -d "{\"profile\":\"researcher\",\"action\":\"snapshot\"}"
 
+curl -X POST http://127.0.0.1:17335/tool/browser_act \
+  -H "content-type: application/json" \
+  -d "{\"profile\":\"researcher\",\"action\":\"type\",\"selector\":\"input[name=email]\",\"text\":\"user@example.com\",\"inputMode\":\"keyboard\"}"
+
 curl -X POST http://127.0.0.1:17335/tool/profile_traffic_query \
   -H "content-type: application/json" \
   -d "{\"profile\":\"researcher\",\"limit\":20}"

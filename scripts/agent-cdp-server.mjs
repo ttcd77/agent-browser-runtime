@@ -4928,7 +4928,8 @@ function frameIndexesFromOptions(options = {}) {
 }
 
 function selectInFramePageFunction(options) {
-  const selector = String(options.selector || "document");
+  const hasSelector = typeof options.selector === "string" && options.selector.length > 0;
+  const selector = hasSelector ? String(options.selector) : "";
   const text = String(options.text || "");
   const frameIndexes = Array.isArray(options.frameIndexes) ? options.frameIndexes : [];
   let doc = document;
@@ -4939,7 +4940,7 @@ function selectInFramePageFunction(options) {
     doc = frame.contentDocument || frame.contentWindow?.document;
     if (!doc) return null;
   }
-  if (selector === "document") return doc;
+  if (selector === "document" || (!hasSelector && !text)) return doc;
   if (selector) return doc.querySelector(selector);
   const wanted = text.toLowerCase();
   return Array.from(doc.querySelectorAll("button,a,input,textarea,[role=button],label,summary"))
@@ -4964,6 +4965,24 @@ function typeInFramePageFunction(options) {
   el.dispatchEvent(new Event("input", { bubbles: true }));
   el.dispatchEvent(new Event("change", { bubbles: true }));
   return { ok: true, framePath: options.framePath || null };
+}
+
+function focusInFramePageFunction(options) {
+  const el = selectInFramePageFunction(options);
+  if (!el) return { ok: false, error: "selector_not_found", framePath: options.framePath || null };
+  el.scrollIntoView({ block: "center", inline: "center" });
+  el.focus();
+  const rect = el.getBoundingClientRect();
+  return {
+    ok: true,
+    framePath: options.framePath || null,
+    tagName: el.tagName,
+    type: el.type || null,
+    placeholder: el.getAttribute("placeholder") || null,
+    ariaLabel: el.getAttribute("aria-label") || null,
+    value: "value" in el ? el.value : null,
+    rect: { x: rect.x, y: rect.y, width: rect.width, height: rect.height },
+  };
 }
 
 function styleInFramePageFunction(options) {
@@ -7670,6 +7689,7 @@ function registerStandaloneBrowserTools(tools, cdpPort, profileRegistry, default
         profile: { type: "string" },
         selector: { type: "string" },
         text: { type: "string" },
+        inputMode: { type: "string" },
         x: { type: "number" },
         y: { type: "number" },
         framePath: { type: "string" },
@@ -7733,6 +7753,7 @@ function registerStandaloneBrowserTools(tools, cdpPort, profileRegistry, default
         text: { type: "string" },
         clear: { type: "boolean" },
         pressEnter: { type: "boolean" },
+        inputMode: { type: "string" },
         framePath: { type: "string" },
         frameIndexes: { type: "array", items: { type: "number" } },
         tabId: { type: "string" },
@@ -7750,14 +7771,40 @@ function registerStandaloneBrowserTools(tools, cdpPort, profileRegistry, default
           framePath: params?.framePath || null,
           frameIndexes,
         };
+        const inputMode = String(params?.inputMode || "dom").toLowerCase();
         const expression = `(() => { const selectInFramePageFunction = ${selectInFramePageFunction.toString()}; const typeInFramePageFunction = ${typeInFramePageFunction.toString()}; return typeInFramePageFunction(${JSON.stringify(typeOptions)}); })()`;
+        const focusExpression = `(() => { const selectInFramePageFunction = ${selectInFramePageFunction.toString()}; const focusInFramePageFunction = ${focusInFramePageFunction.toString()}; return focusInFramePageFunction(${JSON.stringify(typeOptions)}); })()`;
         const capture = await runProfileAction({
           client,
           profile,
           eventType: "browser_type",
           waitMs: typeof params?.waitMs === "number" ? params.waitMs : 700,
-          event: { tabId: target.id, selector: params.selector, textLength: String(params.text || "").length, pressEnter: Boolean(params.pressEnter), framePath: params?.framePath, frameIndexes },
+          event: { tabId: target.id, selector: params.selector, textLength: String(params.text || "").length, pressEnter: Boolean(params.pressEnter), inputMode, framePath: params?.framePath, frameIndexes },
           action: async () => {
+            if (["keyboard", "real", "native", "cdp"].includes(inputMode)) {
+              const focusResult = await client.Runtime.evaluate({ expression: focusExpression, returnByValue: true, awaitPromise: true });
+              const focused = focusResult.result?.value || { ok: false, error: "focus_failed" };
+              if (!focused.ok) return focused;
+              if (typeOptions.clear) {
+                await client.Input.dispatchKeyEvent({ type: "keyDown", key: "Control", code: "ControlLeft", windowsVirtualKeyCode: 17, modifiers: 2 });
+                await client.Input.dispatchKeyEvent({ type: "keyDown", key: "a", code: "KeyA", windowsVirtualKeyCode: 65, modifiers: 2 });
+                await client.Input.dispatchKeyEvent({ type: "keyUp", key: "a", code: "KeyA", windowsVirtualKeyCode: 65, modifiers: 2 });
+                await client.Input.dispatchKeyEvent({ type: "keyUp", key: "Control", code: "ControlLeft", windowsVirtualKeyCode: 17 });
+                await client.Input.dispatchKeyEvent({ type: "keyDown", key: "Backspace", code: "Backspace", windowsVirtualKeyCode: 8 });
+                await client.Input.dispatchKeyEvent({ type: "keyUp", key: "Backspace", code: "Backspace", windowsVirtualKeyCode: 8 });
+              }
+              if (typeOptions.text) await client.Input.insertText({ text: typeOptions.text });
+              if (params.pressEnter) {
+                await client.Input.dispatchKeyEvent({ type: "keyDown", key: "Enter", code: "Enter", windowsVirtualKeyCode: 13 });
+                await client.Input.dispatchKeyEvent({ type: "keyUp", key: "Enter", code: "Enter", windowsVirtualKeyCode: 13 });
+              }
+              const valueResult = await client.Runtime.evaluate({
+                expression: `(() => { const selectInFramePageFunction = ${selectInFramePageFunction.toString()}; const el = selectInFramePageFunction(${JSON.stringify(typeOptions)}); if (el) el.dispatchEvent(new Event("change", { bubbles: true })); return el && "value" in el ? el.value : null; })()`,
+                returnByValue: true,
+                awaitPromise: true,
+              });
+              return { ok: true, inputMode: "keyboard", framePath: typeOptions.framePath, focused, value: valueResult.result?.value ?? null };
+            }
             const result = await client.Runtime.evaluate({ expression, returnByValue: true, awaitPromise: true });
             if (params.pressEnter) {
               await client.Input.dispatchKeyEvent({ type: "keyDown", key: "Enter", code: "Enter", windowsVirtualKeyCode: 13 });
