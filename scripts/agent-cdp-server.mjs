@@ -13917,6 +13917,8 @@ async function main() {
   const dataDir =
     process.env.CDP_SECURITY_DATA_DIR || join(homedir(), ".agent-browser-runtime");
   const launchBrowser = process.env.CDP_LAUNCH_BROWSER === "1";
+  const browserHeadless = process.env.CDP_BROWSER_HEADLESS === "1";
+  const browserLaunchMode = browserHeadless ? "headless" : "headful";
   const existingBrowser = await cdpEndpointAvailable(cdpPort);
   let browserProcess = null;
 
@@ -13937,7 +13939,7 @@ async function main() {
         `--user-data-dir=${userDataDir}`,
         "--no-first-run",
         "--no-default-browser-check",
-        ...(process.env.CDP_BROWSER_HEADLESS === "1" ? ["--headless=new"] : []),
+        ...(browserHeadless ? ["--headless=new"] : []),
         ...parseBrowserExtraArgs(process.env.CDP_BROWSER_EXTRA_ARGS),
         "about:blank",
       ],
@@ -13976,6 +13978,9 @@ async function main() {
           cdpPort,
           cdpEndpoint: `http://127.0.0.1:${cdpPort}`,
           browserAttachMode: existingBrowser ? "attached-existing-cdp" : browserProcess ? "launched-managed-browser" : "attached-cdp-after-wait",
+          browserLaunchMode: existingBrowser ? "existing-cdp-browser" : browserLaunchMode,
+          browserHeadless: existingBrowser ? null : browserHeadless,
+          professionalDefault: "headful-managed-browser",
           launchedByServer: Boolean(browserProcess),
           browserUserDataDir: process.env.CDP_BROWSER_USER_DATA_DIR || (browserProcess ? join(dataDir, "browser-identities", profile) : undefined),
           configPath,
@@ -14075,6 +14080,7 @@ async function main() {
     console.log(`- default profile: ${profile}`);
     console.log(`- profile registry: ${profileRegistry.registryFile}`);
     console.log(`- browser CDP: http://127.0.0.1:${cdpPort}`);
+    console.log(`- browser launch mode: ${existingBrowser ? "existing-cdp-browser" : browserLaunchMode}`);
     console.log(`- config: ${configPath}`);
   });
 }

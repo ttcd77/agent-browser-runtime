@@ -72,6 +72,15 @@ npm run test
 Managed Browser mode is the safest public demo path because it uses a fresh
 agent-owned browser profile instead of the user's daily Chrome profile.
 
+For professional AppSec work the default Managed Browser is **headful**: it opens
+a visible Edge/Chrome window so the operator can watch the agent interact with
+the page. This is closer to a human F12 workflow and is better for real target
+validation, WebRTC/media flows, UI state, and anti-automation edge cases.
+
+Headless mode is reserved for CI, local smoke tests, and non-interactive
+regression runs. Set `CDP_BROWSER_HEADLESS=1` only when you explicitly want that
+test mode.
+
 ```bash
 $env:CDP_LAUNCH_BROWSER="1"
 npm run agent:server
@@ -675,7 +684,7 @@ See `examples/openclaw.config.example.json`.
 | `CDP_LAUNCH_BROWSER` | Launch Edge/Chrome if no CDP browser is available. | unset |
 | `CDP_BROWSER_EXECUTABLE` | Explicit Edge/Chrome executable path. | auto-detected |
 | `CDP_BROWSER_USER_DATA_DIR` | Browser user-data directory when launching a browser. | `$CDP_SECURITY_DATA_DIR/browser-identities/$CDP_AGENT_PROFILE` |
-| `CDP_BROWSER_HEADLESS` | Use headless mode for test runs. | unset |
+| `CDP_BROWSER_HEADLESS` | Use headless mode for CI/test runs. Professional/manual validation should leave this unset so the Managed Browser is visible. | unset / headful |
 | `CDP_BROWSER_EXTRA_ARGS` | Extra Chrome/Edge launch flags for target-specific browser conditions. Accepts a JSON array or shell-friendly `--flag --flag=value` string. | unset |
 | `CDP_SECURITY_DATA_DIR` | Base data directory for captured bodies, events, profiles, and logs. | `~/.agent-browser-runtime` |
 | `CDP_PROFILE_REGISTRY_FILE` | Standalone server profile registry. | `$CDP_SECURITY_DATA_DIR/profiles.json` |

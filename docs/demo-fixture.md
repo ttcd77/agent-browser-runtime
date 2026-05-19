@@ -30,6 +30,10 @@ npm run smoke:demo
 The smoke starts a fresh managed server and headless Chrome internally, so no
 separate server process is needed.
 
+This is a smoke-test exception. For professional target validation, Managed
+Browser should run headful by leaving `CDP_BROWSER_HEADLESS` unset, so the
+operator can see the same browser surface the agent is controlling.
+
 ## Evidence Surfaces
 
 The fixture at `http://127.0.0.1:<random-port>/` serves:
