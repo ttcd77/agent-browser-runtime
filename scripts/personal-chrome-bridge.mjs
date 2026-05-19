@@ -2483,6 +2483,9 @@ function buildProfessionalReadiness({
   const evidenceBundlePath = latestResearchPackSummary?.artifactPaths?.evidenceBundlePath || null;
   const drilldownPlanPath = latestResearchPackSummary?.artifactPaths?.drilldownPlanPath || null;
   const evidenceManifestPath = latestResearchPackSummary?.artifactPaths?.evidenceManifestPath || null;
+  const correlationGraphPath = latestResearchPackSummary?.artifactPaths?.correlationGraphPath || null;
+  const authBoundaryReportPath = latestResearchPackSummary?.artifactPaths?.authBoundaryReportPath || null;
+  const workerFrameReportPath = latestResearchPackSummary?.artifactPaths?.workerFrameReportPath || null;
   const firstF12RequestDetailArtifact = firstF12RequestDetailPath ? {
     path: firstF12RequestDetailPath,
     inspect: { tool: "devtools_artifact_inspect", input: { path: firstF12RequestDetailPath, maxBytes: 120000 } },
@@ -2522,6 +2525,21 @@ function buildProfessionalReadiness({
     path: evidenceManifestPath,
     inspect: { tool: "devtools_artifact_inspect", input: { path: evidenceManifestPath, maxBytes: 160000 } },
     read: { tool: "devtools_artifact_read", input: { path: evidenceManifestPath, mode: "line", startLine: 1, lineCount: 180 } },
+  } : null;
+  const correlationGraphArtifact = correlationGraphPath ? {
+    path: correlationGraphPath,
+    inspect: { tool: "devtools_artifact_inspect", input: { path: correlationGraphPath, maxBytes: 180000 } },
+    read: { tool: "devtools_artifact_read", input: { path: correlationGraphPath, mode: "line", startLine: 1, lineCount: 180 } },
+  } : null;
+  const authBoundaryArtifact = authBoundaryReportPath ? {
+    path: authBoundaryReportPath,
+    inspect: { tool: "devtools_artifact_inspect", input: { path: authBoundaryReportPath, maxBytes: 180000 } },
+    read: { tool: "devtools_artifact_read", input: { path: authBoundaryReportPath, mode: "line", startLine: 1, lineCount: 180 } },
+  } : null;
+  const workerFrameArtifact = workerFrameReportPath ? {
+    path: workerFrameReportPath,
+    inspect: { tool: "devtools_artifact_inspect", input: { path: workerFrameReportPath, maxBytes: 180000 } },
+    read: { tool: "devtools_artifact_read", input: { path: workerFrameReportPath, mode: "line", startLine: 1, lineCount: 180 } },
   } : null;
   const checks = [
     {
@@ -2697,6 +2715,23 @@ function buildProfessionalReadiness({
       seenNextActions.add(key);
     }
   }
+  for (const [artifact, why] of [
+    [correlationGraphArtifact, "Inspect the saved request correlation graph from the latest research pack."],
+    [authBoundaryArtifact, "Inspect the saved auth boundary report from the latest research pack."],
+    [workerFrameArtifact, "Inspect the saved worker/frame boundary report from the latest research pack."],
+  ]) {
+    if (!artifact) continue;
+    const entry = {
+      tool: artifact.inspect.tool,
+      input: artifact.inspect.input,
+      why,
+    };
+    const key = actionKey(entry);
+    if (!seenNextActions.has(key)) {
+      nextActions.push(entry);
+      seenNextActions.add(key);
+    }
+  }
   if (f12NavigationArtifact) {
     const entry = {
       tool: f12NavigationArtifact.inspect.tool,
@@ -2775,6 +2810,9 @@ function buildProfessionalReadiness({
     evidenceBundleArtifact,
     drilldownPlanArtifact,
     evidenceManifestArtifact,
+    correlationGraphArtifact,
+    authBoundaryArtifact,
+    workerFrameArtifact,
     f12NavigationArtifact,
     firstF12RequestDetailArtifact,
     firstF12RequestDetail: f12NavigationDrilldowns[0] ? {

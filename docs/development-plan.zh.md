@@ -962,3 +962,14 @@
 - `nextActions` 会包含该 artifact 的 `devtools_artifact_inspect` 下一步，Agent 可以从 readiness 校验本轮保存了哪些证据文件及其 hash。
 - Managed Browser / Personal Chrome smoke 都覆盖该路线。
 - 该路线只读取证据清单和文件完整性元数据，不判断漏洞。
+
+### 2026-05-19: Readiness Graph / Boundary Artifact 路线完成
+
+已经完成:
+
+- `devtools_professional_readiness.routeSummary.correlationGraphArtifact` 会直接返回 request correlation graph 的 inspect/read 路线。
+- `devtools_professional_readiness.routeSummary.authBoundaryArtifact` 会直接返回 auth boundary report 的 inspect/read 路线。
+- `devtools_professional_readiness.routeSummary.workerFrameArtifact` 会直接返回 worker/frame boundary report 的 inspect/read 路线。
+- `nextActions` 会包含这三类 artifact 的 `devtools_artifact_inspect` 下一步，Agent 可以从 readiness 进入跨请求关系、权限边界、worker/frame 边界证据。
+- Managed Browser / Personal Chrome smoke 都覆盖这些路线。
+- 这些路线只读取已保存的客观证据图和边界报告，不判断漏洞。
