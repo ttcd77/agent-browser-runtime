@@ -1,6 +1,9 @@
 #!/usr/bin/env node
 
+import { writeFileSync, mkdirSync } from "node:fs";
+import { dirname, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
+import { buildOperatorDemoReport } from "./security-research-demo-report.mjs";
 
 const defaults = {
   managedServer: "http://127.0.0.1:17335",
@@ -23,6 +26,7 @@ Options:
   --token-scan                Include token scan in bundle/auth evidence.
   --limit <n>                 First-pass evidence limit. Default: 20.
   --wait-ms <n>               Navigation/reload wait time. Default: 1000.
+  --report-md <path>          Write Operator Demo Report Markdown to this path.
   --json                      Print full JSON response.
   --help                      Show this help.
 `;
@@ -41,6 +45,7 @@ export function parseArgs(argv) {
     limit: 20,
     waitMs: 1000,
     json: false,
+    reportMd: null,
   };
   for (let i = 0; i < argv.length; i += 1) {
     const arg = argv[i];
@@ -68,6 +73,8 @@ export function parseArgs(argv) {
       args.waitMs = Number(argv[++i]);
     } else if (arg === "--json") {
       args.json = true;
+    } else if (arg === "--report-md") {
+      args.reportMd = argv[++i];
     } else if (!args.url && /^https?:\/\//i.test(arg)) {
       args.url = arg;
     } else {
@@ -75,6 +82,96 @@ export function parseArgs(argv) {
     }
   }
   return args;
+}
+
+export function adaptPackForReport(pack, profile) {
+  const summary = pack.summary || {};
+  const readiness = pack.professionalReadiness || {};
+  const handoffCompleteness = pack.handoffCompleteness || {};
+  const drilldowns = pack.drilldownPlan?.drilldowns || [];
+  const routeSummary = readiness.routeSummary || {};
+  const compactArtifacts = readiness.routeArtifacts || {};
+
+  const routeArtifactEntries = Object.entries(compactArtifacts)
+    .map(([name, art]) => ({
+      name,
+      inspectRoute: art?.inspect || null,
+      readRoute: art?.read || null,
+    }))
+    .filter((e) => e.inspectRoute || e.readRoute);
+
+  const researchPackPath = summary.researchPackPath;
+  const firstRead = researchPackPath
+    ? {
+        purpose: "Bounded read of the research pack",
+        route: routeSummary.latestHandoffRead || {
+          tool: "devtools_artifact_read",
+          input: { path: researchPackPath, mode: "line", startLine: 1, maxLines: 120 },
+        },
+      }
+    : null;
+
+  const operatorHandoff = {
+    firstRead,
+    firstRequest:
+      routeSummary.firstF12RequestDetail ||
+      pack.f12Navigation?.firstDetailRoute ||
+      null,
+    routeArtifacts: routeArtifactEntries,
+    drilldowns: drilldowns.slice(0, 3).map((d) => ({
+      label: d.label || d.tool,
+      tool: d.tool,
+      input: d.input || {},
+    })),
+    objectiveBoundary:
+      readiness.objectiveBoundary ||
+      "Collect browser evidence only; do not classify findings as vulnerabilities.",
+  };
+
+  const firstF12 = pack.firstF12RequestDetail || {};
+  const headerSummary = firstF12.sections?.headers
+    ? { requestHeaderCount: firstF12.sections.headers.requestHeaderCount }
+    : firstF12.headerSummary;
+
+  return {
+    backend: pack.backend,
+    profile,
+    url: summary.url || pack.page?.url,
+    summary: { requestCount: summary.requestCount },
+    consoleSummary: { entryCount: summary.consoleEntryCount },
+    networkSummary: { failedCount: summary.failedRequestCount },
+    artifactPaths: {
+      harPath: summary.harPath,
+      applicationExportPath: summary.applicationExportPath,
+      tracePath: summary.tracePath || summary.chromeTracePath,
+      evidenceBundlePath: summary.evidenceBundlePath,
+      evidenceManifestPath: summary.evidenceManifestPath,
+      correlationGraphPath: summary.correlationGraphPath,
+      authBoundaryReportPath: summary.authBoundaryReportPath,
+      workerFrameReportPath: summary.workerFrameReportPath,
+      researchPackPath: summary.researchPackPath,
+      drilldownPlanPath: summary.drilldownPlanPath,
+    },
+    handoff: {
+      ready: summary.handoffReady ?? handoffCompleteness.ready,
+      missing: summary.handoffMissing ?? handoffCompleteness.missing ?? [],
+    },
+    artifactCoverage: pack.artifactCoverage || {
+      ready: summary.artifactCoverageReady,
+      missing: summary.artifactCoverageMissing ?? [],
+      skipped: summary.artifactCoverageSkipped ?? [],
+    },
+    captureBoundaries: {
+      startTime: summary.capture?.startedAt,
+      endTime: summary.capture?.stoppedAt,
+    },
+    f12Navigation: pack.f12Navigation,
+    firstF12RequestDetail: { ...firstF12, headerSummary },
+    afterReadiness: readiness,
+    operatorHandoff,
+    objectiveBoundary: operatorHandoff.objectiveBoundary,
+    firstDrilldowns: drilldowns,
+  };
 }
 
 async function callTool(server, name, input = {}) {
@@ -314,6 +411,14 @@ async function main(argv = process.argv.slice(2)) {
     console.log(JSON.stringify(pack, null, 2));
   } else {
     printSummary(pack);
+  }
+
+  if (args.reportMd) {
+    const reportPath = resolve(args.reportMd);
+    mkdirSync(dirname(reportPath), { recursive: true });
+    const md = buildOperatorDemoReport(adaptPackForReport(pack, args.profile));
+    writeFileSync(reportPath, md, "utf8");
+    console.log(`- operator demo report: ${reportPath}`);
   }
 }
 

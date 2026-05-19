@@ -221,3 +221,21 @@ instead:
 ```bash
 npm run research:pack -- --personal --url https://example.com --no-trace
 ```
+
+Use `--report-md` to save a compact Operator Demo Report Markdown alongside
+the normal summary output:
+
+```powershell
+npm run research:pack -- --url http://127.0.0.1:PORT/ --report-md .\tmp\operator-demo-report.md
+```
+
+The CLI creates parent directories automatically. On completion it prints:
+
+```text
+- operator demo report: C:\...\tmp\operator-demo-report.md
+```
+
+The report contains evidence navigation (artifact paths and ready-to-call
+`devtools_artifact_read` / `devtools_artifact_inspect` routes). It does not
+contain vulnerability conclusions, risk scores, or exploitability assessments.
+Those are separate reasoning steps outside this runtime.

@@ -1,6 +1,10 @@
 #!/usr/bin/env node
 
-import { parseArgs, printSummary, usage } from "./security-research-pack-cli.mjs";
+import { mkdtempSync, rmSync, readFileSync } from "node:fs";
+import { join } from "node:path";
+import { tmpdir } from "node:os";
+import { parseArgs, printSummary, usage, adaptPackForReport } from "./security-research-pack-cli.mjs";
+import { buildOperatorDemoReport } from "./security-research-demo-report.mjs";
 
 function assert(condition, message) {
   if (!condition) throw new Error(message);
@@ -20,6 +24,15 @@ assert(parsed.profile === "researcher", "CLI parser lost profile");
 assert(parsed.includeTrace === false, "CLI parser did not parse --no-trace");
 assert(parsed.limit === 7, "CLI parser did not parse numeric limit");
 assert(usage().includes("--json"), "CLI usage missing --json");
+
+const parsedWithReport = parseArgs([
+  "--url",
+  "https://example.com",
+  "--report-md",
+  "./tmp/operator-demo-report.md",
+]);
+assert(parsedWithReport.reportMd === "./tmp/operator-demo-report.md", "CLI parser lost --report-md");
+assert(usage().includes("--report-md"), "CLI usage missing --report-md");
 
 const lines = [];
 printSummary({
@@ -206,5 +219,104 @@ assert(output.includes("sections: overview, headers, payload, cookies, timing, i
 assert(output.includes("request headers: 6"), "summary missing first F12 request header count");
 assert(output.includes("body readable: true"), "summary missing first F12 request body readability");
 assert(output.includes("Request detail: devtools_request_detail"), "summary missing first drilldown");
+
+// ── adaptPackForReport + demo report generation ────────────────────────────
+const mockPack = {
+  backend: "managed-cdp",
+  page: { url: "https://example.com" },
+  summary: {
+    url: "https://example.com",
+    requestCount: 2,
+    failedRequestCount: 0,
+    consoleEntryCount: 1,
+    handoffReady: true,
+    handoffMissing: [],
+    artifactCoverageReady: true,
+    artifactCoverageMissing: [],
+    artifactCoverageSkipped: ["trace"],
+    harPath: "tmp/example.har",
+    researchPackPath: "tmp/security-research-pack.json",
+    drilldownPlanPath: "tmp/drilldown-plan.json",
+    capture: {
+      startedAt: "2026-05-19T00:00:00.000Z",
+      stoppedAt: null,
+    },
+  },
+  f12Navigation: {
+    requestNodeCount: 2,
+    firstDetailRoute: {
+      tool: "devtools_request_detail",
+      input: { requestId: "request-1" },
+    },
+  },
+  firstF12RequestDetail: {
+    requestId: "request-1",
+    status: 200,
+    sectionAvailability: { headers: true },
+    sections: { headers: { requestHeaderCount: 6, responseHeaderCount: 4 } },
+  },
+  handoffCompleteness: { ready: true, presentCount: 7, missing: [] },
+  artifactCoverage: { ready: true, missing: [], skipped: ["trace"] },
+  professionalReadiness: {
+    ready: true,
+    evidenceReady: true,
+    missing: [],
+    objectiveBoundary: "Collect browser evidence only; does not classify findings as vulnerabilities.",
+    routeArtifacts: {
+      f12Navigation: {
+        path: "tmp/f12-navigation.json",
+        inspect: { tool: "devtools_artifact_inspect", input: { path: "tmp/f12-navigation.json" } },
+        read: { tool: "devtools_artifact_read", input: { path: "tmp/f12-navigation.json" } },
+      },
+    },
+    routeSummary: {
+      latestHandoffRead: {
+        tool: "devtools_artifact_read",
+        input: { path: "tmp/security-research-pack.json", mode: "line", startLine: 1, maxLines: 120 },
+      },
+      firstF12RequestDetail: {
+        tool: "devtools_request_detail",
+        input: { requestId: "request-1" },
+      },
+    },
+  },
+  drilldownPlan: {
+    drilldowns: [
+      { label: "Request detail", tool: "devtools_request_detail", input: { requestId: "request-1" } },
+    ],
+  },
+};
+
+const adapted = adaptPackForReport(mockPack, "researcher");
+assert(adapted.backend === "managed-cdp", "adaptPackForReport lost backend");
+assert(adapted.profile === "researcher", "adaptPackForReport lost profile");
+assert(adapted.url === "https://example.com", "adaptPackForReport lost url");
+assert(adapted.artifactPaths.researchPackPath === "tmp/security-research-pack.json", "adaptPackForReport lost researchPackPath");
+assert(adapted.operatorHandoff.firstRead?.route?.tool === "devtools_artifact_read", "adaptPackForReport missing firstRead route");
+assert(adapted.operatorHandoff.routeArtifacts.length >= 1, "adaptPackForReport missing route artifacts");
+assert(adapted.operatorHandoff.drilldowns.length >= 1, "adaptPackForReport missing drilldowns");
+assert(adapted.firstF12RequestDetail.headerSummary?.requestHeaderCount === 6, "adaptPackForReport lost headerSummary");
+
+const tempDir = mkdtempSync(join(tmpdir(), "cli-smoke-report-"));
+try {
+  const { writeFileSync } = await import("node:fs");
+  const reportPath = join(tempDir, "operator-demo-report.md");
+  const md = buildOperatorDemoReport(adapted);
+  writeFileSync(reportPath, md, "utf8");
+
+  assert(md.length > 0, "demo report from adapter is empty");
+  assert(md.includes("## Operator Handoff"), "demo report missing Operator Handoff");
+  assert(md.includes("## Objective Boundary"), "demo report missing Objective Boundary");
+  assert(md.includes("devtools_artifact_read"), "demo report missing devtools_artifact_read");
+  assert(md.includes("tmp/security-research-pack.json"), "demo report missing artifact path");
+  assert(!md.toLowerCase().includes("vulnerability found"), "demo report contains forbidden text 'vulnerability found'");
+  assert(!md.toLowerCase().includes("high risk"), "demo report contains forbidden text 'high risk'");
+  assert(!md.toLowerCase().includes("exploitable"), "demo report contains forbidden text 'exploitable'");
+
+  const fromDisk = readFileSync(reportPath, "utf8");
+  assert(fromDisk === md, "demo report written to disk does not match generated content");
+} finally {
+  rmSync(tempDir, { recursive: true, force: true });
+}
 
 console.log("Research pack CLI smoke passed");
