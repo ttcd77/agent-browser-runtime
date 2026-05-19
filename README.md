@@ -164,6 +164,29 @@ Health check:
 curl http://127.0.0.1:17335/health
 ```
 
+MCP server for Claude/Codex/Cursor-style clients:
+
+```bash
+npm run build
+npm run mcp:server
+```
+
+Example MCP host config:
+
+```json
+{
+  "mcpServers": {
+    "agent-browser-runtime": {
+      "command": "node",
+      "args": ["C:/Users/Tong/project/agent-browser-runtime/dist/mcp-server/index.js"],
+      "env": {
+        "AGENT_BROWSER_RUNTIME_URL": "http://127.0.0.1:17335"
+      }
+    }
+  }
+}
+```
+
 Local dashboard:
 
 ```text
@@ -444,7 +467,8 @@ See `docs/agent-devtools-api.md`.
 For an F12-to-tool lookup table, see `docs/devtools-panel-map.md`.
 For the one-call research workflow, see `docs/security-research-pack.md`.
 For public release readiness, see `docs/open-source-release-checklist.md`.
-For a minimal adapter sketch, see `examples/mcp-adapter-sketch.mjs`.
+For native MCP clients, run `npm run mcp:server`.
+For a minimal custom-adapter sketch, see `examples/mcp-adapter-sketch.mjs`.
 
 ## Known Backend Boundaries
 

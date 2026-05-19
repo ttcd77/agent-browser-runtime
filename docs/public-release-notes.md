@@ -42,7 +42,6 @@ Do not publish:
 ## Near-Term Work
 
 - Improve public demo flow and examples.
-- Add a small agent/MCP adapter package.
+- Continue hardening the native MCP stdio server and custom adapter examples.
 - Continue hardening the F12 parity layer around complex sites.
 - Package the Personal Chrome extension once the beta path is stable.
-

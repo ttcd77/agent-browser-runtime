@@ -27,6 +27,7 @@ const requiredPackageScripts = [
   "check",
   "contract:devtools",
   "smoke:worker",
+  "smoke:mcp",
   "smoke:f12",
   "smoke:personal",
   "smoke:cli",

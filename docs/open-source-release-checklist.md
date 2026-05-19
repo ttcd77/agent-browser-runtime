@@ -77,6 +77,7 @@ Do not publish:
 
 - Add packaged npm metadata/bin entries if publishing to npm.
 - Add a short demo GIF or screenshot using only `example.com`.
-- Turn the minimal MCP adapter sketch into a full MCP server package.
+- Expand the MCP server package with optional hosted transport after the stdio
+  path has more real-client testing.
 - Rename any remaining internal wording that sounds tied to OpenClaw unless it
   is explicitly compatibility-related.

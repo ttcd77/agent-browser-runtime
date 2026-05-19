@@ -27,7 +27,8 @@
     "LICENSE"
   ],
   "bin": {
-    "agent-browser-research-pack": "./scripts/security-research-pack-cli.mjs"
+    "agent-browser-research-pack": "./scripts/security-research-pack-cli.mjs",
+    "agent-browser-mcp": "./dist/mcp-server/index.js"
   },
   "scripts": {
     "build": "tsc && node scripts/copy-plugin-manifests.mjs",
@@ -43,6 +44,8 @@
     "dev:loop-check": "node scripts/continuous-dev-check.mjs",
     "smoke:server": "npm run build && node scripts/agent-server-smoke.mjs",
     "smoke:worker": "npm run build && node scripts/browser-worker-smoke.mjs",
+    "mcp:server": "node dist/mcp-server/index.js",
+    "smoke:mcp": "npm run build && node scripts/mcp-server-smoke.mjs",
     "smoke:f12": "npm run build && node scripts/devtools-f12-smoke.mjs",
     "smoke:professional": "npm run build && node scripts/professional-appsec-smoke.mjs",
     "smoke:cli": "node scripts/research-pack-cli-smoke.mjs",
@@ -62,6 +65,7 @@
     "agent:auto-loop": "node scripts/agent-auto-loop.mjs --interval-minutes 45 --max-iterations 3"
   },
   "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.29.0",
     "chrome-remote-interface": "^0.34.0",
     "ws": "^8.20.1",
     "zod": "^3.25.76",

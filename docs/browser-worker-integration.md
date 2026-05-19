@@ -82,6 +82,35 @@ Example SDK request:
 }
 ```
 
+## MCP Integration
+
+For MCP-compatible clients such as Claude Desktop, Cursor, or other local agent
+hosts, build the project and run the native stdio MCP server:
+
+```bash
+npm run build
+npm run mcp:server
+```
+
+Example host config:
+
+```json
+{
+  "mcpServers": {
+    "agent-browser-runtime": {
+      "command": "node",
+      "args": ["C:/Users/Tong/project/agent-browser-runtime/dist/mcp-server/index.js"],
+      "env": {
+        "AGENT_BROWSER_RUNTIME_URL": "http://127.0.0.1:17335"
+      }
+    }
+  }
+}
+```
+
+The MCP server always exposes `browser_worker_doctor`. When the worker is
+running, it dynamically exposes the full HTTP tool catalog from `/tools`.
+
 ## Agent Workflow
 
 Recommended first route:
