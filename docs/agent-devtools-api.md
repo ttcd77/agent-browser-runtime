@@ -139,6 +139,10 @@ from evidence names such as `f12Navigation`, `harCompleteness`,
 inspect, read }` routes. Use it when the next step is to open one saved F12
 artifact without parsing the full `routeSummary`.
 
+The readiness `summary` includes `routeArtifactCount` and `routeArtifactNames`
+so an agent can decide whether route artifacts exist before expanding the full
+map.
+
 ## Unified Tools
 
 Page operation:

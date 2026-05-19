@@ -3663,6 +3663,7 @@ function buildProfessionalReadiness({
     ["authBoundary", authBoundaryArtifact],
     ["workerFrameBoundary", workerFrameArtifact],
   ].filter(([, artifact]) => artifact?.path || artifact?.inspect || artifact?.read));
+  const routeArtifactNames = Object.keys(routeArtifacts);
   const readinessSummary = {
     ready: missing.length === 0,
     evidenceReady: Boolean(artifactCount && timelineCount),
@@ -3673,6 +3674,8 @@ function buildProfessionalReadiness({
     latestResearchPackReady: latestResearchPackSummary?.ready ?? null,
     f12NavigationRequestCount: f12Navigation?.requestNodeCount ?? null,
     latestArtifactKinds: latestArtifacts ? Object.keys(latestArtifacts) : [],
+    routeArtifactCount: routeArtifactNames.length,
+    routeArtifactNames,
     nextTool: nextActions[0]?.tool || null,
     nextActionCount: nextActions.length,
   };

@@ -637,6 +637,8 @@ assert(professionalReadiness.summary?.ready === true && professionalReadiness.su
 assert(professionalReadiness.summary?.latestResearchPackReady === true, `Personal Chrome professional readiness summary missing research-pack readiness: ${JSON.stringify(professionalReadiness.summary)}`);
 assert(professionalReadiness.summary?.f12NavigationRequestCount >= 1, `Personal Chrome professional readiness summary missing F12 navigation count: ${JSON.stringify(professionalReadiness.summary)}`);
 assert(professionalReadiness.summary?.latestArtifactKinds?.includes("har"), `Personal Chrome professional readiness summary missing latest artifact kinds: ${JSON.stringify(professionalReadiness.summary)}`);
+assert(professionalReadiness.summary?.routeArtifactCount >= 5, `Personal Chrome professional readiness summary missing route artifact count: ${JSON.stringify(professionalReadiness.summary)}`);
+assert(professionalReadiness.summary?.routeArtifactNames?.includes("correlationGraph"), `Personal Chrome professional readiness summary missing route artifact names: ${JSON.stringify(professionalReadiness.summary)}`);
 assert(professionalReadiness.workflowPath?.includes("browser_security_pack"), `Personal Chrome professional readiness missing workflow path: ${JSON.stringify(professionalReadiness)}`);
 assert(professionalReadiness.checks?.some((check) => check.name === "f12ParityMatrix" && check.present), `Personal Chrome professional readiness missing parity check: ${JSON.stringify(professionalReadiness.checks)}`);
 assert(professionalReadiness.checks?.some((check) => check.name === "agentUsageRoute" && check.present), `Personal Chrome professional readiness missing agent usage route check: ${JSON.stringify(professionalReadiness.checks)}`);

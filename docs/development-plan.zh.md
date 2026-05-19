@@ -1017,3 +1017,11 @@
 - `npm run research:pack` 摘要现在优先读取 readiness `routeArtifacts`。
 - 如果 `routeArtifacts` 不存在，CLI 会回退到 `routeSummary.*Artifact`，保持兼容。
 - `smoke:cli` 覆盖 compact route artifact 优先级和 `routeSummary` fallback。
+
+### 2026-05-19: Readiness Summary Route Artifact Signal
+
+已经完成:
+
+- readiness `summary` 现在包含 `routeArtifactCount` 和 `routeArtifactNames`。
+- Agent 可以先读 summary 判断是否已有可接手 artifact 路线，再决定是否展开 `routeArtifacts`。
+- Managed Professional smoke 和 Personal Chrome smoke 都覆盖该压缩信号。

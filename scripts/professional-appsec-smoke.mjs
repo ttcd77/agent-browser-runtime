@@ -296,6 +296,8 @@ try {
   assert(finalReadiness.summary?.latestResearchPackReady === true, `professional readiness summary missing research-pack readiness: ${JSON.stringify(finalReadiness.summary)}`);
   assert(finalReadiness.summary?.f12NavigationRequestCount >= 1, `professional readiness summary missing F12 navigation count: ${JSON.stringify(finalReadiness.summary)}`);
   assert(finalReadiness.summary?.latestArtifactKinds?.includes("har"), `professional readiness summary missing latest artifact kinds: ${JSON.stringify(finalReadiness.summary)}`);
+  assert(finalReadiness.summary?.routeArtifactCount >= 5, `professional readiness summary missing route artifact count: ${JSON.stringify(finalReadiness.summary)}`);
+  assert(finalReadiness.summary?.routeArtifactNames?.includes("correlationGraph"), `professional readiness summary missing route artifact names: ${JSON.stringify(finalReadiness.summary)}`);
   assert(finalReadiness.artifactCount >= 1, "professional readiness missing artifact count after pack");
   assert(finalReadiness.artifactKinds?.["research-pack"] >= 1, `professional readiness missing artifact kind distribution: ${JSON.stringify(finalReadiness.artifactKinds)}`);
   assert(finalReadiness.latestArtifacts?.har?.inspect?.tool === "devtools_artifact_inspect", `professional readiness missing latest HAR artifact pointer: ${JSON.stringify(finalReadiness.latestArtifacts)}`);
