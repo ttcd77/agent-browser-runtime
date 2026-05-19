@@ -157,6 +157,13 @@ export function printSummary(pack, output = console.log) {
     if (Array.isArray(readiness.nextActions) && readiness.nextActions.length) {
       output(`  - next action: ${readiness.nextActions[0].tool}`);
     }
+    const readinessSummary = readiness.summary || {};
+    if (typeof readinessSummary.routeArtifactCount === "number") {
+      output(`  - route artifact count: ${readinessSummary.routeArtifactCount}`);
+    }
+    if (Array.isArray(readinessSummary.routeArtifactNames) && readinessSummary.routeArtifactNames.length) {
+      output(`  - route artifact names: ${readinessSummary.routeArtifactNames.join(", ")}`);
+    }
     const route = readiness.routeSummary || {};
     if (route.firstStep?.tool) output(`  - route first step: ${route.firstStep.tool}`);
     if (route.latestHandoffInspect?.input?.path) {

@@ -123,6 +123,10 @@ printSummary({
         read: { tool: "devtools_artifact_read", input: { path: "tmp/har-completeness.json" } },
       },
     },
+    summary: {
+      routeArtifactCount: 5,
+      routeArtifactNames: ["f12Navigation", "harCompleteness", "correlationGraph", "authBoundary", "workerFrameBoundary"],
+    },
     routeSummary: {
       firstStep: { tool: "devtools_artifact_inspect", input: { path: "tmp/security-research-pack.json" } },
       latestHandoffInspect: { tool: "devtools_artifact_inspect", input: { path: "tmp/security-research-pack.json" } },
@@ -168,6 +172,8 @@ assert(output.includes("skipped: trace"), "summary missing artifact coverage ski
 assert(output.includes("- professional readiness: true"), "summary missing professional readiness");
 assert(output.includes("evidence ready: true"), "summary missing professional evidence readiness");
 assert(output.includes("next action: devtools_workflow_guide"), "summary missing readiness next action");
+assert(output.includes("route artifact count: 5"), "summary missing readiness route artifact count");
+assert(output.includes("route artifact names: f12Navigation, harCompleteness, correlationGraph, authBoundary, workerFrameBoundary"), "summary missing readiness route artifact names");
 assert(output.includes("route first step: devtools_artifact_inspect"), "summary missing readiness route first step");
 assert(output.includes("route handoff inspect: devtools_artifact_inspect path=tmp/security-research-pack.json"), "summary missing route handoff inspect");
 assert(output.includes("route handoff read: devtools_artifact_read path=tmp/security-research-pack.json"), "summary missing route handoff read");

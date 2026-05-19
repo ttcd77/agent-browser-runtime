@@ -101,7 +101,9 @@ prints route artifacts for saved F12 evidence, including F12 navigation, HAR
 completeness, trace, Application export, evidence bundle, drilldown plan,
 evidence manifest, correlation graph, auth boundary, and worker/frame boundary
 reports. Each route artifact includes bounded `devtools_artifact_inspect` /
-`devtools_artifact_read` follow-up tools.
+`devtools_artifact_read` follow-up tools. The same summary prints
+`routeArtifactCount` and `routeArtifactNames` from readiness, so an agent can
+decide whether to expand the route artifact map.
 
 ## Why This Helps Security Research
 
