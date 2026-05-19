@@ -115,7 +115,7 @@ node scripts/security-research-demo-report.mjs /tmp/pack.json /tmp/demo-report.m
 
 ## Commit Hash
 
-**`<filled below>`**
+**`6ff508a`**
 
 ---
 
