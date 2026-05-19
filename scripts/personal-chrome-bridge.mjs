@@ -2480,6 +2480,7 @@ function buildProfessionalReadiness({
   const harCompletenessPath = latestResearchPackSummary?.artifactPaths?.harCompletenessPath || null;
   const tracePath = latestResearchPackSummary?.artifactPaths?.tracePath || null;
   const applicationExportPath = latestResearchPackSummary?.artifactPaths?.applicationExportPath || null;
+  const evidenceBundlePath = latestResearchPackSummary?.artifactPaths?.evidenceBundlePath || null;
   const firstF12RequestDetailArtifact = firstF12RequestDetailPath ? {
     path: firstF12RequestDetailPath,
     inspect: { tool: "devtools_artifact_inspect", input: { path: firstF12RequestDetailPath, maxBytes: 120000 } },
@@ -2504,6 +2505,11 @@ function buildProfessionalReadiness({
     path: applicationExportPath,
     inspect: { tool: "devtools_artifact_inspect", input: { path: applicationExportPath, maxBytes: 200000 } },
     read: { tool: "devtools_artifact_read", input: { path: applicationExportPath, mode: "line", startLine: 1, lineCount: 180 } },
+  } : null;
+  const evidenceBundleArtifact = evidenceBundlePath ? {
+    path: evidenceBundlePath,
+    inspect: { tool: "devtools_artifact_inspect", input: { path: evidenceBundlePath, maxBytes: 220000 } },
+    read: { tool: "devtools_artifact_read", input: { path: evidenceBundlePath, mode: "line", startLine: 1, lineCount: 180 } },
   } : null;
   const checks = [
     {
@@ -2643,6 +2649,18 @@ function buildProfessionalReadiness({
       seenNextActions.add(key);
     }
   }
+  if (evidenceBundleArtifact) {
+    const entry = {
+      tool: evidenceBundleArtifact.inspect.tool,
+      input: evidenceBundleArtifact.inspect.input,
+      why: "Inspect the saved F12 evidence bundle from the latest research pack.",
+    };
+    const key = actionKey(entry);
+    if (!seenNextActions.has(key)) {
+      nextActions.push(entry);
+      seenNextActions.add(key);
+    }
+  }
   if (f12NavigationArtifact) {
     const entry = {
       tool: f12NavigationArtifact.inspect.tool,
@@ -2718,6 +2736,7 @@ function buildProfessionalReadiness({
     traceArtifact,
     traceQuery: traceArtifact?.query || null,
     applicationExportArtifact,
+    evidenceBundleArtifact,
     f12NavigationArtifact,
     firstF12RequestDetailArtifact,
     firstF12RequestDetail: f12NavigationDrilldowns[0] ? {

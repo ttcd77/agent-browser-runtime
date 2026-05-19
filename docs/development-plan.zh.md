@@ -935,3 +935,12 @@
 - `nextActions` 会包含该 artifact 的 `devtools_artifact_inspect` 下一步，Agent 可以从 readiness 进入 cookie、storage、cache、IndexedDB 等 F12 Application 证据。
 - Managed Browser / Personal Chrome smoke 都覆盖该路线。
 - 该路线只读取已保存 Application export，不判断数据是否构成安全问题。
+
+### 2026-05-19: Readiness Evidence Bundle Artifact 路线完成
+
+已经完成:
+
+- `devtools_professional_readiness.routeSummary.evidenceBundleArtifact` 会直接返回完整 F12 evidence bundle 的 inspect/read 路线。
+- `nextActions` 会包含该 artifact 的 `devtools_artifact_inspect` 下一步，Agent 可以从 readiness 进入一次性证据包，再按需钻取 Network、Console、Storage、Sources、Performance 等分区。
+- Managed Browser / Personal Chrome smoke 都覆盖该路线。
+- 该路线只读取已保存 evidence bundle，不做漏洞判断。
