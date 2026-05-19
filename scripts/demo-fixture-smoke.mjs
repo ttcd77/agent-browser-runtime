@@ -357,6 +357,32 @@ try {
     `expected >= 4 network requests (main, api/data, api/error, redirect chain, iframe), got: ${summary.requestCount}`,
   );
 
+  // Console coverage: log/warn/error signals must be real CDP Console evidence.
+  const consoleEvents =
+    pack.evidence?.consoleReloadCapture?.console ||
+    pack.evidence?.console?.evidence?.console?.console ||
+    pack.evidence?.console?.console ||
+    [];
+  const consoleTexts = consoleEvents
+    .flatMap((entry) => entry.args || entry.text || [])
+    .map((value) => String(value));
+  assert(
+    (summary.consoleEntryCount ?? 0) >= 3,
+    `expected >= 3 console entries (log/warn/error), got: ${summary.consoleEntryCount}`,
+  );
+  assert(
+    consoleTexts.some((text) => text.includes("demo-fixture: page load started")),
+    "console evidence missing log marker",
+  );
+  assert(
+    consoleTexts.some((text) => text.includes("intentional warning signal")),
+    "console evidence missing warning marker",
+  );
+  assert(
+    consoleTexts.some((text) => text.includes("intentional error signal")),
+    "console evidence missing error marker",
+  );
+
   // Operator Demo Report on disk
   assert(existsSync(demoReportPath), "demo operator report file was not written to disk");
   assert(demoReportMd.length > 0, "demo operator report is empty");
@@ -368,6 +394,7 @@ try {
     demoReportMd.includes("devtools_artifact_read"),
     "demo report missing devtools_artifact_read tool reference",
   );
+  assert(demoReportMd.includes("Console entries"), "demo report missing console entries summary");
 
   // Forbidden content: report must NOT make vulnerability judgments
   const lower = demoReportMd.toLowerCase();

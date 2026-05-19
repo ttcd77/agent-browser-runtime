@@ -47,8 +47,9 @@ The fixture at `http://127.0.0.1:<random-port>/` serves:
 | `/worker.js` | Web Worker script |
 
 ### Console
-The main page fires `console.log`, `console.warn`, and `console.error` on load,
-producing F12 Console panel entries.
+The main page fires `console.log`, `console.warn`, and `console.error` on load.
+The research pack enables Console capture before a reload window, then verifies
+the real CDP Console output contains the demo log, warning, and error markers.
 
 ### Storage / Application
 - `localStorage.setItem("demo_fixture_marker", ...)`
@@ -75,7 +76,8 @@ a ready message back.
 - Application export exists (localStorage, sessionStorage, cookie capture).
 - Worker/frame boundary report exists (iframe frame captured).
 - `requestCount >= 4` (main page + api/data + api/error + at least one redirect hop).
-- `consoleEntryCount >= 1` (console.log/warn/error captured).
+- `consoleEntryCount >= 3` and the real Console evidence contains the demo
+  log, warning, and error markers.
 - Operator Demo Report exists on disk.
 - Report contains `## Operator Handoff`.
 - Report contains `## Objective Boundary`.
@@ -115,6 +117,9 @@ All temporary paths are cleaned up automatically after the smoke completes.
 - The demo report is generated via `adaptPackForReport` (CLI adapter) +
   `buildOperatorDemoReport` (shared helper), which is the same path used by
   `npm run research:pack -- --report-md <path>`.
+- Console capture is intentionally enabled before a reload window. This mirrors
+  opening DevTools before reproducing an issue: Console events emitted before
+  listeners are attached cannot be reconstructed later.
 - `smoke:demo` is intentionally **excluded from `npm run check`** to keep
   the daily check fast. Run it manually for portfolio demonstrations or
   integration validation.

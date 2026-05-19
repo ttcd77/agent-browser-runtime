@@ -11621,6 +11621,20 @@ function registerStandaloneBrowserTools(tools, cdpPort, profileRegistry, default
       }
       steps.push({ step: "capture_start", result: await safeCall("devtools_capture_start", { clear: true, label: "security-research-pack" }) });
       steps.push({ step: "hard_reload", result: await safeCall("browser_hard_reload", { waitMs }) });
+      const consoleReloadCapture = await safeCall("browser_console_log", {
+        reload: true,
+        ignoreCache: true,
+        waitMs,
+        limit: Math.max(limit, 100),
+      });
+      steps.push({
+        step: "console_reload_capture",
+        result: {
+          profile: consoleReloadCapture.profile,
+          tabId: consoleReloadCapture.tabId,
+          counts: consoleReloadCapture.counts,
+        },
+      });
       const overview = await safeCall("agent_inspect", { focus: "overview", limit });
       const network = await safeCall("agent_inspect", { focus: "network", limit });
       const storage = await safeCall("agent_inspect", { focus: "storage", limit, includeHeavy: true });
@@ -11710,13 +11724,31 @@ function registerStandaloneBrowserTools(tools, cdpPort, profileRegistry, default
         ].filter(Boolean),
       });
       const networkSummary = network?.evidence?.summary || {};
+      const countConsoleEntries = (payload) => {
+        const consolePanel = payload?.evidence?.console || payload || {};
+        const counts = consolePanel.counts || {};
+        return (
+          counts.console ??
+          counts.entries ??
+          consolePanel.entryCount ??
+          consolePanel.console?.length ??
+          consolePanel.entries?.length ??
+          0
+        );
+      };
+      const consoleEntryCount =
+        countConsoleEntries(consoleEvidence) ||
+        countConsoleEntries(consoleReloadCapture) ||
+        overview?.evidence?.console?.entryCount ||
+        overview?.evidence?.console?.entries?.length ||
+        0;
       const page = overview?.evidence?.diagnostics?.page || {};
       const generatedAt = new Date().toISOString();
       const summary = {
         url: page.url || params?.url || null,
         requestCount: networkSummary.requestCount || 0,
         failedRequestCount: networkSummary.failedRequestCount || networkSummary.errorCount || 0,
-        consoleEntryCount: overview?.evidence?.console?.entryCount || overview?.evidence?.console?.entries?.length || 0,
+        consoleEntryCount,
         cookieCount: storage?.evidence?.cookies?.cookieCount ?? null,
         sourceCount: sources?.evidence?.sources?.count ?? null,
         performanceObserverEntryCount: performance?.evidence?.observer?.summary?.entryCount ?? null,
@@ -11863,6 +11895,7 @@ function registerStandaloneBrowserTools(tools, cdpPort, profileRegistry, default
           network,
           storage,
           console: consoleEvidence,
+          consoleReloadCapture,
           sources,
           performance,
         },
