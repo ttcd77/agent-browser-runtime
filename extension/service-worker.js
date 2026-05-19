@@ -2511,7 +2511,12 @@ async function chromeRealtimeLog(params) {
   const maxPayloadChars = Number(params.maxPayloadChars || 2000);
   const requestedId = params.requestId ? String(params.requestId) : null;
   const needle = params.url_contains ? String(params.url_contains).toLowerCase() : null;
+  const payloadNeedle = params.payload_contains ? String(params.payload_contains).toLowerCase() : null;
   const direction = params.direction ? String(params.direction).toLowerCase() : null;
+  const frameMatchesPayload = (frame) => {
+    if (!payloadNeedle) return true;
+    return String(frame?.payloadData || "").toLowerCase().includes(payloadNeedle);
+  };
   const truncatePayload = (value) => {
     if (typeof value !== "string") return value ?? null;
     return value.length > maxPayloadChars ? `${value.slice(0, maxPayloadChars)}...[truncated ${value.length - maxPayloadChars} chars]` : value;
@@ -2519,9 +2524,12 @@ async function chromeRealtimeLog(params) {
   let websockets = [...session.websockets.values()];
   if (requestedId) websockets = websockets.filter((socket) => String(socket.requestId) === requestedId);
   if (needle) websockets = websockets.filter((socket) => String(socket.url || "").toLowerCase().includes(needle));
+  if (payloadNeedle) websockets = websockets.filter((socket) => (socket.frames || []).some(frameMatchesPayload));
   websockets = websockets.slice(-limit).map((socket) => {
-    const frames = (socket.frames || [])
+    const originalFrames = socket.frames || [];
+    const frames = originalFrames
       .filter((frame) => !direction || String(frame.direction || "").toLowerCase() === direction)
+      .filter(frameMatchesPayload)
       .slice(-limit)
       .map((frame) => ({
         ...frame,
@@ -2539,23 +2547,50 @@ async function chromeRealtimeLog(params) {
       updatedAt: socket.updatedAt,
       closedAt: socket.closedAt,
       errorMessage: socket.errorMessage,
-      frameCount: socket.frames?.length || 0,
+      frameCount: originalFrames.length,
+      matchingFrameCount: originalFrames.filter((frame) => (!direction || String(frame.direction || "").toLowerCase() === direction) && frameMatchesPayload(frame)).length,
       returnedFrameCount: frames.length,
       frames,
     };
   });
   let eventSources = [...(session.eventSources || [])];
   if (requestedId) eventSources = eventSources.filter((entry) => String(entry.requestId) === requestedId);
+  if (payloadNeedle) eventSources = eventSources.filter((entry) => String(entry.data || "").toLowerCase().includes(payloadNeedle));
   eventSources = eventSources.slice(-limit).map((entry) => ({
     ...entry,
     data: truncatePayload(entry.data),
     truncated: typeof entry.data === "string" && entry.data.length > maxPayloadChars,
   }));
+  const websocketFrameCount = websockets.reduce((sum, socket) => sum + (socket.frameCount || 0), 0);
+  const matchingWebsocketFrameCount = websockets.reduce((sum, socket) => sum + (socket.matchingFrameCount || 0), 0);
+  const recommendedDrilldowns = [];
+  for (const socket of websockets.slice(0, 10)) {
+    if (!socket.requestId) continue;
+    recommendedDrilldowns.push({
+      label: socket.url ? `Inspect realtime channel ${socket.url}` : `Inspect realtime channel ${socket.requestId}`,
+      tool: "devtools_realtime_log",
+      input: {
+        requestId: socket.requestId,
+        ...(payloadNeedle ? { payload_contains: params.payload_contains } : {}),
+        ...(direction ? { direction: params.direction } : {}),
+      },
+      why: "Narrow WebSocket/SSE evidence by concrete channel id without loading unrelated realtime traffic.",
+    });
+  }
   return {
     tab: pickTab(tab),
     capture: session.capture,
     websocketCount: websockets.length,
+    websocketFrameCount,
+    matchingWebsocketFrameCount,
     eventSourceMessageCount: eventSources.length,
+    filters: {
+      requestId: requestedId,
+      url_contains: params.url_contains || null,
+      payload_contains: params.payload_contains || null,
+      direction: params.direction || null,
+    },
+    recommendedDrilldowns,
     websockets,
     eventSources,
   };

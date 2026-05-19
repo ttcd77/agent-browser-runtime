@@ -21,6 +21,8 @@ make them objectively retrievable.
   - `maxPayloadChars`
 - WebSocket channels can now be filtered by matching frame payloads.
 - EventSource/SSE messages can now be filtered by message payload.
+- The same filter contract is now implemented in both Managed Browser/CDP and
+  Personal Chrome/chrome.debugger mode.
 - Results include:
   - `filters`
   - `websocketFrameCount`

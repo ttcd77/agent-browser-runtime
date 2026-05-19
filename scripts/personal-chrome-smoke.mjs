@@ -365,6 +365,14 @@ const realtimeLog = await callTool("devtools_realtime_log", {
 assert(realtimeLog.tab?.url, `Personal Chrome realtime log missing tab context: ${JSON.stringify(realtimeLog)}`);
 assert(Array.isArray(realtimeLog.websockets), "Personal Chrome realtime log missing websockets array");
 assert(Array.isArray(realtimeLog.eventSources), "Personal Chrome realtime log missing eventSources array");
+const realtimeFiltered = await callTool("devtools_realtime_log", {
+  payload_contains: "personal-smoke-marker-that-may-not-exist",
+  direction: "sent",
+  limit: 5,
+});
+assert(realtimeFiltered.filters?.payload_contains === "personal-smoke-marker-that-may-not-exist", `Personal Chrome realtime filter not echoed: ${JSON.stringify(realtimeFiltered.filters)}`);
+assert(typeof realtimeFiltered.matchingWebsocketFrameCount === "number", "Personal Chrome realtime filter missing matching frame count");
+assert(Array.isArray(realtimeFiltered.recommendedDrilldowns), "Personal Chrome realtime filter missing drilldown list");
 const heapSnapshot = await callTool("devtools_heap_snapshot");
 assert(heapSnapshot.notApplicable === true, `Personal Chrome heap snapshot should be structured notApplicable: ${JSON.stringify(heapSnapshot)}`);
 assert(heapSnapshot.managedFallbackTool === "devtools_heap_snapshot", "Personal Chrome heap snapshot missing managed fallback guidance");
