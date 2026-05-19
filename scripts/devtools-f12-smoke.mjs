@@ -845,6 +845,23 @@ try {
   assert(JSON.stringify(realtimeLog.websockets || []).includes("AGENT_WS_MARKER"), "realtime log missing WebSocket frame payload");
   assert(realtimeLog.eventSourceMessageCount >= 1, `realtime log missing EventSource evidence: ${JSON.stringify(realtimeLog)}`);
   assert(JSON.stringify(realtimeLog.eventSources || []).includes("AGENT_SSE_MARKER"), "realtime log missing EventSource payload");
+  const realtimePayloadFilter = await callTool(baseUrl, "devtools_realtime_log", {
+    profile: "default",
+    payload_contains: "AGENT_WS_MARKER",
+    direction: "sent",
+    limit: 20,
+  });
+  assert(realtimePayloadFilter.filters?.payload_contains === "AGENT_WS_MARKER", `realtime payload filter not echoed: ${JSON.stringify(realtimePayloadFilter.filters)}`);
+  assert(realtimePayloadFilter.matchingWebsocketFrameCount >= 1, `realtime payload filter found no matching frames: ${JSON.stringify(realtimePayloadFilter)}`);
+  assert(realtimePayloadFilter.websockets?.every((socket) => socket.frames?.every((frame) => String(frame.payloadData || "").includes("AGENT_WS_MARKER"))), `realtime payload filter returned unrelated frames: ${JSON.stringify(realtimePayloadFilter.websockets)}`);
+  assert(realtimePayloadFilter.recommendedDrilldowns?.some((entry) => entry.tool === "devtools_realtime_log" && entry.input?.requestId), `realtime payload filter missing concrete drilldown: ${JSON.stringify(realtimePayloadFilter.recommendedDrilldowns)}`);
+  const realtimeSseFilter = await callTool(baseUrl, "devtools_realtime_log", {
+    profile: "default",
+    payload_contains: "AGENT_SSE_MARKER",
+    limit: 20,
+  });
+  assert(realtimeSseFilter.eventSourceMessageCount >= 1, `realtime payload filter found no SSE messages: ${JSON.stringify(realtimeSseFilter)}`);
+  assert(realtimeSseFilter.eventSources?.every((entry) => String(entry.data || "").includes("AGENT_SSE_MARKER")), `realtime payload filter returned unrelated SSE messages: ${JSON.stringify(realtimeSseFilter.eventSources)}`);
 
   await callTool(baseUrl, "devtools_eval", {
     profile: "default",

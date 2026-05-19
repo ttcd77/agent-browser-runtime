@@ -82,6 +82,12 @@ Network-table filters shared by Personal and Managed backends:
 These filters are table-drilldown helpers only. They do not classify requests as
 vulnerable or safe.
 
+`devtools_realtime_log` supports realtime-channel filters: `requestId`,
+`url_contains`, `payload_contains`, `direction`, `limit`, and
+`maxPayloadChars`. Use `payload_contains` for protocols such as
+XMPP-over-WebSocket, where the important evidence may live in frames rather than
+HTTP request rows.
+
 Request replay returns `replayBoundary` in both backends. Read it before
 interpreting a replay result:
 
