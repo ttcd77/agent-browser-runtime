@@ -2,8 +2,9 @@
 
 Agent Browser Runtime can run as one local Browser Worker for every agent on
 the workstation. The worker is framework-neutral: Codex, Claude, Hermes,
-OpenClaw, and a custom SDK should all call the same HTTP facade instead of
-binding to CDP target ids, extension internals, or per-agent browser scripts.
+OpenClaw-compatible adapters, and custom SDKs should all call the same HTTP
+facade instead of binding to CDP target ids, extension internals, or per-agent
+browser scripts.
 
 ## Contract
 
@@ -109,4 +110,3 @@ traffic journal, screenshots, snapshots, and evidence directory.
 
 Public examples should use `example.com` or local fixtures. Do not commit HARs,
 screenshots, cookies, authorization headers, or evidence from real targets.
-

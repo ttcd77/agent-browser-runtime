@@ -42,6 +42,7 @@
     "contract:devtools": "node scripts/devtools-contract-check.mjs",
     "dev:loop-check": "node scripts/continuous-dev-check.mjs",
     "smoke:server": "npm run build && node scripts/agent-server-smoke.mjs",
+    "smoke:worker": "npm run build && node scripts/browser-worker-smoke.mjs",
     "smoke:f12": "npm run build && node scripts/devtools-f12-smoke.mjs",
     "smoke:professional": "npm run build && node scripts/professional-appsec-smoke.mjs",
     "smoke:cli": "node scripts/research-pack-cli-smoke.mjs",
