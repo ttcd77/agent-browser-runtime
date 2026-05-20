@@ -7,6 +7,7 @@ import { createHash } from "node:crypto";
 import http from "node:http";
 import CDP from "chrome-remote-interface";
 import { buildArtifactIndex as buildSharedArtifactIndex, inferArtifactKind as inferSharedArtifactKind } from "./lib/artifact-index.mjs";
+import { createFeedbackNote, listFeedbackNotes } from "./lib/feedback-notes.mjs";
 
 const root = process.cwd();
 const DIRECT_CDP_CORE_DOMAINS = [
@@ -6581,6 +6582,51 @@ function registerStandaloneBrowserTools(tools, cdpPort, profileRegistry, default
     },
     async execute(_id, params) {
       return toolResult(await profileRegistry.deleteProfile(params?.profile));
+    },
+  });
+
+  const browserFeedbackTool = {
+    name: "browser_feedback",
+    description:
+      "Agent feedback entrypoint: record a local bug, capability gap, docs issue, product friction, or idea about Agent Browser Runtime. This writes a local feedback/*.md note and does not judge vulnerabilities.",
+    parameters: {
+      type: "object",
+      properties: {
+        type: { type: "string", enum: ["bug", "gap", "docs", "product", "idea"] },
+        title: { type: "string" },
+        summary: { type: "string" },
+        repro: { type: "string" },
+        expected: { type: "string" },
+        actual: { type: "string" },
+        evidence: { type: "string" },
+        next: { type: "string" },
+        tool: { type: "string" },
+        profile: { type: "string" },
+        reporter: { type: "string" },
+      },
+      required: ["title"],
+    },
+    async execute(_id, params = {}) {
+      const note = createFeedbackNote({
+        ...params,
+        reporter: params.reporter || "browser-worker-tool",
+      });
+      return toolResult({
+        ...note,
+        feedbackUrl: "http://127.0.0.1:17335/feedback",
+        docs: "docs/feedback-and-gaps.md",
+        publicIssueRule: "Review and redact before publishing. Do not include cookies, tokens, private screenshots, real HARs, or account state.",
+      });
+    },
+  };
+  tools.set("browser_feedback", browserFeedbackTool);
+
+  tools.set("devtools_feedback_note", {
+    name: "devtools_feedback_note",
+    description: "Alias of browser_feedback for agents working in the low-level DevTools namespace.",
+    parameters: browserFeedbackTool.parameters,
+    async execute(id, params) {
+      return await browserFeedbackTool.execute(id, params);
     },
   });
 
@@ -13913,6 +13959,125 @@ function panelHtml() {
 </html>`;
 }
 
+function feedbackHtml() {
+  return `<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Agent Browser Feedback</title>
+  <style>
+    :root { color-scheme: light; font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background: #f6f4ef; color: #191816; }
+    * { box-sizing: border-box; }
+    body { margin: 0; min-height: 100vh; padding: 32px; }
+    main { max-width: 1120px; margin: 0 auto; display: grid; grid-template-columns: 420px 1fr; gap: 22px; align-items: start; }
+    h1 { font-size: 26px; margin: 0 0 8px; letter-spacing: 0; }
+    p { color: #6c665b; line-height: 1.5; margin: 0 0 18px; }
+    .card { border: 1px solid #ded8cb; background: #fffdf8; border-radius: 8px; padding: 18px; }
+    label { display: block; font-size: 12px; font-weight: 700; color: #5c564d; margin: 12px 0 6px; }
+    input, select, textarea { width: 100%; border: 1px solid #d4cbbb; background: #fff; color: #191816; border-radius: 8px; padding: 10px 11px; font: inherit; }
+    textarea { min-height: 82px; resize: vertical; }
+    button { border: 1px solid #2f6b5f; background: #2f6b5f; color: #fff; border-radius: 8px; padding: 10px 13px; cursor: pointer; margin-top: 14px; font-weight: 700; }
+    .secondary { border-color: #d4cbbb; background: #fffdf8; color: #191816; margin-left: 8px; }
+    .notice { display: none; border: 1px solid #c8dbd5; background: #eef7f3; color: #234d43; border-radius: 8px; padding: 10px 12px; font-size: 13px; margin: 12px 0; overflow-wrap: anywhere; }
+    .note { border-top: 1px solid #ece7dc; padding: 13px 0; }
+    .note:first-child { border-top: 0; }
+    .note-title { font-weight: 760; }
+    .meta { color: #6c665b; font-size: 12px; margin-top: 4px; overflow-wrap: anywhere; }
+    .summary { font-size: 13px; margin-top: 7px; color: #3d3934; line-height: 1.45; }
+    code { background: #efe9dc; border-radius: 6px; padding: 2px 5px; }
+    @media (max-width: 900px) { main { grid-template-columns: 1fr; } body { padding: 18px; } }
+  </style>
+</head>
+<body>
+  <main>
+    <section class="card">
+      <h1>Feedback</h1>
+      <p>Record tool bugs, missing F12 evidence, unclear docs, or product friction. Notes stay local in <code>feedback/*.md</code> and must be reviewed before publishing.</p>
+      <form id="form">
+        <label>Type</label>
+        <select name="type">
+          <option value="gap">Capability gap</option>
+          <option value="bug">Bug</option>
+          <option value="docs">Docs</option>
+          <option value="product">Product friction</option>
+          <option value="idea">Idea</option>
+        </select>
+        <label>Title</label>
+        <input name="title" required placeholder="Short objective title" />
+        <label>Summary</label>
+        <textarea name="summary" placeholder="What did the agent need, and what happened?"></textarea>
+        <label>Tool</label>
+        <input name="tool" placeholder="browser_inspect / devtools_request_detail / etc." />
+        <label>Profile</label>
+        <input name="profile" placeholder="demo-fixture / target-guest-clean / etc." />
+        <label>Expected</label>
+        <textarea name="expected" placeholder="What should the tool have exposed?"></textarea>
+        <label>Actual</label>
+        <textarea name="actual" placeholder="What did it expose instead?"></textarea>
+        <label>Evidence pointers</label>
+        <textarea name="evidence" placeholder="Artifact path, request id, safe local fixture, or reproduction hint. No secrets."></textarea>
+        <button type="submit">Save local note</button>
+        <button class="secondary" type="button" onclick="load()">Refresh</button>
+      </form>
+      <div id="notice" class="notice"></div>
+    </section>
+    <section class="card">
+      <h1>Local Notes</h1>
+      <p>These notes are for agent triage. They are ignored by git unless manually converted into safe public issues.</p>
+      <div id="notes">Loading...</div>
+    </section>
+  </main>
+  <script>
+    function escapeHtml(value) {
+      return String(value ?? "").replace(/[&<>"']/g, ch => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[ch]));
+    }
+    function formPayload(form) {
+      return Object.fromEntries([...new FormData(form).entries()].map(([key, value]) => [key, String(value).trim()]));
+    }
+    async function load() {
+      const response = await fetch("/feedback-data");
+      const data = await response.json();
+      const box = document.getElementById("notes");
+      if (!data.notes?.length) {
+        box.innerHTML = '<div class="meta">No feedback notes yet.</div>';
+        return;
+      }
+      box.innerHTML = data.notes.map(note =>
+        '<div class="note"><div class="note-title">' + escapeHtml(note.title) + '</div>' +
+        '<div class="meta">' + escapeHtml(note.type) + ' · ' + escapeHtml(note.status) + ' · ' + escapeHtml(note.updatedAt) + '</div>' +
+        '<div class="meta">' + escapeHtml(note.tool || "no tool") + ' · ' + escapeHtml(note.profile || "no profile") + '</div>' +
+        '<div class="summary">' + escapeHtml(note.summary || "") + '</div>' +
+        '<div class="meta">' + escapeHtml(note.path) + '</div></div>'
+      ).join("");
+    }
+    document.getElementById("form").addEventListener("submit", async (event) => {
+      event.preventDefault();
+      const notice = document.getElementById("notice");
+      notice.style.display = "block";
+      notice.textContent = "Saving...";
+      const response = await fetch("/feedback-note", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ ...formPayload(event.currentTarget), reporter: "feedback-page" }),
+      });
+      const result = await response.json();
+      if (!response.ok) {
+        notice.textContent = result.error || JSON.stringify(result);
+        return;
+      }
+      notice.textContent = "Saved: " + result.path;
+      event.currentTarget.reset();
+      await load();
+    });
+    load().catch(error => {
+      document.getElementById("notes").textContent = String(error);
+    });
+  </script>
+</body>
+</html>`;
+}
+
 async function main() {
   const profile = process.env.CDP_AGENT_PROFILE || "default";
   const cdpPort = Number.parseInt(process.env.CDP_BROWSER_PORT || "9222", 10);
@@ -13988,6 +14153,7 @@ async function main() {
           browserUserDataDir: process.env.CDP_BROWSER_USER_DATA_DIR || (browserProcess ? join(dataDir, "browser-identities", profile) : undefined),
           configPath,
           profileRegistryFile: profileRegistry.registryFile,
+          feedbackUrl: `http://127.0.0.1:${serverPort}/feedback`,
           tools: [...harness.tools.keys()],
         });
         return;
@@ -14004,6 +14170,25 @@ async function main() {
       }
       if (req.method === "GET" && url.pathname === "/panel") {
         sendHtml(res, 200, panelHtml());
+        return;
+      }
+      if (req.method === "GET" && url.pathname === "/feedback") {
+        sendHtml(res, 200, feedbackHtml());
+        return;
+      }
+      if (req.method === "GET" && url.pathname === "/feedback-data") {
+        sendJson(res, 200, listFeedbackNotes({ limit: Number(url.searchParams.get("limit") || 50) }));
+        return;
+      }
+      if (req.method === "POST" && url.pathname === "/feedback-note") {
+        const params = await readJson(req);
+        sendJson(res, 200, {
+          ...createFeedbackNote({
+            ...params,
+            reporter: params.reporter || "feedback-http",
+          }),
+          docs: "docs/feedback-and-gaps.md",
+        });
         return;
       }
       if (req.method === "GET" && url.pathname === "/panel-data") {

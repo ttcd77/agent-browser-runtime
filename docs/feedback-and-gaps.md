@@ -16,7 +16,26 @@ as a feedback note before continuing.
 
 ## Local Notes
 
-Use:
+Agents should prefer the Browser Worker tool when the worker is running:
+
+```json
+{
+  "toolName": "browser_feedback",
+  "params": {
+    "type": "gap",
+    "title": "browser_inspect network omits redirect chain",
+    "summary": "The agent had a requestId but could not see redirect hops from the facade.",
+    "tool": "browser_inspect",
+    "profile": "demo-fixture",
+    "expected": "Network route exposes redirect chain or points to request detail.",
+    "actual": "The facade summary did not show the redirect hops."
+  }
+}
+```
+
+The low-level alias is `devtools_feedback_note`.
+
+Humans or shell-only agents can use:
 
 ```bash
 npm run feedback:note -- --type bug --title "browser_inspect network omits redirect chain" --summary "The agent had a requestId but could not see redirect hops from the facade."
@@ -25,6 +44,21 @@ npm run feedback:note -- --type bug --title "browser_inspect network omits redir
 This writes a markdown note to `feedback/`. The directory is for local triage.
 Do not commit sensitive feedback notes. If a note is safe and generally useful,
 turn it into a GitHub issue using the templates in `.github/ISSUE_TEMPLATE/`.
+
+The local web page is:
+
+```text
+http://127.0.0.1:17335/feedback
+```
+
+HTTP endpoints:
+
+| Endpoint | Use |
+|---|---|
+| `GET /feedback` | Human-readable local feedback page |
+| `GET /feedback-data` | Machine-readable recent feedback notes |
+| `POST /feedback-note` | Create a local note without using the tool catalog |
+| `POST /tool/browser_feedback` | Preferred agent entrypoint |
 
 Useful fields:
 
@@ -83,4 +117,3 @@ A tool gap is not “the tool did not find a vulnerability.” A tool gap is one
 - A failure message does not tell the next agent what to do.
 
 The runtime should expose evidence and boundaries. It should not decide impact.
-

@@ -40,6 +40,7 @@ const requiredPackageScripts = [
   "professional:scorecard",
   "worker:doctor",
   "feedback:note",
+  "smoke:feedback",
   "research:pack",
   "release:readiness",
 ];
@@ -57,6 +58,7 @@ const requiredReadmePhrases = [
   "routeArtifactCount",
   "routeArtifactNames",
   "browser_inspect",
+  "browser_feedback",
 ];
 
 const forbiddenTrackedPrefixes = [

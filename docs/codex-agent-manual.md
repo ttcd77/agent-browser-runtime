@@ -194,12 +194,34 @@ Do not mix unrelated targets or identities in one profile.
 
 If the tool blocks you, record it immediately:
 
+```json
+{
+  "toolName": "browser_feedback",
+  "profile": "demo-fixture",
+  "params": {
+    "type": "gap",
+    "title": "Need bounded WebSocket frame filter",
+    "summary": "Agent could not filter realtime frames by room id.",
+    "tool": "browser_inspect",
+    "expected": "Facade points to a bounded realtime frame drilldown.",
+    "actual": "Agent had to scan the raw realtime log manually."
+  }
+}
+```
+
+If the worker tool catalog is not available, use the CLI fallback:
+
 ```bash
 npm run feedback:note -- --type gap --title "Need bounded WebSocket frame filter" --summary "Agent could not filter realtime frames by room id."
+```
+
+Human-readable local page:
+
+```text
+http://127.0.0.1:17335/feedback
 ```
 
 Read `docs/feedback-and-gaps.md` for the full protocol.
 
 Do not put tokens, cookies, private screenshots, real HARs, or account state in
 public issues. Use local feedback notes for sensitive details.
-

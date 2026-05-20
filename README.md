@@ -199,6 +199,17 @@ The panel is intentionally simple: it shows human-readable profile names and a
 page diagnostics summary. It hides CDP target ids and tab ids from the first
 screen. Agents and SDKs should still use the `devtools_*` tools for automation.
 
+Local feedback page:
+
+```text
+http://127.0.0.1:17335/feedback
+```
+
+Agents should use `browser_feedback` when a Browser Runtime tool is broken,
+confusing, or missing a needed F12/AppSec evidence route. The tool writes a
+local `feedback/*.md` note that is ignored by git until a human reviews and
+redacts it.
+
 ## Agent-Facing Tools
 
 Expose these facade tools to agents by default:
@@ -213,6 +224,7 @@ Expose these facade tools to agents by default:
 | `browser_auth_boundary` | Collect auth/cookie/storage/request boundary evidence without judging impact. |
 | `browser_diff` | Compare before/after evidence or captured traffic. |
 | `browser_replay` | Replay one captured request or a batch of variants. |
+| `browser_feedback` | Record a local bug, capability gap, docs issue, product friction, or idea. |
 | `browser_raw` | Advanced escape hatch for one exact `devtools_*` tool. |
 
 Default professional workflow:
