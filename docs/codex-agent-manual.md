@@ -125,6 +125,18 @@ is broken:
 
 This is the first check for “the managed browser is stuck” reports.
 
+If the previous agent chat/session was closed, start with `profile_resume` or
+`browser_resume_profile`. The recovery semantics are deliberately explicit:
+
+- `attached-existing-tab`: the original live tab is still present, so continue.
+- `opened-new-tab-from-last-url`: the profile was stale; Browser Runtime opened
+  the last known URL in a fresh managed tab and rebound the profile.
+- `browser-storage-continuity-only`: cookies/storage remain in the managed
+  browser identity, but live DOM, JS memory, and in-flight DevTools recording do
+  not survive a closed tab or restarted browser.
+
+After resume, start capture again before reproducing the action you care about.
+
 ## Standard AppSec Workflow
 
 1. Open the page:

@@ -78,6 +78,12 @@ stale or wrong, bind it with `browser_adopt_tab`. If the page is not in
 worker cannot control it until it is opened through Browser Runtime or attached
 through the right backend.
 
+If an agent/chat session was closed and a role needs to continue, call
+`browser_resume_profile` or `profile_resume` before doing anything else. This
+reuses an attached tab when possible; otherwise it opens the profile's last URL
+in a fresh managed tab. Treat this as browser storage/cookie continuity, not
+live JavaScript memory continuity, and restart capture before important actions.
+
 ## Local Checks
 
 Fast development check:

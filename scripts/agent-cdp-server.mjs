@@ -6690,6 +6690,12 @@ function registerStandaloneBrowserTools(tools, cdpPort, profileRegistry, default
     return candidates[candidates.length - 1] || null;
   }
 
+  function resumableUrlFromProfile(profile, fallbackUrl = "about:blank") {
+    const url = String(profile?.url || fallbackUrl || "about:blank");
+    if (/^https?:\/\//i.test(url) || /^data:/i.test(url) || /^file:/i.test(url) || url === "about:blank") return url;
+    return "about:blank";
+  }
+
   tools.set("profile_create", {
     name: "profile_create",
     description: "Create or reopen a durable agent browser profile. A profile owns one tab and one evidence directory.",
@@ -6787,6 +6793,71 @@ function registerStandaloneBrowserTools(tools, cdpPort, profileRegistry, default
           : null,
         next: "Use browser_snapshot/browser_inspect/browser_capture on this profile. If the desired visible page is absent from liveTabs, it is not attached to this CDP endpoint.",
       });
+    },
+  });
+
+  tools.set("profile_resume", {
+    name: "profile_resume",
+    description:
+      "Recover a durable profile after an agent chat/session or browser tab was closed. Reuses a live tab when attached; otherwise reopens the profile's last URL in a fresh managed tab and binds it back.",
+    parameters: {
+      type: "object",
+      properties: {
+        profile: { type: "string" },
+        url: { type: "string" },
+        waitMs: { type: "number" },
+        reload: { type: "boolean" },
+      },
+      required: ["profile"],
+    },
+    async execute(_id, params) {
+      const requested = normalizeProfileName(params?.profile);
+      const status = await profileTargetStatus();
+      const existing = status.profiles.find((entry) => entry.name === requested) || null;
+      const waitMs = typeof params?.waitMs === "number" ? params.waitMs : 800;
+      if (existing?.status === "attached" && existing.currentTarget && params?.reload !== true) {
+        return toolResult({
+          ok: true,
+          profile: existing,
+          resumed: "attached-existing-tab",
+          continuity: "live-tab-continuity",
+          note: "The original live CDP tab is still attached. Continue with browser_snapshot/browser_inspect/browser_capture.",
+        });
+      }
+      const url = resumableUrlFromProfile({ url: params?.url || existing?.url }, "about:blank");
+      const target = await createPageTarget(cdpPort, url);
+      if (waitMs > 0) await sleep(waitMs);
+      const profile = await profileRegistry.adoptProfile(requested, target, {
+        resumedAt: new Date().toISOString(),
+        resumeReason: existing?.status === "stale" ? "stale-profile-tab" : existing ? "unbound-profile" : "new-profile",
+      });
+      return toolResult({
+        ok: true,
+        profile,
+        resumed: existing?.status === "stale" ? "opened-new-tab-from-last-url" : existing ? "opened-new-tab-for-profile" : "created-new-profile-tab",
+        previousProfile: existing
+          ? {
+              name: existing.name,
+              tabId: existing.tabId,
+              title: existing.title,
+              url: existing.url,
+              status: existing.status,
+            }
+          : null,
+        openedTarget: summarizeTargetForRegistry(target),
+        continuity: "browser-storage-continuity-only",
+        note: "A closed agent chat can resume the durable profile, but closed tabs cannot preserve live DOM/JS memory. Browser storage/cookies survive inside the managed browser identity; start capture again before reproducing actions.",
+        next: "Run browser_snapshot or browser_inspect, then browser_capture start before the next important action.",
+      });
+    },
+  });
+
+  tools.set("browser_resume_profile", {
+    name: "browser_resume_profile",
+    description: "Facade alias for profile_resume. Use this as the first recovery step when a role/profile looks disconnected after an agent session was closed.",
+    parameters: tools.get("profile_resume").parameters,
+    async execute(id, params) {
+      return await tools.get("profile_resume").execute(id, params);
     },
   });
 
@@ -13546,6 +13617,7 @@ function registerStandaloneBrowserTools(tools, cdpPort, profileRegistry, default
 
   aliasTool("devtools_tabs", "browser_tabs", "Unified Agent DevTools API: list browser tabs.");
   aliasTool("devtools_adopt_tab", "browser_adopt_tab", "Unified Agent DevTools API: bind an existing live CDP tab to a durable profile.");
+  aliasTool("devtools_resume_profile", "profile_resume", "Unified Agent DevTools API: recover a durable profile after a chat, tab, or worker disconnect.");
   aliasTool("devtools_snapshot", "browser_snapshot", "Unified Agent DevTools API: read visible text and controls.");
   aliasTool("devtools_screenshot", "browser_screenshot", "Unified Agent DevTools API: capture a screenshot.");
   aliasTool("devtools_click", "browser_click", "Unified Agent DevTools API: click by selector, text, or coordinates.");

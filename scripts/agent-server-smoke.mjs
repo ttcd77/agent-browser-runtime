@@ -276,6 +276,19 @@ try {
   if (adoptedSnapshot.title !== "Researcher Space") {
     throw new Error(`adopted tab snapshot mismatch: ${JSON.stringify(adoptedSnapshot)}`);
   }
+  const resumedAttached = await callTool("profile_resume", { profile: "adopted-live-tab" });
+  if (resumedAttached.resumed !== "attached-existing-tab") {
+    throw new Error(`profile_resume should reuse attached tab: ${JSON.stringify(resumedAttached)}`);
+  }
+  await callTool("profile_delete", { profile: "adopted-live-tab" });
+  const resumedStale = await callTool("profile_resume", { profile: "adopted-live-tab", url: adoptedUrl, waitMs: 500 });
+  if (!resumedStale.ok || !resumedStale.profile?.url?.includes("adopt=1")) {
+    throw new Error(`profile_resume did not reopen profile URL: ${JSON.stringify(resumedStale)}`);
+  }
+  const resumedSnapshot = await callTool("browser_snapshot", { profile: "adopted-live-tab" });
+  if (resumedSnapshot.title !== "Researcher Space") {
+    throw new Error(`resumed profile snapshot mismatch: ${JSON.stringify(resumedSnapshot)}`);
+  }
 
   const panelResponse = await fetch(`http://127.0.0.1:${serverPort}/panel`);
   if (!panelResponse.ok) {
@@ -355,6 +368,7 @@ try {
   console.log("- profile-bound browser_click/browser_eval/browser_screenshot evidence recorded");
   console.log("- profile_traffic_query/profile_traffic_get callable without OpenClaw");
   console.log("- browser_adopt_tab binds existing live CDP tabs back to durable profiles");
+  console.log("- profile_resume recovers attached or stale profiles after agent/session disconnects");
   console.log("- /panel and /panel-data provide public-facing dashboard data");
 } catch (err) {
   if (child.exitCode === null) child.kill();
