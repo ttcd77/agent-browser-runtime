@@ -107,6 +107,24 @@ Use stable names:
 
 Do not mix unrelated targets or identities in one profile.
 
+## Profile / Tab Drift
+
+Browser Runtime stores durable profile records, but Chrome/Edge tabs are live
+objects. After a browser restart, manual tab movement, or a tool crash, a
+profile can point at a stale tab. Diagnose this before assuming the page itself
+is broken:
+
+1. Call `browser_tabs`.
+2. Call `profile_list`.
+3. Check whether the profile status is `attached`, `stale`, or `unbound`.
+4. If the desired tab appears in `browser_tabs`, call `browser_adopt_tab` with
+   `profile` plus `tabId`, `urlContains`, or `titleContains`.
+5. If the desired tab does not appear in `browser_tabs`, it is not attached to
+   the current CDP endpoint. Open it through `browser_open`/`browser_navigate`
+   or connect the worker to the browser process that owns that tab.
+
+This is the first check for “the managed browser is stuck” reports.
+
 ## Standard AppSec Workflow
 
 1. Open the page:

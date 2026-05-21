@@ -6221,6 +6221,29 @@ function createProfileRegistry({ cdpPort, dataDir, onProfileReady }) {
     return next;
   }
 
+  async function adoptProfile(raw, target, patch = {}) {
+    const name = normalizeProfileName(raw);
+    if (!target?.id) throw new Error("target with id is required");
+    const state = readRegistry();
+    const now = new Date().toISOString();
+    const existing = state.profiles[name];
+    const record = {
+      name,
+      tabId: target.id,
+      title: target.title || "",
+      url: target.url || "about:blank",
+      createdAt: existing?.createdAt || now,
+      lastUsedAt: now,
+      evidenceDir: existing?.evidenceDir || profileDir(name),
+      ...patch,
+    };
+    mkdirSync(record.evidenceDir, { recursive: true });
+    state.profiles[name] = record;
+    writeRegistry(state);
+    await onProfileReady?.(record);
+    return record;
+  }
+
   function appendTraffic(raw, entries) {
     const name = normalizeProfileName(raw);
     const file = trafficFile(name);
@@ -6357,6 +6380,7 @@ function createProfileRegistry({ cdpPort, dataDir, onProfileReady }) {
     listProfiles,
     deleteProfile,
     touchProfile,
+    adoptProfile,
     appendTraffic,
     appendWebSockets,
     appendEventSources,
@@ -6618,6 +6642,54 @@ function registerStandaloneBrowserTools(tools, cdpPort, profileRegistry, default
     }
   }
 
+  function summarizeTargetForRegistry(target) {
+    return {
+      id: target.id,
+      title: target.title || "",
+      url: target.url || "about:blank",
+    };
+  }
+
+  async function profileTargetStatus() {
+    const pages = await listPageTargets(cdpPort);
+    const pageById = new Map(pages.map((target) => [target.id, target]));
+    const profiles = profileRegistry.listProfiles().map((profile) => {
+      const target = profile.tabId ? pageById.get(profile.tabId) : null;
+      const status = target ? "attached" : profile.tabId ? "stale" : "unbound";
+      return {
+        ...profile,
+        status,
+        attached: Boolean(target),
+        stale: status === "stale",
+        currentTarget: target ? summarizeTargetForRegistry(target) : null,
+      };
+    });
+    const profileNamesByTab = new Map();
+    for (const profile of profiles) {
+      if (!profile.tabId) continue;
+      const names = profileNamesByTab.get(profile.tabId) || [];
+      names.push(profile.name);
+      profileNamesByTab.set(profile.tabId, names);
+    }
+    return { pages, profiles, profileNamesByTab };
+  }
+
+  function findAdoptableTarget(pages, params = {}) {
+    const tabId = params?.tabId ? String(params.tabId) : "";
+    const urlContains = params?.urlContains ? String(params.urlContains).toLowerCase() : "";
+    const titleContains = params?.titleContains ? String(params.titleContains).toLowerCase() : "";
+    let candidates = pages.filter((target) => target.url !== "devtools://devtools/bundled/devtools_app.html");
+    if (tabId) candidates = candidates.filter((target) => target.id === tabId);
+    if (urlContains) candidates = candidates.filter((target) => String(target.url || "").toLowerCase().includes(urlContains));
+    if (titleContains) candidates = candidates.filter((target) => String(target.title || "").toLowerCase().includes(titleContains));
+    if (params?.preferNonBlank !== false) {
+      const nonBlank = candidates.filter((target) => target.url && target.url !== "about:blank");
+      if (nonBlank.length) candidates = nonBlank;
+    }
+    if (params?.latest === false) return candidates[0] || null;
+    return candidates[candidates.length - 1] || null;
+  }
+
   tools.set("profile_create", {
     name: "profile_create",
     description: "Create or reopen a durable agent browser profile. A profile owns one tab and one evidence directory.",
@@ -6637,12 +6709,83 @@ function registerStandaloneBrowserTools(tools, cdpPort, profileRegistry, default
 
   tools.set("profile_list", {
     name: "profile_list",
-    description: "List durable agent browser profiles managed by this local server.",
+    description: "List durable agent browser profiles managed by this local server, including whether each profile is attached to a live CDP tab.",
     parameters: { type: "object", properties: {} },
     async execute() {
+      const status = await profileTargetStatus();
       return toolResult({
-        profiles: profileRegistry.listProfiles(),
+        profiles: status.profiles,
+        summary: {
+          total: status.profiles.length,
+          attached: status.profiles.filter((profile) => profile.status === "attached").length,
+          stale: status.profiles.filter((profile) => profile.status === "stale").length,
+          unbound: status.profiles.filter((profile) => profile.status === "unbound").length,
+          liveTabs: status.pages.length,
+        },
         registryFile: profileRegistry.registryFile,
+      });
+    },
+  });
+
+  tools.set("browser_adopt_tab", {
+    name: "browser_adopt_tab",
+    description:
+      "Bind an existing live CDP tab to a durable profile. Use this when a visible page exists in the managed browser but the profile registry points at a stale or wrong tab.",
+    parameters: {
+      type: "object",
+      properties: {
+        profile: { type: "string" },
+        tabId: { type: "string" },
+        urlContains: { type: "string" },
+        titleContains: { type: "string" },
+        latest: { type: "boolean" },
+        preferNonBlank: { type: "boolean" },
+        reason: { type: "string" },
+      },
+      required: ["profile"],
+    },
+    async execute(_id, params) {
+      const { pages, profiles } = await profileTargetStatus();
+      const target = findAdoptableTarget(pages, params);
+      if (!target) {
+        return toolResult({
+          ok: false,
+          error: "no_matching_live_tab",
+          profile: normalizeProfileName(params?.profile),
+          filters: {
+            tabId: params?.tabId || null,
+            urlContains: params?.urlContains || null,
+            titleContains: params?.titleContains || null,
+          },
+          liveTabs: pages.map(summarizeTargetForRegistry),
+          staleProfiles: profiles.filter((profile) => profile.status === "stale").map((profile) => ({
+            name: profile.name,
+            tabId: profile.tabId,
+            title: profile.title,
+            url: profile.url,
+          })),
+          next: "Open or reload the page through browser_open/browser_navigate, or connect the worker to the browser process that owns the visible tab.",
+        });
+      }
+      const before = profiles.find((profile) => profile.name === normalizeProfileName(params?.profile)) || null;
+      const profile = await profileRegistry.adoptProfile(params?.profile, target, {
+        adoptedAt: new Date().toISOString(),
+        adoptReason: params?.reason || null,
+      });
+      return toolResult({
+        ok: true,
+        profile,
+        adoptedTarget: summarizeTargetForRegistry(target),
+        previousProfile: before
+          ? {
+              name: before.name,
+              tabId: before.tabId,
+              title: before.title,
+              url: before.url,
+              status: before.status,
+            }
+          : null,
+        next: "Use browser_snapshot/browser_inspect/browser_capture on this profile. If the desired visible page is absent from liveTabs, it is not attached to this CDP endpoint.",
       });
     },
   });
@@ -7822,16 +7965,30 @@ function registerStandaloneBrowserTools(tools, cdpPort, profileRegistry, default
 
   tools.set("browser_tabs", {
     name: "browser_tabs",
-    description: "List visible browser tabs available through the local CDP endpoint.",
+    description: "List visible browser tabs available through the local CDP endpoint and show which durable profiles are attached or stale.",
     parameters: { type: "object", properties: {} },
     async execute() {
-      const pages = await listPageTargets(cdpPort);
+      const { pages, profiles, profileNamesByTab } = await profileTargetStatus();
       return toolResult({
         tabs: pages.map((target) => ({
           id: target.id,
           title: target.title,
           url: target.url,
+          profiles: profileNamesByTab.get(target.id) || [],
         })),
+        staleProfiles: profiles.filter((profile) => profile.status === "stale").map((profile) => ({
+          name: profile.name,
+          tabId: profile.tabId,
+          title: profile.title,
+          url: profile.url,
+          lastUsedAt: profile.lastUsedAt,
+        })),
+        summary: {
+          liveTabs: pages.length,
+          attachedProfiles: profiles.filter((profile) => profile.status === "attached").length,
+          staleProfiles: profiles.filter((profile) => profile.status === "stale").length,
+          unboundProfiles: profiles.filter((profile) => profile.status === "unbound").length,
+        },
       });
     },
   });
@@ -13388,6 +13545,7 @@ function registerStandaloneBrowserTools(tools, cdpPort, profileRegistry, default
   }
 
   aliasTool("devtools_tabs", "browser_tabs", "Unified Agent DevTools API: list browser tabs.");
+  aliasTool("devtools_adopt_tab", "browser_adopt_tab", "Unified Agent DevTools API: bind an existing live CDP tab to a durable profile.");
   aliasTool("devtools_snapshot", "browser_snapshot", "Unified Agent DevTools API: read visible text and controls.");
   aliasTool("devtools_screenshot", "browser_screenshot", "Unified Agent DevTools API: capture a screenshot.");
   aliasTool("devtools_click", "browser_click", "Unified Agent DevTools API: click by selector, text, or coordinates.");

@@ -1,6 +1,9 @@
 import { spawn } from "node:child_process";
+import { mkdtempSync, rmSync } from "node:fs";
 import http from "node:http";
 import net from "node:net";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 
 function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -68,6 +71,7 @@ const serverPort = await freePort();
 const browserPort = await freePort();
 const testServer = await startTestServer();
 const testServerPort = testServer.address().port;
+const dataDir = mkdtempSync(join(tmpdir(), "agent-browser-runtime-server-smoke-"));
 const child = spawn(
   process.execPath,
   ["scripts/agent-cdp-server.mjs"],
@@ -80,6 +84,7 @@ const child = spawn(
       CDP_BROWSER_PORT: String(browserPort),
       CDP_AGENT_PROFILE: "agent-server-smoke",
       CDP_BROWSER_HEADLESS: "1",
+      CDP_SECURITY_DATA_DIR: dataDir,
     },
     stdio: ["ignore", "pipe", "pipe"],
   },
@@ -241,6 +246,36 @@ try {
   if (!profileList.profiles.some((entry) => entry.name === "researcher")) {
     throw new Error(`researcher profile missing from registry: ${JSON.stringify(profileList)}`);
   }
+  if (!profileList.summary || typeof profileList.summary.liveTabs !== "number") {
+    throw new Error(`profile_list did not include attachment summary: ${JSON.stringify(profileList)}`);
+  }
+
+  const adoptedUrl = `http://127.0.0.1:${testServerPort}/?adopt=1`;
+  const cdpNewResponse = await fetch(`http://127.0.0.1:${browserPort}/json/new?${encodeURIComponent(adoptedUrl)}`, { method: "PUT" });
+  if (!cdpNewResponse.ok) {
+    throw new Error(`CDP /json/new for adopt smoke failed: ${cdpNewResponse.status} ${await cdpNewResponse.text()}`);
+  }
+  await sleep(500);
+  const adoptResponse = await fetch(`http://127.0.0.1:${serverPort}/tool/browser_adopt_tab`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ profile: "adopted-live-tab", urlContains: "adopt=1", reason: "agent-server-smoke" }),
+  });
+  if (!adoptResponse.ok) {
+    throw new Error(`browser_adopt_tab failed: ${adoptResponse.status} ${await adoptResponse.text()}`);
+  }
+  const adopted = await adoptResponse.json();
+  if (!adopted.ok || adopted.profile?.name !== "adopted-live-tab" || !adopted.profile?.url?.includes("adopt=1")) {
+    throw new Error(`browser_adopt_tab did not bind expected target: ${JSON.stringify(adopted)}`);
+  }
+  const tabsAfterAdopt = await callTool("browser_tabs");
+  if (!tabsAfterAdopt.tabs.some((tab) => tab.profiles?.includes("adopted-live-tab"))) {
+    throw new Error(`browser_tabs did not show adopted profile binding: ${JSON.stringify(tabsAfterAdopt)}`);
+  }
+  const adoptedSnapshot = await callTool("browser_snapshot", { profile: "adopted-live-tab" });
+  if (adoptedSnapshot.title !== "Researcher Space") {
+    throw new Error(`adopted tab snapshot mismatch: ${JSON.stringify(adoptedSnapshot)}`);
+  }
 
   const panelResponse = await fetch(`http://127.0.0.1:${serverPort}/panel`);
   if (!panelResponse.ok) {
@@ -319,6 +354,7 @@ try {
   console.log("- profile-bound browser_navigate/browser_type/browser_snapshot callable without OpenClaw");
   console.log("- profile-bound browser_click/browser_eval/browser_screenshot evidence recorded");
   console.log("- profile_traffic_query/profile_traffic_get callable without OpenClaw");
+  console.log("- browser_adopt_tab binds existing live CDP tabs back to durable profiles");
   console.log("- /panel and /panel-data provide public-facing dashboard data");
 } catch (err) {
   if (child.exitCode === null) child.kill();
@@ -327,4 +363,9 @@ try {
   throw err;
 } finally {
   await new Promise((resolve) => testServer.close(resolve));
+  try {
+    rmSync(dataDir, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 });
+  } catch {
+    // Windows can briefly hold browser profile handles after process exit.
+  }
 }

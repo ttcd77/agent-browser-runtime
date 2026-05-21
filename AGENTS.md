@@ -70,6 +70,14 @@ Use stable, readable, target/role scoped names:
 
 Do not mix unrelated targets, accounts, or identities in one profile.
 
+If a visible browser page does not respond through the expected profile, first
+call `browser_tabs` and `profile_list`. A healthy profile should be `attached`
+to a live tab. If the tab exists on the same CDP endpoint but the profile is
+stale or wrong, bind it with `browser_adopt_tab`. If the page is not in
+`browser_tabs`, it belongs to another browser process or CDP port and this
+worker cannot control it until it is opened through Browser Runtime or attached
+through the right backend.
+
 ## Local Checks
 
 Fast development check:
