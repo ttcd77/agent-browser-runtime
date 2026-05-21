@@ -58,6 +58,22 @@ Set `AGENT_BROWSER_RUNTIME_URL=http://127.0.0.1:17335` when another agent or SDK
 
 The product contract should stay the same across both modes. Backend-specific names are for debugging and compatibility.
 
+## Backend Routing Rule
+
+Agents must choose the backend by user intent:
+
+| User wording / situation | Use | Base URL |
+|---|---|---|
+| "agent browser", clean profile, repeatable F12 evidence, isolated target identity, HAR/trace/replay/heap/coverage | Managed Browser | `http://127.0.0.1:17335` |
+| "my Chrome", "personal browser", "current tab", already logged in, login works in real Chrome but not managed, user wants agent to inspect what they see | Personal Chrome extension bridge | `http://127.0.0.1:17337` |
+
+Do not try to attach managed CDP to an already-running ordinary Chrome tab.
+Chrome must start with `--remote-debugging-port` for that path. If the user
+already has Chrome open, the correct mid-session takeover path is the extension
+bridge (`npm run personal:chrome`), the same class of mechanism used by
+Chrome-based MCP tools. Cookie export, copied browser profiles, and DPAPI cookie
+injection are fallback/debug tactics, not the first product path.
+
 ## Profile Rules
 
 Use stable, readable, target/role scoped names:

@@ -60,6 +60,35 @@ Set a custom URL with:
 AGENT_BROWSER_RUNTIME_URL=http://127.0.0.1:<port>
 ```
 
+## Backend Routing: Managed vs Personal
+
+Do not assume every browser request should go to the managed worker.
+
+| Situation | Backend | URL |
+|---|---|---|
+| Clean agent-owned profile, repeatable F12 evidence, isolated identity, HAR, traces, replay, heap, coverage | Managed Browser | `http://127.0.0.1:17335` |
+| User says "my Chrome", "personal browser", "current tab", "already logged in", or managed login is blocked | Personal Chrome extension bridge | `http://127.0.0.1:17337` |
+
+Why this matters:
+
+- Managed Browser uses CDP on a browser process that Browser Runtime launched or
+  that was started with `--remote-debugging-port`.
+- It cannot attach after the fact to a normal already-running Chrome tab.
+- Personal Chrome uses the unpacked extension plus `chrome.debugger`, so it can
+  inspect/control the user's real Chrome after local authorization.
+- Cookie export, copied profiles, and DPAPI cookie injection are fallback/debug
+  tactics. If the Personal Chrome bridge is connected, use it first for
+  already-logged-in user tabs.
+
+Check both routes with:
+
+```bash
+npm run worker:doctor
+```
+
+The doctor output includes `backendRouting` and `personalChrome` fields so a new
+agent can route correctly without asking the operator.
+
 ## MCP Setup
 
 Build first:

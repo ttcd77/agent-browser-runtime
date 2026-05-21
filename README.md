@@ -491,6 +491,11 @@ For a minimal custom-adapter sketch, see `examples/mcp-adapter-sketch.mjs`.
 - Personal Chrome uses a local extension bridge and `chrome.debugger`. It is best
   when the user wants the agent to inspect the browser state they are already
   seeing.
+- If the user says "my Chrome", "current tab", "already logged in", or managed
+  login is blocked, use the Personal Chrome bridge on `http://127.0.0.1:17337`
+  first. Do not try to retrofit CDP onto an already-running ordinary Chrome
+  process, and do not copy cookies/profiles as the first product path when the
+  extension bridge is available.
 - The two modes expose the same `devtools_*` contract, but Chrome may expose more
   browser-process CDP data to Managed Browser than to Personal Chrome.
 - Capture is explicit. If recording was not enabled before an action, neither

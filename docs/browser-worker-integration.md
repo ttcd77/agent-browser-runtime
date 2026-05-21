@@ -37,6 +37,26 @@ CDP_LAUNCH_BROWSER=1 npm run agent:server
 The professional default is a visible managed browser. Use
 `CDP_BROWSER_HEADLESS=1` only for CI or non-interactive smoke tests.
 
+## Backend Selection
+
+There are two local browser workers:
+
+| Worker | URL | Purpose |
+|---|---|---|
+| Managed Browser | `http://127.0.0.1:17335` | Agent-owned browser profiles, clean target identities, strongest CDP/F12 evidence capture |
+| Personal Chrome | `http://127.0.0.1:17337` | User's already-open real Chrome via extension bridge, including logged-in tabs and real browser context |
+
+Route by intent:
+
+- Use Managed Browser when the agent owns the browser state or needs repeatable
+  forensic artifacts.
+- Use Personal Chrome when the user asks to inspect their current Chrome tab or
+  a login/session only works in their real browser.
+- Do not try to retrofit `--remote-debugging-port` onto already-running Chrome.
+  That is not how CDP works. For mid-session takeover, use the extension bridge.
+- Do not choose cookie/profile copying as the first path when Personal Chrome is
+  connected; it is a fallback for unusual debugging cases.
+
 ## Health And Tool Discovery
 
 ```bash
@@ -52,6 +72,8 @@ curl http://127.0.0.1:17335/tools
 - `facadeTools`: the supported `browser_*` surface,
 - `sdk.toolRequestType`: the SDK request type,
 - `startCommand`: copyable commands for a fresh workstation.
+- `backendRouting`: when to use Managed Browser vs Personal Chrome.
+- `personalChrome`: whether the extension bridge is currently connected.
 
 ## SDK Integration
 
