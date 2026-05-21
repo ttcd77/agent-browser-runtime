@@ -48,6 +48,14 @@ function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+function randomBetween(min, max) {
+  return min + Math.random() * (max - min);
+}
+
+async function humanDelay(minMs = 12, maxMs = 55) {
+  await sleep(Math.round(randomBetween(minMs, maxMs)));
+}
+
 function waitForExit(child, timeoutMs = 5000) {
   if (child.exitCode !== null || child.signalCode !== null) return Promise.resolve();
   return new Promise((resolve) => {
@@ -4985,6 +4993,39 @@ function clickInFramePageFunction(options) {
   return { ok: true, mode: options.selector ? "selector" : "text", framePath: options.framePath || null };
 }
 
+function pointInFramePageFunction(options) {
+  const el = selectInFramePageFunction(options);
+  if (!el) return { ok: false, error: options.selector ? "selector_not_found" : "text_not_found", framePath: options.framePath || null };
+  el.scrollIntoView({ block: "center", inline: "center" });
+  const rect = el.getBoundingClientRect();
+  let offsetX = 0;
+  let offsetY = 0;
+  let win = el.ownerDocument?.defaultView;
+  while (win && win !== window && win.frameElement) {
+    const frameRect = win.frameElement.getBoundingClientRect();
+    offsetX += frameRect.x;
+    offsetY += frameRect.y;
+    win = win.parent;
+  }
+  const width = Math.max(1, rect.width);
+  const height = Math.max(1, rect.height);
+  const insetX = Math.min(width * 0.25, 8);
+  const insetY = Math.min(height * 0.25, 8);
+  const x = offsetX + rect.x + width / 2 + (Math.random() - 0.5) * insetX;
+  const y = offsetY + rect.y + height / 2 + (Math.random() - 0.5) * insetY;
+  return {
+    ok: true,
+    x,
+    y,
+    mode: options.selector ? "selector" : "text",
+    framePath: options.framePath || null,
+    tagName: el.tagName,
+    type: el.type || null,
+    text: (el.innerText || el.value || el.getAttribute("aria-label") || "").slice(0, 120),
+    rect: { x: offsetX + rect.x, y: offsetY + rect.y, width, height },
+  };
+}
+
 function typeInFramePageFunction(options) {
   const el = selectInFramePageFunction(options);
   if (!el) return { ok: false, error: "selector_not_found", framePath: options.framePath || null };
@@ -6543,6 +6584,40 @@ function registerStandaloneBrowserTools(tools, cdpPort, profileRegistry, default
     return { ...capture, eventFile };
   }
 
+  async function dispatchHumanMouseClick(client, x, y, options = {}) {
+    const steps = Math.max(3, Math.min(24, Number(options.steps || 9)));
+    const jitter = Math.max(0, Math.min(8, Number(options.jitterPx ?? 2.4)));
+    const startX = x + randomBetween(-48, 48);
+    const startY = y + randomBetween(-34, 34);
+    for (let i = 1; i <= steps; i += 1) {
+      const t = i / steps;
+      const ease = t * t * (3 - 2 * t);
+      const wobble = Math.sin(t * Math.PI) * jitter;
+      const px = startX + (x - startX) * ease + randomBetween(-wobble, wobble);
+      const py = startY + (y - startY) * ease + randomBetween(-wobble, wobble);
+      await client.Input.dispatchMouseEvent({ type: "mouseMoved", x: px, y: py, button: "none" });
+      await humanDelay(8, 28);
+    }
+    await client.Input.dispatchMouseEvent({ type: "mouseMoved", x, y, button: "none" });
+    await humanDelay(25, 90);
+    await client.Input.dispatchMouseEvent({ type: "mousePressed", x, y, button: "left", clickCount: 1 });
+    await humanDelay(35, 120);
+    await client.Input.dispatchMouseEvent({ type: "mouseReleased", x, y, button: "left", clickCount: 1 });
+  }
+
+  async function dispatchHumanText(client, text, options = {}) {
+    const perChar = options.perChar !== false;
+    if (!perChar) {
+      if (text) await client.Input.insertText({ text });
+      return;
+    }
+    for (const char of String(text || "")) {
+      await client.Input.insertText({ text: char });
+      if (/\s/.test(char)) await humanDelay(35, 115);
+      else await humanDelay(18, 75);
+    }
+  }
+
   tools.set("profile_create", {
     name: "profile_create",
     description: "Create or reopen a durable agent browser profile. A profile owns one tab and one evidence directory.",
@@ -7817,6 +7892,9 @@ function registerStandaloneBrowserTools(tools, cdpPort, profileRegistry, default
         selector: { type: "string" },
         text: { type: "string" },
         inputMode: { type: "string" },
+        human: { type: "boolean" },
+        jitterPx: { type: "number" },
+        steps: { type: "number" },
         x: { type: "number" },
         y: { type: "number" },
         framePath: { type: "string" },
@@ -7829,16 +7907,21 @@ function registerStandaloneBrowserTools(tools, cdpPort, profileRegistry, default
       const profile = await resolveProfile(params?.profile);
       return toolResult(await withPageClient(cdpPort, params?.tabId || profile.tabId, async (client, target) => {
         if (typeof params?.x === "number" && typeof params?.y === "number") {
+          const inputMode = String(params?.inputMode || "human").toLowerCase();
           const capture = await runProfileAction({
             client,
             profile,
             eventType: "browser_click",
             waitMs: typeof params?.waitMs === "number" ? params.waitMs : 700,
-            event: { tabId: target.id, mode: "coordinates", x: params.x, y: params.y },
+            event: { tabId: target.id, mode: "coordinates", inputMode, x: params.x, y: params.y },
             action: async () => {
-              await client.Input.dispatchMouseEvent({ type: "mousePressed", x: params.x, y: params.y, button: "left", clickCount: 1 });
-              await client.Input.dispatchMouseEvent({ type: "mouseReleased", x: params.x, y: params.y, button: "left", clickCount: 1 });
-              return { ok: true, mode: "coordinates", x: params.x, y: params.y };
+              if (["dom", "instant"].includes(inputMode) || params?.human === false) {
+                await client.Input.dispatchMouseEvent({ type: "mousePressed", x: params.x, y: params.y, button: "left", clickCount: 1 });
+                await client.Input.dispatchMouseEvent({ type: "mouseReleased", x: params.x, y: params.y, button: "left", clickCount: 1 });
+                return { ok: true, mode: "coordinates", inputMode: "instant", x: params.x, y: params.y };
+              }
+              await dispatchHumanMouseClick(client, params.x, params.y, { jitterPx: params?.jitterPx, steps: params?.steps });
+              return { ok: true, mode: "coordinates", inputMode: "human", x: params.x, y: params.y };
             },
           });
           await profileRegistry.touchProfile(profile.name, { tabId: target.id });
@@ -7851,14 +7934,23 @@ function registerStandaloneBrowserTools(tools, cdpPort, profileRegistry, default
           framePath: params?.framePath || null,
           frameIndexes,
         };
+        const inputMode = String(params?.inputMode || "human").toLowerCase();
         const expression = `(() => { const selectInFramePageFunction = ${selectInFramePageFunction.toString()}; const clickInFramePageFunction = ${clickInFramePageFunction.toString()}; return clickInFramePageFunction(${JSON.stringify(actionOptions)}); })()`;
+        const pointExpression = `(() => { const selectInFramePageFunction = ${selectInFramePageFunction.toString()}; const pointInFramePageFunction = ${pointInFramePageFunction.toString()}; return pointInFramePageFunction(${JSON.stringify(actionOptions)}); })()`;
         const capture = await runProfileAction({
           client,
           profile,
           eventType: "browser_click",
           waitMs: typeof params?.waitMs === "number" ? params.waitMs : 700,
-          event: { tabId: target.id, mode: params?.selector ? "selector" : "text", selector: params?.selector, text: params?.text, framePath: params?.framePath, frameIndexes },
+          event: { tabId: target.id, mode: params?.selector ? "selector" : "text", inputMode, selector: params?.selector, text: params?.text, framePath: params?.framePath, frameIndexes },
           action: async () => {
+            if (!["dom", "instant"].includes(inputMode) && params?.human !== false) {
+              const pointResult = await client.Runtime.evaluate({ expression: pointExpression, returnByValue: true, awaitPromise: true });
+              const point = pointResult.result?.value || { ok: false, error: "point_failed" };
+              if (!point.ok) return point;
+              await dispatchHumanMouseClick(client, point.x, point.y, { jitterPx: params?.jitterPx, steps: params?.steps });
+              return { ...point, ok: true, inputMode: "human" };
+            }
             const result = await client.Runtime.evaluate({ expression, returnByValue: true, awaitPromise: true });
             return result.result?.value || { ok: false, error: "click_failed" };
           },
@@ -7881,6 +7973,8 @@ function registerStandaloneBrowserTools(tools, cdpPort, profileRegistry, default
         clear: { type: "boolean" },
         pressEnter: { type: "boolean" },
         inputMode: { type: "string" },
+        human: { type: "boolean" },
+        perChar: { type: "boolean" },
         framePath: { type: "string" },
         frameIndexes: { type: "array", items: { type: "number" } },
         tabId: { type: "string" },
@@ -7898,7 +7992,7 @@ function registerStandaloneBrowserTools(tools, cdpPort, profileRegistry, default
           framePath: params?.framePath || null,
           frameIndexes,
         };
-        const inputMode = String(params?.inputMode || "dom").toLowerCase();
+        const inputMode = String(params?.inputMode || "keyboard").toLowerCase();
         const expression = `(() => { const selectInFramePageFunction = ${selectInFramePageFunction.toString()}; const typeInFramePageFunction = ${typeInFramePageFunction.toString()}; return typeInFramePageFunction(${JSON.stringify(typeOptions)}); })()`;
         const focusExpression = `(() => { const selectInFramePageFunction = ${selectInFramePageFunction.toString()}; const focusInFramePageFunction = ${focusInFramePageFunction.toString()}; return focusInFramePageFunction(${JSON.stringify(typeOptions)}); })()`;
         const capture = await runProfileAction({
@@ -7908,7 +8002,7 @@ function registerStandaloneBrowserTools(tools, cdpPort, profileRegistry, default
           waitMs: typeof params?.waitMs === "number" ? params.waitMs : 700,
           event: { tabId: target.id, selector: params.selector, textLength: String(params.text || "").length, pressEnter: Boolean(params.pressEnter), inputMode, framePath: params?.framePath, frameIndexes },
           action: async () => {
-            if (["keyboard", "real", "native", "cdp"].includes(inputMode)) {
+            if (["keyboard", "real", "native", "cdp", "human"].includes(inputMode) && params?.human !== false) {
               const focusResult = await client.Runtime.evaluate({ expression: focusExpression, returnByValue: true, awaitPromise: true });
               const focused = focusResult.result?.value || { ok: false, error: "focus_failed" };
               if (!focused.ok) return focused;
@@ -7920,8 +8014,9 @@ function registerStandaloneBrowserTools(tools, cdpPort, profileRegistry, default
                 await client.Input.dispatchKeyEvent({ type: "keyDown", key: "Backspace", code: "Backspace", windowsVirtualKeyCode: 8 });
                 await client.Input.dispatchKeyEvent({ type: "keyUp", key: "Backspace", code: "Backspace", windowsVirtualKeyCode: 8 });
               }
-              if (typeOptions.text) await client.Input.insertText({ text: typeOptions.text });
+              if (typeOptions.text) await dispatchHumanText(client, typeOptions.text, { perChar: params?.perChar !== false });
               if (params.pressEnter) {
+                await humanDelay(40, 140);
                 await client.Input.dispatchKeyEvent({ type: "keyDown", key: "Enter", code: "Enter", windowsVirtualKeyCode: 13 });
                 await client.Input.dispatchKeyEvent({ type: "keyUp", key: "Enter", code: "Enter", windowsVirtualKeyCode: 13 });
               }
