@@ -6397,6 +6397,166 @@ function createProfileRegistry({ cdpPort, dataDir, onProfileReady }) {
 }
 
 function registerStandaloneBrowserTools(tools, cdpPort, profileRegistry, defaultProfileName) {
+  const personalBridgeUrl =
+    process.env.AGENT_BROWSER_PERSONAL_URL ||
+    process.env.PERSONAL_CHROME_HTTP_URL ||
+    "http://127.0.0.1:17337";
+
+  function withBackendParameters(parameters = {}) {
+    const next = {
+      ...(parameters || {}),
+      properties: { ...((parameters && parameters.properties) || {}) },
+    };
+    next.properties.backend = {
+      type: "string",
+      enum: ["managed", "managed-cdp", "personal", "personal-chrome", "auto"],
+      description: "Browser backend. Use personal/currentTab for the user's already-open Chrome; use managed for isolated CDP profiles.",
+    };
+    next.properties.personal = { type: "boolean", description: "Shortcut for backend=personal." };
+    next.properties.currentTab = { type: "boolean", description: "Route to Personal Chrome's active tab when available." };
+    next.properties.useCurrentTab = { type: "boolean", description: "Alias for currentTab." };
+    return next;
+  }
+
+  function stripBackendParameters(params = {}) {
+    const { backend, personal, currentTab, useCurrentTab, ...rest } = params || {};
+    return rest;
+  }
+
+  function shouldRoutePersonal(params = {}) {
+    const backend = String(params?.backend || "").toLowerCase();
+    if (backend === "personal" || backend === "personal-chrome") return true;
+    if (params?.personal === true || params?.currentTab === true || params?.useCurrentTab === true) return true;
+    return false;
+  }
+
+  function shouldAutoRoutePersonal(toolName, params = {}) {
+    const backend = String(params?.backend || "").toLowerCase();
+    if (backend !== "auto") return false;
+    if (params?.personal === true || params?.currentTab === true || params?.useCurrentTab === true) return true;
+    if (!params?.url && ["browser_inspect", "browser_capture", "browser_security_pack", "browser_auth_boundary", "browser_diff"].includes(toolName)) {
+      return true;
+    }
+    return false;
+  }
+
+  async function callJson(url, options = {}, timeoutMs = 10000) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+    try {
+      const response = await fetch(url, { ...options, signal: controller.signal });
+      const text = await response.text();
+      let body = {};
+      if (text) {
+        try {
+          body = JSON.parse(text);
+        } catch {
+          body = { text };
+        }
+      }
+      return { ok: response.ok, status: response.status, body };
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
+  async function personalBridgeHealth(timeoutMs = 2500) {
+    try {
+      const response = await callJson(`${personalBridgeUrl}/health`, {}, timeoutMs);
+      return {
+        ok: response.ok && response.body?.ok === true && Number(response.body?.connected || 0) > 0,
+        status: response.status,
+        url: personalBridgeUrl,
+        health: response.body,
+      };
+    } catch (error) {
+      return {
+        ok: false,
+        url: personalBridgeUrl,
+        error: String(error?.message || error),
+      };
+    }
+  }
+
+  async function routeToPersonal(toolName, params = {}) {
+    const health = await personalBridgeHealth();
+    if (!health.ok) {
+      return {
+        ok: false,
+        backendRouter: "personal-chrome",
+        routedFrom: "managed-worker",
+        tool: toolName,
+        error: "personal_bridge_unavailable",
+        personalBridge: health,
+        next: [
+          "Start the Personal Chrome bridge: npm run personal:chrome",
+          "Reload or enable the Agent Browser Runtime Chrome extension in the user's Chrome.",
+          "Retry the same browser_* call with backend='personal' or currentTab=true.",
+        ],
+      };
+    }
+
+    const input = stripBackendParameters(params);
+    let targetTool = toolName;
+    let targetInput = input;
+    if (toolName === "browser_open" && !input.url) {
+      targetTool = "personal_chrome_active_tab_snapshot";
+      targetInput = {};
+    }
+
+    try {
+      const response = await callJson(
+        `${personalBridgeUrl}/tool/${encodeURIComponent(targetTool)}`,
+        {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify(targetInput || {}),
+        },
+        Number(params?.timeoutMs || 45000),
+      );
+      if (!response.ok) {
+        return {
+          ok: false,
+          backendRouter: "personal-chrome",
+          routedFrom: "managed-worker",
+          personalBridge: { ok: true, url: personalBridgeUrl },
+          tool: toolName,
+          forwardedTool: targetTool,
+          status: response.status,
+          error: "personal_tool_failed",
+          result: response.body,
+        };
+      }
+      return {
+        ok: true,
+        backendRouter: "personal-chrome",
+        routedFrom: "managed-worker",
+        personalBridge: { ok: true, url: personalBridgeUrl },
+        tool: toolName,
+        forwardedTool: targetTool,
+        result: response.body,
+        next: ["Continue through the unified browser_* facade; switch to backend='managed' only for isolated CDP profiles."],
+      };
+    } catch (error) {
+      return {
+        ok: false,
+        backendRouter: "personal-chrome",
+        routedFrom: "managed-worker",
+        personalBridge: { ok: true, url: personalBridgeUrl },
+        tool: toolName,
+        forwardedTool: targetTool,
+        error: String(error?.message || error),
+      };
+    }
+  }
+
+  async function maybeRoutePersonal(toolName, params = {}) {
+    if (shouldRoutePersonal(params) || shouldAutoRoutePersonal(toolName, params)) {
+      return await routeToPersonal(toolName, params);
+    }
+    return null;
+  }
+
   async function resolveProfile(raw) {
     return await profileRegistry.getProfile(raw || defaultProfileName);
   }
@@ -13962,18 +14122,84 @@ function registerStandaloneBrowserTools(tools, cdpPort, profileRegistry, default
     },
   });
 
+  tools.set("browser_backend_status", {
+    name: "browser_backend_status",
+    description: "Product router status: show whether the unified browser facade can use Managed CDP and/or the user's Personal Chrome bridge.",
+    parameters: {
+      type: "object",
+      properties: {
+        includePersonalSnapshot: { type: "boolean" },
+      },
+    },
+    async execute(id, params) {
+      const managedProfiles = await profileRegistry.listProfiles();
+      const managedTabs = await cdpJson(cdpPort, "/json").catch(() => []);
+      const personal = await personalBridgeHealth();
+      let personalSnapshot = null;
+      if (personal.ok && params?.includePersonalSnapshot) {
+        const snapshot = await callJson(
+          `${personalBridgeUrl}/tool/personal_chrome_active_tab_snapshot`,
+          { method: "POST", headers: { "content-type": "application/json" }, body: "{}" },
+          10000,
+        );
+        personalSnapshot = snapshot.ok ? snapshot.body : { ok: false, status: snapshot.status, error: snapshot.body };
+      }
+      return toolResult({
+        ok: true,
+        router: "unified-browser-runtime",
+        managed: {
+          ok: true,
+          backend: "managed-cdp",
+          cdpPort,
+          defaultProfile: defaultProfileName,
+          profiles: managedProfiles.map((entry) => entry.name),
+          liveTabs: Array.isArray(managedTabs) ? managedTabs.filter((tab) => tab.type === "page").length : 0,
+          useWhen: ["isolated profiles", "clean F12 evidence packs", "repeatable target roles", "CDP-only panels"],
+        },
+        personal: {
+          ...personal,
+          backend: "personal-chrome",
+          useWhen: ["the user says my Chrome/current tab", "the account is already logged in", "managed browser login is blocked", "mid-session takeover of the real browser"],
+        },
+        unifiedFacade: {
+          defaultBackend: "managed-cdp",
+          routePersonalWith: [
+            { tool: "browser_inspect", input: { backend: "personal", mode: "overview" } },
+            { tool: "browser_open", input: { currentTab: true } },
+            { tool: "browser_capture", input: { backend: "personal", action: "start" } },
+          ],
+          routeManagedWith: [
+            { tool: "browser_open", input: { backend: "managed", profile: "target-clean", url: "https://example.com" } },
+          ],
+        },
+        personalSnapshot,
+      });
+    },
+  });
+
+  tools.set("devtools_backend_status", {
+    name: "devtools_backend_status",
+    description: "Alias for browser_backend_status.",
+    parameters: tools.get("browser_backend_status").parameters,
+    async execute(id, params) {
+      return await tools.get("browser_backend_status").execute(id, params);
+    },
+  });
+
   tools.set("browser_open", {
     name: "browser_open",
     description: "Facade: open or switch a profile to a URL, then return page diagnostics. Use this instead of low-level navigation for ordinary agent work.",
-    parameters: {
+    parameters: withBackendParameters({
       type: "object",
       properties: {
         profile: { type: "string" },
         url: { type: "string" },
         waitMs: { type: "number" },
       },
-    },
+    }),
     async execute(id, params) {
+      const routed = await maybeRoutePersonal("browser_open", params);
+      if (routed) return toolResult(routed);
       const profileName = params?.profile || defaultProfileName;
       if (params?.url) {
         await tools.get("browser_navigate").execute(id, { profile: profileName, url: params.url, waitMs: params?.waitMs });
@@ -13994,7 +14220,7 @@ function registerStandaloneBrowserTools(tools, cdpPort, profileRegistry, default
   tools.set("browser_act", {
     name: "browser_act",
     description: "Facade: perform a common browser action: click, type, scroll, eval, screenshot, or snapshot.",
-    parameters: {
+    parameters: withBackendParameters({
       type: "object",
       properties: {
         profile: { type: "string" },
@@ -14007,8 +14233,10 @@ function registerStandaloneBrowserTools(tools, cdpPort, profileRegistry, default
         waitMs: { type: "number" },
       },
       required: ["action"],
-    },
+    }),
     async execute(id, params) {
+      const routed = await maybeRoutePersonal("browser_act", params);
+      if (routed) return toolResult(routed);
       const action = String(params?.action || "").toLowerCase();
       const profileName = params?.profile || defaultProfileName;
       const actionTools = {
@@ -14037,7 +14265,7 @@ function registerStandaloneBrowserTools(tools, cdpPort, profileRegistry, default
   tools.set("browser_inspect", {
     name: "browser_inspect",
     description: "Facade: inspect the current page through agent_inspect. Modes: overview, network, storage, console, dom, sources, performance, search, evidence, debug.",
-    parameters: {
+    parameters: withBackendParameters({
       type: "object",
       properties: {
         profile: { type: "string" },
@@ -14048,8 +14276,10 @@ function registerStandaloneBrowserTools(tools, cdpPort, profileRegistry, default
         limit: { type: "number" },
         includeHeavy: { type: "boolean" },
       },
-    },
+    }),
     async execute(id, params) {
+      const routed = await maybeRoutePersonal("browser_inspect", params);
+      if (routed) return toolResult(routed);
       const profileName = params?.profile || defaultProfileName;
       const focus = params?.mode || params?.focus || "overview";
       const result = JSON.parse((await tools.get("agent_inspect").execute(id, { ...params, profile: profileName, focus })).content?.[0]?.text || "{}");
@@ -14067,7 +14297,7 @@ function registerStandaloneBrowserTools(tools, cdpPort, profileRegistry, default
   tools.set("browser_capture", {
     name: "browser_capture",
     description: "Facade: manage F12 recording with start, stop, clear, status, or reload.",
-    parameters: {
+    parameters: withBackendParameters({
       type: "object",
       properties: {
         profile: { type: "string" },
@@ -14076,8 +14306,10 @@ function registerStandaloneBrowserTools(tools, cdpPort, profileRegistry, default
         clear: { type: "boolean" },
         waitMs: { type: "number" },
       },
-    },
+    }),
     async execute(id, params) {
+      const routed = await maybeRoutePersonal("browser_capture", params);
+      if (routed) return toolResult(routed);
       const action = String(params?.action || "status").toLowerCase();
       const profileName = params?.profile || defaultProfileName;
       const actionTools = {
@@ -14106,8 +14338,10 @@ function registerStandaloneBrowserTools(tools, cdpPort, profileRegistry, default
   tools.set("browser_security_pack", {
     name: "browser_security_pack",
     description: "Facade: run the one-call objective security research evidence workflow and return saved artifact paths.",
-    parameters: tools.get("devtools_security_research_pack").parameters,
+    parameters: withBackendParameters(tools.get("devtools_security_research_pack").parameters),
     async execute(id, params) {
+      const routed = await maybeRoutePersonal("browser_security_pack", params);
+      if (routed) return toolResult(routed);
       const result = JSON.parse((await tools.get("devtools_security_research_pack").execute(id, { ...params, profile: params?.profile || defaultProfileName })).content?.[0]?.text || "{}");
       return toolResult({ facade: "browser_security_pack", ...result });
     },
@@ -14116,8 +14350,10 @@ function registerStandaloneBrowserTools(tools, cdpPort, profileRegistry, default
   tools.set("browser_auth_boundary", {
     name: "browser_auth_boundary",
     description: "Facade: collect objective authentication-boundary evidence: cookies, auth headers, tokens, storage, and credentialed requests.",
-    parameters: tools.get("devtools_auth_boundary_report").parameters,
+    parameters: withBackendParameters(tools.get("devtools_auth_boundary_report").parameters),
     async execute(id, params) {
+      const routed = await maybeRoutePersonal("browser_auth_boundary", params);
+      if (routed) return toolResult(routed);
       const result = JSON.parse((await tools.get("devtools_auth_boundary_report").execute(id, { ...params, profile: params?.profile || defaultProfileName })).content?.[0]?.text || "{}");
       return toolResult({ facade: "browser_auth_boundary", ...result });
     },
@@ -14126,8 +14362,10 @@ function registerStandaloneBrowserTools(tools, cdpPort, profileRegistry, default
   tools.set("browser_diff", {
     name: "browser_diff",
     description: "Facade: compare before/after evidence artifacts or current captured traffic.",
-    parameters: tools.get("devtools_capture_diff").parameters,
+    parameters: withBackendParameters(tools.get("devtools_capture_diff").parameters),
     async execute(id, params) {
+      const routed = await maybeRoutePersonal("browser_diff", params);
+      if (routed) return toolResult(routed);
       const result = JSON.parse((await tools.get("devtools_capture_diff").execute(id, { ...params, profile: params?.profile || defaultProfileName })).content?.[0]?.text || "{}");
       return toolResult({ facade: "browser_diff", ...result });
     },
@@ -14136,7 +14374,7 @@ function registerStandaloneBrowserTools(tools, cdpPort, profileRegistry, default
   tools.set("browser_replay", {
     name: "browser_replay",
     description: "Facade: replay one captured request or run batch variants and compare responses.",
-    parameters: {
+    parameters: withBackendParameters({
       type: "object",
       properties: {
         profile: { type: "string" },
@@ -14144,8 +14382,10 @@ function registerStandaloneBrowserTools(tools, cdpPort, profileRegistry, default
         variants: { type: "array", items: { type: "object" } },
       },
       required: ["requestId"],
-    },
+    }),
     async execute(id, params) {
+      const routed = await maybeRoutePersonal("browser_replay", params);
+      if (routed) return toolResult(routed);
       const profileName = params?.profile || defaultProfileName;
       const toolName = Array.isArray(params?.variants) && params.variants.length ? "devtools_request_replay_batch" : "devtools_request_replay";
       const result = JSON.parse((await tools.get(toolName).execute(id, { ...params, profile: profileName })).content?.[0]?.text || "{}");
@@ -14156,15 +14396,17 @@ function registerStandaloneBrowserTools(tools, cdpPort, profileRegistry, default
   tools.set("browser_raw", {
     name: "browser_raw",
     description: "Facade: advanced escape hatch. Call one exact devtools_* tool when the big tools are not enough.",
-    parameters: {
+    parameters: withBackendParameters({
       type: "object",
       properties: {
         tool: { type: "string" },
         input: { type: "object" },
       },
       required: ["tool"],
-    },
+    }),
     async execute(id, params) {
+      const routed = await maybeRoutePersonal("browser_raw", params);
+      if (routed) return toolResult(routed);
       const toolName = String(params?.tool || "").trim();
       if (!toolName.startsWith("devtools_")) throw new Error("browser_raw only allows devtools_* tools");
       if (["devtools_tool_catalog", "devtools_tool_help", "devtools_capability_map", "devtools_f12_parity_matrix", "devtools_workflow_guide", "devtools_professional_readiness"].includes(toolName)) throw new Error("use tool usability helpers directly");

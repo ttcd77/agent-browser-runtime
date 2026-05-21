@@ -69,6 +69,7 @@ fetch("/api/profile-smoke").then((r) => r.json()).then((data) => console.log(dat
 
 const serverPort = await freePort();
 const browserPort = await freePort();
+const personalBridgePort = await freePort();
 const testServer = await startTestServer();
 const testServerPort = testServer.address().port;
 const dataDir = mkdtempSync(join(tmpdir(), "agent-browser-runtime-server-smoke-"));
@@ -85,6 +86,7 @@ const child = spawn(
       CDP_AGENT_PROFILE: "agent-server-smoke",
       CDP_BROWSER_HEADLESS: "1",
       CDP_SECURITY_DATA_DIR: dataDir,
+      AGENT_BROWSER_PERSONAL_URL: `http://127.0.0.1:${personalBridgePort}`,
     },
     stdio: ["ignore", "pipe", "pipe"],
   },
@@ -124,6 +126,15 @@ try {
   const stats = await statsResponse.json();
   const profileStats = stats["agent-server-smoke"];
   if (!profileStats) throw new Error(`missing stats for agent-server-smoke: ${JSON.stringify(stats)}`);
+
+  const backendStatus = await callTool("browser_backend_status");
+  if (!backendStatus.ok || backendStatus.managed?.backend !== "managed-cdp" || backendStatus.personal?.ok !== false) {
+    throw new Error(`browser_backend_status did not report managed/personal routing: ${JSON.stringify(backendStatus)}`);
+  }
+  const personalUnavailable = await callTool("browser_inspect", { backend: "personal", mode: "overview" });
+  if (personalUnavailable.ok !== false || personalUnavailable.error !== "personal_bridge_unavailable") {
+    throw new Error(`personal route should fail with structured unavailable response: ${JSON.stringify(personalUnavailable)}`);
+  }
 
   const initialCapture = await callTool("devtools_capture_status");
   if (initialCapture.capture.enabled) {
@@ -391,6 +402,7 @@ try {
   console.log("- profile_create/profile_list callable without OpenClaw");
   console.log("- omitted profile calls use the server default profile");
   console.log("- capture is explicit and off by default");
+  console.log("- unified backend router exposes managed status and structured personal fallback");
   console.log("- profile-bound browser_navigate/browser_type/browser_snapshot callable without OpenClaw");
   console.log("- profile-bound browser_click/browser_eval/browser_screenshot evidence recorded");
   console.log("- profile_traffic_query/profile_traffic_get callable without OpenClaw");
