@@ -84,6 +84,12 @@ reuses an attached tab when possible; otherwise it opens the profile's last URL
 in a fresh managed tab. Treat this as browser storage/cookie continuity, not
 live JavaScript memory continuity, and restart capture before important actions.
 
+For login flows with password, 2FA, passkeys, or anti-abuse scoring, prefer
+`browser_auth_bootstrap`: the tool opens/records the managed profile and the
+human completes login in the visible browser. Agents then check auth state and
+continue from the persisted profile. Do not make JS-only DOM edits to fake user
+login state.
+
 ## Local Checks
 
 Fast development check:

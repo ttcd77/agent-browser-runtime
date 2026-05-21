@@ -137,6 +137,21 @@ If the previous agent chat/session was closed, start with `profile_resume` or
 
 After resume, start capture again before reproducing the action you care about.
 
+## Operator-Assisted Auth Bootstrap
+
+For login flows that include passwords, 2FA, passkeys, SSO, or anti-abuse
+scoring, do not try to force a fully automated login as the default path. Use
+`browser_auth_bootstrap`:
+
+1. `action=start` with `profile` and `loginUrl`.
+2. The human completes login in the visible managed browser.
+3. `action=status` checks URL/cookie-name conditions without printing secrets.
+4. `action=finish` stops capture on success.
+5. Continue normal work with the now-authenticated profile.
+
+This preserves the intended product model: Browser Runtime owns evidence,
+profile state, and F12 capture; the operator owns account authentication.
+
 ## Standard AppSec Workflow
 
 1. Open the page:

@@ -6861,6 +6861,133 @@ function registerStandaloneBrowserTools(tools, cdpPort, profileRegistry, default
     },
   });
 
+  tools.set("browser_auth_bootstrap", {
+    name: "browser_auth_bootstrap",
+    description:
+      "Operator-assisted auth bootstrap for managed profiles. Opens or resumes a login page, starts objective capture, and lets a human complete login/2FA/anti-abuse checks in the visible browser. It observes completion; it does not bypass login controls.",
+    parameters: {
+      type: "object",
+      properties: {
+        profile: { type: "string" },
+        action: { type: "string" },
+        loginUrl: { type: "string" },
+        successUrlContains: { type: "string" },
+        successCookieNames: { type: "array", items: { type: "string" } },
+        label: { type: "string" },
+        waitMs: { type: "number" },
+        stopCaptureOnSuccess: { type: "boolean" },
+      },
+    },
+    async execute(_id, params) {
+      const action = String(params?.action || "start").toLowerCase();
+      const profileName = params?.profile || defaultProfileName;
+      const waitMs = typeof params?.waitMs === "number" ? params.waitMs : 800;
+      const successUrlContains = params?.successUrlContains ? String(params.successUrlContains) : "";
+      const successCookieNames = Array.isArray(params?.successCookieNames) ? params.successCookieNames.map(String).filter(Boolean) : [];
+      if (action === "start") {
+        let profile;
+        if (params?.loginUrl) {
+          const url = String(params.loginUrl);
+          if (!/^https?:\/\//i.test(url)) throw new Error("loginUrl must start with http:// or https://");
+          const target = await createPageTarget(cdpPort, url);
+          if (waitMs > 0) await sleep(waitMs);
+          profile = await profileRegistry.adoptProfile(profileName, target, {
+            authBootstrapStartedAt: new Date().toISOString(),
+            authBootstrapLoginUrl: url,
+          });
+        } else {
+          const status = await tools.get("profile_resume").execute("agent-cdp-server", { profile: profileName, waitMs });
+          profile = JSON.parse(status.content?.[0]?.text || "{}").profile;
+        }
+        const capture = profileRegistry.setCapture(profile.name, {
+          enabled: true,
+          startedAt: new Date().toISOString(),
+          stoppedAt: null,
+          label: params?.label || "operator-assisted-auth-bootstrap",
+        });
+        const eventFile = profileRegistry.appendEvent(profile.name, {
+          type: "browser_auth_bootstrap_start",
+          tabId: profile.tabId,
+          url: profile.url,
+          successUrlContains: successUrlContains || null,
+          successCookieNames,
+          operatorAction: "Complete login manually in the visible managed browser, then call browser_auth_bootstrap with action=status or action=finish.",
+        });
+        return toolResult({
+          ok: true,
+          profile: profile.name,
+          tabId: profile.tabId,
+          url: profile.url,
+          capture,
+          eventFile,
+          mode: "operator-assisted",
+          boundary: "The tool opens and records the browser state; the human completes password, 2FA, and anti-abuse checks.",
+          next: "After the page reaches the authenticated state, call browser_auth_bootstrap with action=status or action=finish.",
+        });
+      }
+      if (!["status", "finish"].includes(action)) throw new Error("action must be start, status, or finish");
+      const profile = await resolveProfile(profileName);
+      return toolResult(await withPageClient(cdpPort, profile.tabId, async (client, target) => {
+        await client.Page.enable().catch(() => {});
+        await client.Network.enable().catch(() => {});
+        const locationResult = await client.Runtime.evaluate({
+          expression: "({ href: location.href, title: document.title, readyState: document.readyState })",
+          returnByValue: true,
+          awaitPromise: true,
+        }).catch(() => null);
+        const page = locationResult?.result?.value || { href: target.url || profile.url || "about:blank", title: target.title || profile.title || "", readyState: "unknown" };
+        const cookiesResult = await client.Network.getCookies().catch(() => ({ cookies: [] }));
+        const cookieNames = Array.isArray(cookiesResult.cookies) ? cookiesResult.cookies.map((cookie) => cookie.name).filter(Boolean) : [];
+        const urlMatched = Boolean(successUrlContains && String(page.href || "").includes(successUrlContains));
+        const missingCookies = successCookieNames.filter((name) => !cookieNames.includes(name));
+        const cookiesMatched = successCookieNames.length ? missingCookies.length === 0 : false;
+        const success = urlMatched || cookiesMatched;
+        let capture = profileRegistry.getCapture(profile.name);
+        if (action === "finish" && (success || params?.stopCaptureOnSuccess === false)) {
+          capture = profileRegistry.setCapture(profile.name, {
+            ...capture,
+            enabled: params?.stopCaptureOnSuccess === false,
+            stoppedAt: params?.stopCaptureOnSuccess === false ? capture.stoppedAt : new Date().toISOString(),
+          });
+        }
+        const nextProfile = await profileRegistry.touchProfile(profile.name, { tabId: target.id, url: page.href, title: page.title });
+        const eventFile = profileRegistry.appendEvent(profile.name, {
+          type: `browser_auth_bootstrap_${action}`,
+          tabId: target.id,
+          page,
+          success,
+          checks: {
+            successUrlContains: successUrlContains || null,
+            urlMatched,
+            successCookieNames,
+            cookiesMatched,
+            missingCookies,
+            observedCookieNames: cookieNames,
+          },
+        });
+        return {
+          ok: true,
+          profile: nextProfile.name,
+          tabId: target.id,
+          page,
+          success,
+          capture,
+          eventFile,
+          checks: {
+            successUrlContains: successUrlContains || null,
+            urlMatched,
+            successCookieNames,
+            cookiesMatched,
+            missingCookies,
+            observedCookieNames: cookieNames,
+          },
+          boundary: "Manual/operator-assisted auth state observation only. No bypass decision or vulnerability judgment is made.",
+          next: success ? "Proceed with browser_capture/browser_inspect/security pack using this authenticated profile." : "Complete login in the visible browser, then call status again.",
+        };
+      }));
+    },
+  });
+
   tools.set("profile_delete", {
     name: "profile_delete",
     description: "Delete a managed browser profile record and close its tab. Evidence files are kept on disk.",
@@ -13618,6 +13745,7 @@ function registerStandaloneBrowserTools(tools, cdpPort, profileRegistry, default
   aliasTool("devtools_tabs", "browser_tabs", "Unified Agent DevTools API: list browser tabs.");
   aliasTool("devtools_adopt_tab", "browser_adopt_tab", "Unified Agent DevTools API: bind an existing live CDP tab to a durable profile.");
   aliasTool("devtools_resume_profile", "profile_resume", "Unified Agent DevTools API: recover a durable profile after a chat, tab, or worker disconnect.");
+  aliasTool("devtools_auth_bootstrap", "browser_auth_bootstrap", "Unified Agent DevTools API: operator-assisted login bootstrap and auth-state observation.");
   aliasTool("devtools_snapshot", "browser_snapshot", "Unified Agent DevTools API: read visible text and controls.");
   aliasTool("devtools_screenshot", "browser_screenshot", "Unified Agent DevTools API: capture a screenshot.");
   aliasTool("devtools_click", "browser_click", "Unified Agent DevTools API: click by selector, text, or coordinates.");

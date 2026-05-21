@@ -289,6 +289,33 @@ try {
   if (resumedSnapshot.title !== "Researcher Space") {
     throw new Error(`resumed profile snapshot mismatch: ${JSON.stringify(resumedSnapshot)}`);
   }
+  const authStart = await callTool("browser_auth_bootstrap", {
+    profile: "auth-bootstrap-smoke",
+    action: "start",
+    loginUrl: `http://127.0.0.1:${testServerPort}/?auth=1`,
+    successUrlContains: "auth=1",
+    label: "auth-bootstrap-smoke",
+    waitMs: 500,
+  });
+  if (!authStart.ok || authStart.mode !== "operator-assisted") {
+    throw new Error(`browser_auth_bootstrap start failed: ${JSON.stringify(authStart)}`);
+  }
+  const authStatus = await callTool("browser_auth_bootstrap", {
+    profile: "auth-bootstrap-smoke",
+    action: "status",
+    successUrlContains: "auth=1",
+  });
+  if (!authStatus.success || !authStatus.checks?.urlMatched) {
+    throw new Error(`browser_auth_bootstrap status did not observe success URL: ${JSON.stringify(authStatus)}`);
+  }
+  const authFinish = await callTool("browser_auth_bootstrap", {
+    profile: "auth-bootstrap-smoke",
+    action: "finish",
+    successUrlContains: "auth=1",
+  });
+  if (!authFinish.success || authFinish.capture?.enabled) {
+    throw new Error(`browser_auth_bootstrap finish did not stop capture on success: ${JSON.stringify(authFinish)}`);
+  }
 
   const panelResponse = await fetch(`http://127.0.0.1:${serverPort}/panel`);
   if (!panelResponse.ok) {
@@ -369,6 +396,7 @@ try {
   console.log("- profile_traffic_query/profile_traffic_get callable without OpenClaw");
   console.log("- browser_adopt_tab binds existing live CDP tabs back to durable profiles");
   console.log("- profile_resume recovers attached or stale profiles after agent/session disconnects");
+  console.log("- browser_auth_bootstrap supports operator-assisted login bootstrap and status checks");
   console.log("- /panel and /panel-data provide public-facing dashboard data");
 } catch (err) {
   if (child.exitCode === null) child.kill();
