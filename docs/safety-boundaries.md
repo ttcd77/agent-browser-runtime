@@ -30,10 +30,18 @@ or rendering issue and want an agent to inspect the same state.
 
 Boundary:
 
-- this works only when the browser was launched with remote debugging enabled,
+- an already-open ordinary Chrome tab is reached through the local Personal
+  Chrome extension bridge, not by retrofitting a CDP port onto that process,
+- a browser launched with `--remote-debugging-port` can also be attached through
+  Managed/CDP mode, but that is a different workflow,
 - it may expose your personal cookies and account data to the local tool server,
 - use it for your own accounts and your own debugging only,
 - use dedicated target profiles for security testing.
+
+Product rule: agents should normally call the main worker and pass
+`backend: "personal"` or `currentTab: true`; they should not copy cookies,
+clone browser profiles, or inject credentials as the first path when the
+extension bridge is available.
 
 ## Agent Instructions
 

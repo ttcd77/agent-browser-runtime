@@ -7,6 +7,7 @@ It gives Codex, Claude, OpenClaw, or a custom agent SDK a browser it can operate
 - create a named browser profile,
 - navigate, click, type, evaluate JavaScript, snapshot, and screenshot,
 - capture profile-scoped network traffic,
+- route the same `browser_*` calls to either a managed browser or the user's authorized Personal Chrome tab,
 - keep evidence under that profile's directory,
 - reuse an existing CDP browser when one is already open.
 
@@ -23,6 +24,12 @@ The user-facing model is deliberately small:
   create extra profiles for separate roles, targets, and identities.
 
 Both modes expose the same `browser_*` facade and the same `devtools_*` tool names. Profiles, ports, browser processes, and extension details are routing choices underneath that tool layer.
+
+Current product shape:
+
+- **Managed Browser** (`http://127.0.0.1:17335`): the main professional path for clean profiles, repeatable F12 evidence, HAR/trace/artifact generation, and target-scoped browser identities.
+- **Personal Chrome** (`http://127.0.0.1:17337` behind the same facade): optional operator-authorized bridge for the user's already-open Chrome tab, useful when the user says "my Chrome", "current tab", or an authenticated flow only works in their real browser.
+- **Unified facade**: agents can call the main worker and choose `backend: "managed"` or `backend: "personal"` without learning separate ports or extension internals.
 
 In product terms, a `profile` is an agent-facing operating space. It can mean a role, a target, or an identity:
 
@@ -484,6 +491,53 @@ For public release readiness, see `docs/open-source-release-checklist.md`.
 For native MCP clients, run `npm run mcp:server`.
 For a minimal custom-adapter sketch, see `examples/mcp-adapter-sketch.mjs`.
 
+## Unified Backend Router
+
+The main worker on `http://127.0.0.1:17335` is the product entrypoint. It can
+route the facade tools to either backend:
+
+```json
+{ "tool": "browser_backend_status", "params": {} }
+```
+
+Managed browser, clean profile:
+
+```json
+{
+  "tool": "browser_open",
+  "params": {
+    "backend": "managed",
+    "profile": "demo-fixture",
+    "url": "https://example.com",
+    "waitMs": 1000
+  }
+}
+```
+
+Personal Chrome, current authorized tab:
+
+```json
+{
+  "tool": "browser_inspect",
+  "params": {
+    "backend": "personal",
+    "mode": "overview",
+    "limit": 10
+  }
+}
+```
+
+Shortcuts:
+
+- `backend: "personal"` routes through the Personal Chrome extension bridge.
+- `currentTab: true` routes to Personal Chrome's active tab.
+- `backend: "auto"` routes to Personal Chrome only when the request explicitly
+  asks for the current/personal tab; otherwise it stays on Managed Browser.
+
+If the Personal Chrome bridge is not running, the facade returns a structured
+`personal_bridge_unavailable` response with the next startup steps instead of
+silently failing or making the agent guess.
+
 ## Known Backend Boundaries
 
 - Managed Browser uses direct CDP and is the preferred backend for repeatable
@@ -492,10 +546,10 @@ For a minimal custom-adapter sketch, see `examples/mcp-adapter-sketch.mjs`.
   when the user wants the agent to inspect the browser state they are already
   seeing.
 - If the user says "my Chrome", "current tab", "already logged in", or managed
-  login is blocked, use the Personal Chrome bridge on `http://127.0.0.1:17337`
-  first. Do not try to retrofit CDP onto an already-running ordinary Chrome
-  process, and do not copy cookies/profiles as the first product path when the
-  extension bridge is available.
+  login is blocked, call the main worker with `backend: "personal"` or
+  `currentTab: true`. Do not try to retrofit CDP onto an already-running
+  ordinary Chrome process, and do not copy cookies/profiles as the first product
+  path when the extension bridge is available.
 - The two modes expose the same `devtools_*` contract, but Chrome may expose more
   browser-process CDP data to Managed Browser than to Personal Chrome.
 - Capture is explicit. If recording was not enabled before an action, neither
@@ -769,15 +823,19 @@ Do not commit captured evidence from real targets unless it has been reviewed an
 Working now:
 
 - standalone local HTTP tool server,
+- unified backend router for Managed Browser and Personal Chrome facade calls,
 - profile-scoped browser operations,
 - profile-scoped screenshots and traffic journals,
+- operator-assisted auth bootstrap for login flows with password, 2FA, passkeys, SSO, or anti-abuse scoring,
+- durable profile resume and live-tab adoption diagnostics,
+- objective security research packs with local artifact handoff,
 - clean local build without the original OpenClaw checkout,
 - OpenClaw adapter compatibility,
-- product smoke tests and live browser smoke tests.
+- product smoke tests, server smoke tests, feedback smoke tests, and CI checks.
 
 Next likely steps:
 
 - extract the CDP capture internals into a smaller framework-neutral library,
-- add a minimal UI for profile browsing and evidence review,
+- improve the human review panel for profiles, artifacts, and feedback,
 - add stronger process-level isolation through multiple browser ports,
 - add an SDK client package.

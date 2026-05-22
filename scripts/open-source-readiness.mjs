@@ -5,6 +5,7 @@ import { execFileSync } from "node:child_process";
 
 const requiredFiles = [
   "README.md",
+  "CHANGELOG.md",
   "LICENSE",
   "docs/safety-boundaries.md",
   "docs/agent-devtools-api.md",
@@ -59,6 +60,9 @@ const requiredReadmePhrases = [
   "routeArtifactNames",
   "browser_inspect",
   "browser_feedback",
+  "browser_backend_status",
+  "backend: \"personal\"",
+  "currentTab: true",
 ];
 
 const forbiddenTrackedPrefixes = [

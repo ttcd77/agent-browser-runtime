@@ -22,6 +22,7 @@ Without this layer, an agent can interact with a website but still fail to under
 
 - **Managed Browser mainline**: starts a visible browser for professional AppSec work, with headless mode reserved for CI and smoke tests.
 - **Personal Chrome beta**: optional bridge for operator-authorized inspection of a user's own browser state.
+- **Unified backend router**: the main worker can route `browser_*` facade calls to Managed Browser or Personal Chrome through one product entrypoint.
 - **Facade-first agent API**: agents start with `browser_open`, `browser_capture`, `browser_inspect`, and `browser_security_pack` instead of choosing from dozens of low-level tools.
 - **F12 drilldown tools**: `devtools_*` tools expose Network, Application, Elements, Sources, Security, Console, Frames, Performance, Trace, and raw CDP escape hatches.
 - **Evidence packs**: one command can produce a manifest, HAR, application export, trace artifacts, correlation graph, realtime payload logs, and machine-readable operator handoff.
@@ -32,7 +33,7 @@ Without this layer, an agent can interact with a website but still fail to under
 
 Current status: **professional core ready, active development**.
 
-The Managed Browser path is the primary supported workflow. It has release readiness checks, contract checks, unit tests, F12 smoke tests, professional workflow smoke tests, example workflow smoke tests, and a scorecard. Personal Chrome mode exists for local authorized debugging but should be treated as beta.
+The Managed Browser path is the primary supported workflow. It has release readiness checks, contract checks, unit tests, F12 smoke tests, professional workflow smoke tests, example workflow smoke tests, and a scorecard. Personal Chrome mode exists for local authorized debugging and is now reachable through the same main facade by passing `backend: "personal"` or `currentTab: true`, but it should still be treated as beta because it depends on the local Chrome extension bridge and user authorization.
 
 Known boundaries are documented rather than hidden. For example, historical browser data cannot be recovered if capture was not enabled before the action, and browser replay is not raw socket-level replay.
 
@@ -55,7 +56,18 @@ npm run research:pack -- --url https://example.com --profile researcher
 
 The output returns local artifact paths and a machine-readable handoff for the next agent or operator.
 
+Agent-facing current-tab route:
+
+```json
+{
+  "tool": "browser_inspect",
+  "params": {
+    "backend": "personal",
+    "mode": "overview"
+  }
+}
+```
+
 ## Safety
 
 Use only with browser profiles, accounts, and targets you are authorized to inspect. Do not commit captured HAR files, profile data, private target evidence, screenshots with accounts, or authenticated browser artifacts.
-

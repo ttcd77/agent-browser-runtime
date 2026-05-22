@@ -1,6 +1,6 @@
 {
   "name": "agent-browser-runtime",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "A local DevTools evidence runtime for AI agents, with Personal Chrome and Managed Browser backends.",
   "type": "module",
   "license": "MIT",

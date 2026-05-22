@@ -5,7 +5,8 @@ This repository is public as an active work-in-progress. The current goal is to 
 ## Current Status
 
 - Managed Browser workflow: ready for local professional testing.
-- Personal Chrome workflow: beta, useful for explicit local debugging.
+- Personal Chrome workflow: beta, useful for explicit local debugging and now routable through the main `browser_*` facade.
+- Unified backend router: `browser_backend_status` reports Managed/Personal availability; `backend: "personal"` and `currentTab: true` route facade calls to the Personal Chrome bridge when it is connected.
 - Public examples: use `example.com` or local fixtures.
 - Real target evidence: intentionally excluded from this repository.
 
@@ -45,3 +46,4 @@ Do not publish:
 - Continue hardening the native MCP stdio server and custom adapter examples.
 - Continue hardening the F12 parity layer around complex sites.
 - Package the Personal Chrome extension once the beta path is stable.
+- Improve the public human review panel for profiles, artifacts, and local feedback.
