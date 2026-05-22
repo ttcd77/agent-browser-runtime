@@ -14393,6 +14393,56 @@ function registerStandaloneBrowserTools(tools, cdpPort, profileRegistry, default
     },
   });
 
+  tools.set("browser_text", {
+    name: "browser_text",
+    description: "Facade: extract readable text content from the current page in one call. Returns plain text, page URL, title, and character count. Use instead of browser_eval + document.body.innerText for common text extraction.",
+    parameters: withBackendParameters({
+      type: "object",
+      properties: {
+        profile: { type: "string" },
+        maxChars: { type: "number", description: "Maximum characters to return (default 50000)." },
+      },
+    }),
+    async execute(_id, params) {
+      const routed = await maybeRoutePersonal("browser_text", params);
+      if (routed) return toolResult(routed);
+      const profileName = params?.profile || defaultProfileName;
+      const maxChars = typeof params?.maxChars === "number" && params.maxChars > 0 ? params.maxChars : 50000;
+      const profile = await resolveProfile(profileName);
+      return toolResult(await withPageClient(cdpPort, profile.tabId, async (client, target) => {
+        const extractionScript = `
+          (function() {
+            var main = document.querySelector('article') || document.querySelector('[role="main"]') || document.querySelector('main');
+            var source = main || document.body;
+            if (!source) return '';
+            return source.innerText || '';
+          })()
+        `;
+        const [textResult, urlResult, titleResult] = await Promise.all([
+          client.Runtime.evaluate({ expression: extractionScript, returnByValue: true }),
+          client.Runtime.evaluate({ expression: 'document.location.href', returnByValue: true }),
+          client.Runtime.evaluate({ expression: 'document.title', returnByValue: true }),
+        ]);
+        var fullText = String(textResult.result?.value || '');
+        var truncated = fullText.length > maxChars;
+        var text = truncated ? fullText.slice(0, maxChars) : fullText;
+        return {
+          backend: "managed-cdp",
+          facade: "browser_text",
+          profile: profileName,
+          tabId: target.id,
+          url: String(urlResult.result?.value || ''),
+          title: String(titleResult.result?.value || ''),
+          text: text,
+          charCount: text.length,
+          truncated: truncated,
+          fullCharCount: fullText.length,
+          next: ["browser_inspect", "browser_capture"],
+        };
+      }));
+    },
+  });
+
   tools.set("browser_raw", {
     name: "browser_raw",
     description: "Facade: advanced escape hatch. Call one exact devtools_* tool when the big tools are not enough.",
