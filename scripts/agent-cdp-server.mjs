@@ -169,11 +169,16 @@ async function withPageClient(port, tabId, fn) {
   }
 }
 
-function toolResult(payload) {
-  return {
-    content: [{ type: "text", text: JSON.stringify(payload) }],
-    details: payload,
-  };
+function toolResult(payload, options) {
+  const content = [{ type: "text", text: JSON.stringify(payload) }];
+  if (options?.image && typeof options.image.data === "string") {
+    content.push({
+      type: "image",
+      data: options.image.data,
+      mimeType: options.image.mimeType || "image/png",
+    });
+  }
+  return { content, details: payload };
 }
 
 function axValue(value) {
@@ -8595,7 +8600,7 @@ function registerStandaloneBrowserTools(tools, cdpPort, profileRegistry, default
 
   tools.set("browser_screenshot", {
     name: "browser_screenshot",
-    description: "Capture a PNG screenshot from the current browser tab and write it into the profile evidence directory by default.",
+    description: "Capture a PNG screenshot from the current browser tab. Returns the base64 image as MCP image content so the agent can see it, plus writes a PNG file under the profile evidence directory. Pass includeImage: false to skip the image payload (e.g. for very large captures).",
     parameters: {
       type: "object",
       properties: {
@@ -8603,11 +8608,19 @@ function registerStandaloneBrowserTools(tools, cdpPort, profileRegistry, default
         tabId: { type: "string" },
         path: { type: "string" },
         fullPage: { type: "boolean" },
+        includeImage: {
+          type: "boolean",
+          description: "When true (default), returns the PNG as base64 image content visible to the agent. When false, only writes to disk and returns metadata.",
+        },
+        maxImageBytes: {
+          type: "number",
+          description: "If set, only inline the image when the PNG is smaller than this many bytes. Default 4_000_000 (~4 MB).",
+        },
       },
     },
     async execute(_id, params) {
       const profile = await resolveProfile(params?.profile);
-      return toolResult(await withPageClient(cdpPort, params?.tabId || profile.tabId, async (client, target) => {
+      const captured = await withPageClient(cdpPort, params?.tabId || profile.tabId, async (client, target) => {
         await client.Page.enable();
         const shot = await client.Page.captureScreenshot({
           format: "png",
@@ -8615,7 +8628,8 @@ function registerStandaloneBrowserTools(tools, cdpPort, profileRegistry, default
         });
         const path = params?.path || join(profile.evidenceDir, "screenshots", `${Date.now()}.png`);
         mkdirSync(dirname(path), { recursive: true });
-        writeFileSync(path, Buffer.from(shot.data, "base64"));
+        const buffer = Buffer.from(shot.data, "base64");
+        writeFileSync(path, buffer);
         await profileRegistry.touchProfile(profile.name, { tabId: target.id });
         const eventFile = profileRegistry.appendEvent(profile.name, {
           type: "browser_screenshot",
@@ -8625,14 +8639,33 @@ function registerStandaloneBrowserTools(tools, cdpPort, profileRegistry, default
           fullPage: params?.fullPage === true,
         });
         return {
-          ok: true,
-          profile: profile.name,
-          tabId: target.id,
-          path,
-          mimeType: "image/png",
-          eventFile,
+          payload: {
+            ok: true,
+            profile: profile.name,
+            tabId: target.id,
+            path,
+            mimeType: "image/png",
+            eventFile,
+            bytes: buffer.length,
+          },
+          base64: shot.data,
         };
-      }));
+      });
+      const includeImage = params?.includeImage !== false;
+      const maxImageBytes = typeof params?.maxImageBytes === "number" ? params.maxImageBytes : 4_000_000;
+      const shouldInline = includeImage && captured.payload.bytes <= maxImageBytes;
+      if (includeImage && !shouldInline) {
+        captured.payload.imageInlined = false;
+        captured.payload.imageSkippedReason = `bytes ${captured.payload.bytes} > maxImageBytes ${maxImageBytes}`;
+      } else if (shouldInline) {
+        captured.payload.imageInlined = true;
+      } else {
+        captured.payload.imageInlined = false;
+      }
+      return toolResult(
+        captured.payload,
+        shouldInline ? { image: { data: captured.base64, mimeType: "image/png" } } : undefined,
+      );
     },
   });
 
@@ -8674,6 +8707,167 @@ function registerStandaloneBrowserTools(tools, cdpPort, profileRegistry, default
           title: result.result?.value?.title,
         });
         return { profile: profile.name, tabId: target.id, evidenceDir: profile.evidenceDir, eventFile, ...result.result?.value };
+      }));
+    },
+  });
+
+  tools.set("browser_find", {
+    name: "browser_find",
+    description: "Find interactive elements on the page using a natural-language query (e.g. \"search bar\", \"add to cart button\", \"login link\"). Matches against innerText, aria-label, placeholder, title, name, role and tag, returns ranked candidates with selectors and bounding boxes so the agent can click/type without writing a CSS selector by hand.",
+    parameters: {
+      type: "object",
+      properties: {
+        profile: { type: "string" },
+        tabId: { type: "string" },
+        query: {
+          type: "string",
+          description: "Natural-language description of the target element (e.g. \"sign in button\", \"email input\", \"product title containing organic\").",
+        },
+        maxResults: { type: "number", description: "Default 10, max 30." },
+        includeNonInteractive: { type: "boolean", description: "Include any element with matching text, not just clickable controls." },
+      },
+      required: ["query"],
+    },
+    async execute(_id, params) {
+      const profile = await resolveProfile(params?.profile);
+      const query = String(params?.query || "").trim();
+      if (!query) throw new Error("browser_find requires a non-empty `query`.");
+      const limit = Math.max(1, Math.min(30, Number(params?.maxResults) || 10));
+      const includeAll = params?.includeNonInteractive === true;
+      return toolResult(await withPageClient(cdpPort, params?.tabId || profile.tabId, async (client, target) => {
+        const expression = `(() => {
+          const query = ${JSON.stringify(query)};
+          const maxResults = ${limit};
+          const includeAll = ${includeAll};
+          const tokens = query.toLowerCase().split(/\\s+/).filter(Boolean);
+          const interactiveSelector = "a,button,input,textarea,select,[role=button],[role=link],[role=textbox],[role=combobox],[role=searchbox],[role=menuitem],[role=tab],[role=switch],[role=checkbox],[role=radio],[contenteditable=\\"\\"],[contenteditable=true]";
+          const baseSelector = includeAll ? "*" : interactiveSelector;
+          const all = Array.from(document.querySelectorAll(baseSelector));
+          function cssPath(el) {
+            if (!(el instanceof Element)) return "";
+            if (el.id) return "#" + CSS.escape(el.id);
+            const parts = [];
+            let node = el;
+            while (node && node.nodeType === 1 && parts.length < 8) {
+              let part = node.tagName.toLowerCase();
+              if (node.parentElement) {
+                const siblings = Array.from(node.parentElement.children).filter((c) => c.tagName === node.tagName);
+                if (siblings.length > 1) {
+                  const idx = siblings.indexOf(node) + 1;
+                  part += ":nth-of-type(" + idx + ")";
+                }
+              }
+              parts.unshift(part);
+              node = node.parentElement;
+              if (node && node.id) {
+                parts.unshift("#" + CSS.escape(node.id));
+                break;
+              }
+            }
+            return parts.join(" > ");
+          }
+          function visibleRect(el) {
+            const r = el.getBoundingClientRect();
+            if (r.width === 0 || r.height === 0) return null;
+            const style = getComputedStyle(el);
+            if (style.visibility === "hidden" || style.display === "none" || style.opacity === "0") return null;
+            return r;
+          }
+          function gatherText(el) {
+            const fields = {
+              text: (el.innerText || "").replace(/\\s+/g, " ").trim().slice(0, 200),
+              ariaLabel: el.getAttribute("aria-label") || "",
+              placeholder: el.getAttribute("placeholder") || "",
+              title: el.getAttribute("title") || "",
+              name: el.getAttribute("name") || "",
+              role: el.getAttribute("role") || "",
+              type: el.getAttribute("type") || "",
+              alt: el.getAttribute("alt") || "",
+              value: typeof el.value === "string" ? String(el.value).slice(0, 200) : "",
+            };
+            return fields;
+          }
+          const scored = [];
+          for (const el of all) {
+            const rect = visibleRect(el);
+            if (!rect) continue;
+            const fields = gatherText(el);
+            const haystack = [
+              fields.text, fields.ariaLabel, fields.placeholder, fields.title, fields.name, fields.role, fields.type, fields.alt, fields.value, el.tagName.toLowerCase(),
+            ].join(" | ").toLowerCase();
+            if (!haystack.trim()) continue;
+            let score = 0;
+            let hits = 0;
+            for (const tok of tokens) {
+              if (!tok) continue;
+              let tokScore = 0;
+              if (fields.ariaLabel.toLowerCase().includes(tok)) tokScore = Math.max(tokScore, 4);
+              if (fields.text.toLowerCase().includes(tok)) tokScore = Math.max(tokScore, 3);
+              if (fields.placeholder.toLowerCase().includes(tok)) tokScore = Math.max(tokScore, 3);
+              if (fields.title.toLowerCase().includes(tok)) tokScore = Math.max(tokScore, 2);
+              if (fields.name.toLowerCase().includes(tok)) tokScore = Math.max(tokScore, 2);
+              if (fields.role.toLowerCase().includes(tok)) tokScore = Math.max(tokScore, 2);
+              if (fields.type.toLowerCase().includes(tok)) tokScore = Math.max(tokScore, 2);
+              if (fields.value.toLowerCase().includes(tok)) tokScore = Math.max(tokScore, 1);
+              if (el.tagName.toLowerCase().includes(tok)) tokScore = Math.max(tokScore, 1);
+              if (tokScore > 0) { score += tokScore; hits += 1; }
+            }
+            if (score === 0) continue;
+            // Penalty for elements with very long text (likely paragraphs).
+            if (fields.text.length > 120 && hits < tokens.length) score -= 1;
+            scored.push({ el, rect, score, hits, fields });
+          }
+          scored.sort((a, b) => b.score - a.score || b.hits - a.hits || (a.fields.text.length - b.fields.text.length));
+          const top = scored.slice(0, maxResults);
+          return {
+            query,
+            totalCandidates: scored.length,
+            matches: top.map((entry, idx) => ({
+              rank: idx + 1,
+              score: entry.score,
+              tokenHits: entry.hits,
+              tag: entry.el.tagName.toLowerCase(),
+              role: entry.fields.role || (entry.el.getAttribute("role") || ""),
+              text: entry.fields.text,
+              attributes: {
+                id: entry.el.id || null,
+                name: entry.fields.name || null,
+                type: entry.fields.type || null,
+                ariaLabel: entry.fields.ariaLabel || null,
+                placeholder: entry.fields.placeholder || null,
+                title: entry.fields.title || null,
+                href: entry.el.getAttribute("href") || null,
+              },
+              selector: cssPath(entry.el),
+              bbox: { x: Math.round(entry.rect.left), y: Math.round(entry.rect.top), width: Math.round(entry.rect.width), height: Math.round(entry.rect.height) },
+              center: { x: Math.round(entry.rect.left + entry.rect.width / 2), y: Math.round(entry.rect.top + entry.rect.height / 2) },
+            })),
+            url: location.href,
+            title: document.title,
+          };
+        })()`;
+        const result = await client.Runtime.evaluate({ expression, returnByValue: true });
+        if (result.exceptionDetails) {
+          throw new Error(result.exceptionDetails.text || "browser_find failed");
+        }
+        const payload = result.result?.value || { query, matches: [], totalCandidates: 0 };
+        await profileRegistry.touchProfile(profile.name, { tabId: target.id, url: payload.url, title: payload.title });
+        const eventFile = profileRegistry.appendEvent(profile.name, {
+          type: "browser_find",
+          tabId: target.id,
+          query,
+          totalCandidates: payload.totalCandidates,
+          matchCount: payload.matches?.length || 0,
+        });
+        return {
+          profile: profile.name,
+          tabId: target.id,
+          eventFile,
+          ...payload,
+          next: payload.matches?.length
+            ? ["browser_click", "browser_type", "browser_screenshot"]
+            : ["browser_snapshot", "browser_screenshot"],
+        };
       }));
     },
   });
@@ -14978,7 +15172,14 @@ async function main() {
         const params = await readJson(req);
         const result = await tool.execute("agent-cdp-server", params);
         const text = result.content?.[0]?.text ?? "{}";
-        sendJson(res, 200, JSON.parse(text));
+        const payload = JSON.parse(text);
+        // Preserve MCP-shaped content array (e.g. image) so the MCP bridge can pass
+        // images and other non-text resources back to the agent. HTTP clients that
+        // do not consume _mcp can ignore this field; the original payload is unchanged.
+        if (Array.isArray(result.content) && result.content.length > 1) {
+          payload._mcp = { content: result.content };
+        }
+        sendJson(res, 200, payload);
         return;
       }
       if (req.method === "POST" && url.pathname === "/shutdown") {

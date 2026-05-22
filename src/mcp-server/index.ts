@@ -64,6 +64,26 @@ server.setRequestHandler(CallToolRequestSchema, async (request): Promise<CallToo
 
   try {
     const result = await client.callTool(name, args);
+    // If the worker returned MCP-shaped content (text + image, etc.) under `_mcp.content`,
+    // pass it through so the agent receives images and other non-text resources directly.
+    if (
+      isRecord(result) &&
+      isRecord(result._mcp) &&
+      Array.isArray((result._mcp as Record<string, unknown>).content)
+    ) {
+      const content = (result._mcp as Record<string, unknown>).content as Array<Record<string, unknown>>;
+      // Defensive: replace the bundled text payload with a clean copy of the worker result
+      // minus the bulky `_mcp` echo, so the text element stays readable.
+      const cleaned: Record<string, unknown> = { ...result };
+      delete cleaned._mcp;
+      const passthrough = content.map((entry) => {
+        if (entry && entry.type === "text") {
+          return { ...entry, text: toolResultText(cleaned) };
+        }
+        return entry;
+      });
+      return { content: passthrough as CallToolResult["content"] };
+    }
     return {
       content: [
         {
