@@ -131,7 +131,30 @@ Example host config:
 ```
 
 The MCP server always exposes `browser_worker_doctor`. When the worker is
-running, it dynamically exposes the full HTTP tool catalog from `/tools`.
+running, it dynamically reads the HTTP tool catalog from `/tools`, then filters
+what is exposed through MCP according to `AGENT_BROWSER_MCP_TIER`.
+
+Default MCP tier is `core`, which keeps the model-facing tool list small:
+
+```text
+browser_worker_doctor, browser_backend_status, profile_list, profile_resume,
+browser_tabs, browser_open, browser_navigate, browser_snapshot, browser_text,
+browser_find, browser_click, browser_type, browser_scroll, browser_screenshot,
+browser_capture, browser_inspect, browser_security_pack, browser_feedback,
+browser_raw
+```
+
+Other options:
+
+```bash
+AGENT_BROWSER_MCP_TIER=extended npm run mcp:server
+AGENT_BROWSER_MCP_TIER=all npm run mcp:server
+AGENT_BROWSER_MCP_TOOLS=browser_open,browser_raw npm run mcp:server
+```
+
+Use `browser_raw` as the escape hatch for hidden `devtools_*` tools. The worker
+HTTP `/tools` endpoint remains full-fidelity for SDKs and debugging; only MCP
+`tools/list` is narrowed for agent usability.
 
 ## Agent Workflow
 

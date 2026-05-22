@@ -51,6 +51,25 @@ npm run mcp:server
 
 Set `AGENT_BROWSER_RUNTIME_URL=http://127.0.0.1:17335` when another agent or SDK needs to call the worker.
 
+## MCP Tool Tiers
+
+The stdio MCP server intentionally does not expose every low-level worker tool
+by default. Default tier is `core`: a small facade-first list around
+`browser_open`, `browser_capture`, `browser_inspect`, `browser_security_pack`,
+common page actions, `browser_raw`, profile status, and `browser_worker_doctor`.
+
+Switch tiers before starting the MCP server:
+
+```powershell
+$env:AGENT_BROWSER_MCP_TIER="extended" # more evidence facade tools
+$env:AGENT_BROWSER_MCP_TIER="all"      # full worker catalog, debugging only
+$env:AGENT_BROWSER_MCP_TOOLS="browser_open,browser_raw" # custom allowlist
+```
+
+Hidden low-level `devtools_*` tools remain reachable through `browser_raw`.
+The HTTP worker `/tools` endpoint still exposes the full catalog; only MCP
+`tools/list` is filtered for agent usability.
+
 ## Browser Modes
 
 - Managed Browser / Agent Browser: main professional path. The runtime launches a visible Edge/Chrome profile for the agent.

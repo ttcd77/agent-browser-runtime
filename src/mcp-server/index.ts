@@ -13,6 +13,54 @@ import { BrowserWorkerClient, DOCTOR_TOOL, toolResultText } from "./http-client.
 
 const client = new BrowserWorkerClient();
 
+const CORE_TOOL_NAMES = [
+  DOCTOR_TOOL.name,
+  "browser_backend_status",
+  "profile_list",
+  "profile_resume",
+  "browser_tabs",
+  "browser_open",
+  "browser_navigate",
+  "browser_snapshot",
+  "browser_text",
+  "browser_find",
+  "browser_click",
+  "browser_type",
+  "browser_scroll",
+  "browser_screenshot",
+  "browser_capture",
+  "browser_inspect",
+  "browser_security_pack",
+  "browser_feedback",
+  "browser_raw",
+] as const;
+
+const EXTENDED_EXTRA_TOOL_NAMES = [
+  "browser_act",
+  "browser_auth_boundary",
+  "browser_diff",
+  "browser_replay",
+  "browser_resume_profile",
+  "browser_auth_bootstrap",
+  "browser_evidence_bundle",
+  "browser_evidence_manifest",
+  "browser_evidence_timeline",
+  "browser_request_correlation_graph",
+  "browser_capture_diff",
+  "browser_capture_bisect",
+  "browser_worker_frame_deep_dive",
+  "browser_storage_snapshot",
+  "browser_cookie_summary",
+  "browser_application_export",
+  "browser_console_log",
+  "browser_issues_log",
+  "browser_network_timeline",
+  "browser_page_diagnostics",
+] as const;
+
+const CORE_TOOL_SET = new Set<string>(CORE_TOOL_NAMES);
+const EXTENDED_TOOL_SET = new Set<string>([...CORE_TOOL_NAMES, ...EXTENDED_EXTRA_TOOL_NAMES]);
+
 const server = new Server(
   {
     name: "agent-browser-runtime",
@@ -44,7 +92,7 @@ server.setRequestHandler(ListToolsRequestSchema, async (): Promise<ListToolsResu
   } catch {
     // Keep the MCP server useful even when the worker is not started yet.
   }
-  return { tools };
+  return { tools: filterToolsForMcpTier(tools) };
 });
 
 server.setRequestHandler(CallToolRequestSchema, async (request): Promise<CallToolResult> => {
@@ -114,4 +162,32 @@ await server.connect(new StdioServerTransport());
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function filterToolsForMcpTier(tools: Tool[]): Tool[] {
+  const custom = parseCustomToolSet(process.env.AGENT_BROWSER_MCP_TOOLS);
+  if (custom) return filterToolsBySet(tools, custom);
+
+  const tier = String(process.env.AGENT_BROWSER_MCP_TIER || "core").trim().toLowerCase();
+  if (tier === "all" || tier === "*") return tools;
+  if (tier === "extended") return filterToolsBySet(tools, EXTENDED_TOOL_SET);
+  return filterToolsBySet(tools, CORE_TOOL_SET);
+}
+
+function parseCustomToolSet(value: string | undefined): Set<string> | null {
+  if (!value || value.trim() === "") return null;
+  const names = value
+    .split(",")
+    .map((name) => name.trim())
+    .filter(Boolean);
+  if (names.length === 0) return null;
+  return new Set([DOCTOR_TOOL.name, ...names]);
+}
+
+function filterToolsBySet(tools: Tool[], allowed: Set<string>): Tool[] {
+  const selected = tools.filter((tool) => allowed.has(tool.name));
+  if (!selected.some((tool) => tool.name === DOCTOR_TOOL.name)) {
+    return [DOCTOR_TOOL, ...selected];
+  }
+  return selected;
 }

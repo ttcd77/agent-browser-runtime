@@ -196,6 +196,34 @@ Example MCP host config:
 }
 ```
 
+### MCP Tool Tiers
+
+The worker still exposes the full HTTP catalog at `/tools`, but the stdio MCP
+server filters `tools/list` by default so agents are not flooded with hundreds
+of low-level DevTools aliases.
+
+Default tier is `core`. It exposes the facade-first operating set:
+
+```text
+browser_worker_doctor, browser_backend_status, profile_list, profile_resume,
+browser_tabs, browser_open, browser_navigate, browser_snapshot, browser_text,
+browser_find, browser_click, browser_type, browser_scroll, browser_screenshot,
+browser_capture, browser_inspect, browser_security_pack, browser_feedback,
+browser_raw
+```
+
+Switch tiers before starting the MCP server:
+
+```bash
+AGENT_BROWSER_MCP_TIER=extended npm run mcp:server # core + common evidence facade tools
+AGENT_BROWSER_MCP_TIER=all npm run mcp:server      # full worker catalog
+AGENT_BROWSER_MCP_TOOLS=browser_open,browser_raw npm run mcp:server
+```
+
+If a hidden low-level `devtools_*` tool is needed, keep the MCP tier small and
+call it through `browser_raw`. This preserves the escape hatch without making
+the model choose from the entire low-level catalog on every session start.
+
 Local dashboard:
 
 ```text

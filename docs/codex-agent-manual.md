@@ -114,7 +114,26 @@ Host config:
 ```
 
 The MCP server always exposes `browser_worker_doctor`. When the Browser Worker
-is running, it dynamically exposes the full `/tools` catalog.
+is running, it reads the full worker `/tools` catalog but exposes a filtered MCP
+tool list by default.
+
+Default MCP tier:
+
+```powershell
+$env:AGENT_BROWSER_MCP_TIER="core"
+```
+
+`core` is the recommended Codex/Claude default: facade tools, common page
+actions, `browser_feedback`, and `browser_raw`. Use `browser_raw` to reach
+hidden `devtools_*` tools without loading the whole catalog into the model.
+
+Other modes:
+
+```powershell
+$env:AGENT_BROWSER_MCP_TIER="extended" # more evidence facade tools
+$env:AGENT_BROWSER_MCP_TIER="all"      # full catalog for debugging
+$env:AGENT_BROWSER_MCP_TOOLS="browser_open,browser_raw" # custom allowlist
+```
 
 ## Profile Rules
 
