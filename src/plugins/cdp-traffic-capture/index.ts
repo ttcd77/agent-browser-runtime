@@ -1883,7 +1883,7 @@ class TrafficCapture {
     }
     if (connected && p.frameEvents.length > 0 && p.issues.length === 0) {
       recommendations.push(
-        `已 navigate 但 issues=0：访问的页面可能没触发 CSP/CORS/Cookie 拦截。访问 gmail/github 之类带 mixed content 或限制 cookie 的真实站会有 issues`,
+        `已 navigate 但 issues=0：访问的页面可能没触发 CSP/CORS/Cookie 拦截。访问带 mixed content、跨站 cookie 限制或严格 CSP 的授权测试页时通常会有 issues`,
       );
     }
     if (connected && p.frameEvents.length > 0 && p.consoleLogs.length === 0) {

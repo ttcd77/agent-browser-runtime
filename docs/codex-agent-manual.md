@@ -79,6 +79,8 @@ Why this matters:
 - Cookie export, copied profiles, and DPAPI cookie injection are fallback/debug
   tactics. If the Personal Chrome bridge is connected, use it first for
   already-logged-in user tabs.
+- For install and operator authorization steps, read
+  `docs/personal-chrome-quickstart.md`.
 
 Check both routes with:
 
@@ -104,7 +106,7 @@ Host config:
   "mcpServers": {
     "agent-browser-runtime": {
       "command": "node",
-      "args": ["C:/Users/Tong/project/agent-browser-runtime/dist/mcp-server/index.js"],
+      "args": ["<agent-browser-runtime>/dist/mcp-server/index.js"],
       "env": {
         "AGENT_BROWSER_RUNTIME_URL": "http://127.0.0.1:17335"
       }

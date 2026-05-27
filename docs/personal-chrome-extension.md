@@ -11,10 +11,14 @@ Claude / Codex / SDK
   -> real Chrome tabs
 ```
 
+For the operator-facing quickstart and safety boundary, read
+`docs/personal-chrome-quickstart.md` first. This file is the lower-level tool
+reference.
+
 ## Start The Bridge
 
 ```powershell
-cd C:\Users\Tong\project\agent-browser-runtime
+cd <agent-browser-runtime>
 npm run personal:chrome
 ```
 
@@ -31,7 +35,7 @@ The bridge listens on:
 4. Select:
 
 ```text
-C:\Users\Tong\project\agent-browser-runtime\extension
+<agent-browser-runtime>/extension
 ```
 
 Then check:
@@ -324,3 +328,6 @@ should stop recording.
 This is for private troubleshooting and local automation. The extension can read
 page text and screenshots from real Chrome tabs. Do not use it on accounts or
 pages you do not want a local agent to inspect.
+
+Do not use this mode as the default target/bounty browser. For target research,
+use Managed Browser with target-scoped profiles and evidence directories.

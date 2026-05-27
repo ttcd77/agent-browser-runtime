@@ -108,6 +108,7 @@ complete product contract, read `docs/agent-devtools-api.md`.
 For a Codex-first operating manual, read `docs/codex-agent-manual.md`.
 For cross-agent and SDK integration, read `docs/browser-worker-integration.md`.
 For bug reports and capability gaps, read `docs/feedback-and-gaps.md`.
+For Personal Chrome setup, read `docs/personal-chrome-quickstart.md`.
 
 For a compact project summary, read `docs/project-overview.md`. For the current
 public work-in-progress status, read `docs/public-release-notes.md`. Safety
@@ -187,7 +188,7 @@ Example MCP host config:
   "mcpServers": {
     "agent-browser-runtime": {
       "command": "node",
-      "args": ["C:/Users/Tong/project/agent-browser-runtime/dist/mcp-server/index.js"],
+      "args": ["<agent-browser-runtime>/dist/mcp-server/index.js"],
       "env": {
         "AGENT_BROWSER_RUNTIME_URL": "http://127.0.0.1:17335"
       }
@@ -647,7 +648,7 @@ The health endpoint will report:
 - `browserAttachMode: "attached-existing-cdp"` when it reused an already-running CDP browser,
 - `browserAttachMode: "launched-managed-browser"` when it launched a browser itself.
 
-Important boundary: a normal browser that was started without remote debugging cannot usually be "taken over" afterward. For a private debugging workflow, start a browser window with remote debugging enabled first, then use it normally. When something looks strange, the agent can attach to that same window and inspect tabs, DOM, screenshots, and traffic.
+Important boundary: a normal browser that was started without remote debugging cannot usually be "taken over" through CDP afterward. For the operator's already-open daily Chrome, use Personal Chrome Extension Mode below instead of asking the operator to close Chrome, clone a profile, export cookies, or inject credentials.
 
 See `docs/personal-browser-mode.md` for the dedicated workflow and safety notes.
 
@@ -667,6 +668,23 @@ extension/
 ```
 
 The bridge exposes tools at `http://127.0.0.1:17337`, including:
+
+Preferred agent entry is the unified facade:
+
+```json
+{
+  "tool": "browser_inspect",
+  "params": {
+    "backend": "personal",
+    "currentTab": true,
+    "focus": "overview"
+  }
+}
+```
+
+Read `docs/personal-chrome-quickstart.md` before using this mode. Personal
+Chrome is for explicit operator-authorized personal/ad hoc tasks, not target
+research or public demos.
 
 - `personal_chrome_tabs`
 - `personal_chrome_active_tab_snapshot`

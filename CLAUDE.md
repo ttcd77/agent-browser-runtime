@@ -5,10 +5,11 @@
 Always work in this repository:
 
 ```powershell
-cd C:\Users\Tong\project\agent-browser-runtime
+cd <agent-browser-runtime>
 ```
 
-Do not implement or commit this project's tasks from `C:\Users\Tong\project\helloworld`.
+Do not implement or commit this project's tasks from a workstation control
+directory. Work from this repository root.
 
 ## Task Handoff
 
@@ -57,4 +58,3 @@ npm run release:readiness
 ```
 
 `smoke:personal` requires the Personal Chrome extension and bridge to be running.
-

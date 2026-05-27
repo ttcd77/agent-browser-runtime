@@ -13,11 +13,15 @@ portfolio-quality security engineering project.
   running.
 - README explains the two product modes clearly:
   Personal Chrome and Managed Browser.
+- `docs/personal-chrome-quickstart.md` explains extension installation,
+  bridge health checks, and the personal/ad hoc boundary.
 - Safety boundaries are visible before examples that touch cookies, headers,
   bodies, or authenticated state.
 - Examples use `example.com` or user-authorized targets only.
 - No private targets, credentials, local evidence files, or personal browser data
   are committed.
+- `npm run release:readiness` reports no local user paths, personal account
+  product examples, or private target evidence paths in tracked public files.
 
 ## Portfolio Signals
 
@@ -72,6 +76,7 @@ Do not publish:
 - browser profile directories,
 - real bug bounty target evidence,
 - screenshots containing accounts or private data.
+- workstation-specific absolute paths or personal account examples.
 
 ## Next Polish Items
 

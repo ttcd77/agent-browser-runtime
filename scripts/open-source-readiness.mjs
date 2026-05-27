@@ -12,6 +12,8 @@ const requiredFiles = [
   "docs/browser-worker-integration.md",
   "docs/codex-agent-manual.md",
   "docs/feedback-and-gaps.md",
+  "docs/personal-chrome-quickstart.md",
+  "docs/personal-chrome-extension.md",
   "docs/devtools-panel-map.md",
   "docs/competitor-research.md",
   "docs/open-source-release-checklist.md",
@@ -63,6 +65,18 @@ const requiredReadmePhrases = [
   "browser_backend_status",
   "backend: \"personal\"",
   "currentTab: true",
+  "docs/personal-chrome-quickstart.md",
+];
+
+const forbiddenPublicPatterns = [
+  { pattern: new RegExp(String.raw`C:\\Users\\` + "Tong", "i"), label: "local Windows user path" },
+  { pattern: new RegExp(String.raw`C:/Users/` + "Tong", "i"), label: "local Windows user path" },
+  { pattern: new RegExp("Hello@" + "Selfloom" + String.raw`\.ai`, "i"), label: "personal email" },
+  { pattern: new RegExp(String.raw`\b` + "selfloom" + String.raw`\.ai\b`, "i"), label: "personal domain" },
+  { pattern: new RegExp(String.raw`\bG` + "mail" + String.raw`\b`, "i"), label: "personal account product reference" },
+  { pattern: new RegExp(String.raw`\bLinked` + "In" + String.raw`\b`, "i"), label: "personal workflow product reference" },
+  { pattern: new RegExp(["targets", "active", "8x8", "evidence"].join("/"), "i"), label: "private target evidence path" },
+  { pattern: new RegExp(["targets", "active", "8x8", "evidence"].join(String.raw`\\`), "i"), label: "private target evidence path" },
 ];
 
 const forbiddenTrackedPrefixes = [
@@ -166,6 +180,15 @@ for (const path of tracked) {
     if (path.startsWith(prefix)) failures.push(`forbidden private/generated path is tracked: ${path}`);
   }
   if (/\.(har|tgz|zip)$/i.test(path)) warnings.push(`archive/evidence-like file is tracked, verify it is intentional: ${path}`);
+}
+
+for (const path of tracked) {
+  if (!/\.(md|json|jsonc|mjs|ts|js|yml|yaml|ps1)$/i.test(path)) continue;
+  if (!existsSync(path)) continue;
+  const text = readText(path);
+  for (const { pattern, label } of forbiddenPublicPatterns) {
+    if (pattern.test(text)) failures.push(`public tracked file contains ${label}: ${path}`);
+  }
 }
 
 const internalWording = tracked.filter((path) => /\.(md|json|mjs|ts)$/i.test(path)).flatMap((path) => {

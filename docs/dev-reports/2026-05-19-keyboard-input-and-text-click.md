@@ -21,7 +21,7 @@ bug: text mode was shadowed by the default `document` selector.
 
 ## Live Evidence
 
-Controlled 8x8 single-flow validation produced:
+Controlled authorized live validation produced:
 
 - Keyboard input recognized by the page.
 - `Join meeting` button changed from disabled to enabled.
@@ -32,9 +32,9 @@ Controlled 8x8 single-flow validation produced:
   - `POST /conference-request/v1?room=builder-verify` with HTTP 200.
   - `GET /vmms-conference-mapper/...conference-creator...` with HTTP 404.
 
-Evidence path:
-
-`C:\Users\Tong\project\helloworld\targets\active\8x8\evidence\browser-runtime-2026-05-19-keyboard-click-flow\8x8-builder-verify-keyboard-click-flow-summary.md`
+The raw target evidence was stored outside this public repository. This public
+dev report keeps only the generalized Browser Runtime behavior and intentionally
+omits private target paths, screenshots, HARs, and account state.
 
 ## Objective Boundary
 

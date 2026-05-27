@@ -22,7 +22,7 @@ browser scripts.
 PowerShell:
 
 ```powershell
-cd C:\Users\Tong\project\agent-browser-runtime
+cd <agent-browser-runtime>
 $env:CDP_LAUNCH_BROWSER="1"
 npm run agent:server
 ```
@@ -121,7 +121,7 @@ Example host config:
   "mcpServers": {
     "agent-browser-runtime": {
       "command": "node",
-      "args": ["C:/Users/Tong/project/agent-browser-runtime/dist/mcp-server/index.js"],
+      "args": ["<agent-browser-runtime>/dist/mcp-server/index.js"],
       "env": {
         "AGENT_BROWSER_RUNTIME_URL": "http://127.0.0.1:17335"
       }
@@ -155,6 +155,11 @@ AGENT_BROWSER_MCP_TOOLS=browser_open,browser_raw npm run mcp:server
 Use `browser_raw` as the escape hatch for hidden `devtools_*` tools. The worker
 HTTP `/tools` endpoint remains full-fidelity for SDKs and debugging; only MCP
 `tools/list` is narrowed for agent usability.
+
+For Personal Chrome, either point a dedicated MCP entry at
+`http://127.0.0.1:17337`, or keep the unified worker on
+`http://127.0.0.1:17335` and pass `backend: "personal"` / `currentTab: true`.
+Personal Chrome setup is documented in `docs/personal-chrome-quickstart.md`.
 
 ## Agent Workflow
 

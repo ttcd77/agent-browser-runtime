@@ -662,7 +662,7 @@
 - `npm run contract:devtools`: 通过，Managed / Personal 仍为 91 / 91。
 - `npm run check`: 通过。
 - Personal Chrome 断点探针用当前真实 Chrome 非破坏性单独调用验证通过。
-- `npm run smoke:personal`: 当前失败在 `security_research_pack` 对真实 Gmail 页生成 bundle path，属于环境/页面依赖问题，不是本次断点探针失败；后续应把 Personal smoke 改成独立测试页以减少对用户当前标签页的依赖。
+- `npm run smoke:personal`: Personal smoke 应使用独立本地 fixture，避免依赖用户当前真实标签页或个人账号状态。
 
 ### 2026-05-17: Personal Chrome smoke 独立测试页完成
 
