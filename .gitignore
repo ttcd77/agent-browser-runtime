@@ -1,0 +1,51 @@
+# Claude Code workspace config — not part of the published package
+CLAUDE.md
+
+node_modules/
+dist/
+coverage/
+.codegraph/
+.env
+.env.*
+!.env.example
+data/
+tmp/
+runtime/
+profiles/
+captures/
+har/
+screenshots/
+snapshots/
+bundles/
+research-packs/
+*.log
+*.tgz
+*.har
+*.zip
+*.png
+*.jpg
+*.jpeg
+*.webp
+*.mp4
+*.webm
+research/competitors/
+logs/
+feedback/*.md
+!feedback/README.md
+
+# Private archive — not for public release
+scripts/_archive/
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Secrets / credentials
+*.pem
+*.key
+credentials.json
+cookies.json

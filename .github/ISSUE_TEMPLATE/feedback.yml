@@ -1,0 +1,30 @@
+name: Product feedback
+description: Report confusing docs, workflow friction, or agent usability problems.
+title: "[Feedback]: "
+labels: ["feedback"]
+body:
+  - type: textarea
+    id: context
+    attributes:
+      label: Context
+      description: What were you trying to do?
+    validations:
+      required: true
+  - type: textarea
+    id: friction
+    attributes:
+      label: Friction
+      description: What was confusing or awkward?
+    validations:
+      required: true
+  - type: textarea
+    id: better
+    attributes:
+      label: What would have helped?
+  - type: checkboxes
+    id: privacy
+    attributes:
+      label: Privacy check
+      options:
+        - label: This issue does not contain cookies, tokens, private target data, authenticated HARs, or private screenshots.
+          required: true

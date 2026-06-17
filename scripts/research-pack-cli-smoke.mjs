@@ -1,0 +1,322 @@
+#!/usr/bin/env node
+
+import { mkdtempSync, rmSync, readFileSync } from "node:fs";
+import { join } from "node:path";
+import { tmpdir } from "node:os";
+import { parseArgs, printSummary, usage, adaptPackForReport } from "./security-research-pack-cli.mjs";
+import { buildOperatorDemoReport } from "./security-research-demo-report.mjs";
+
+function assert(condition, message) {
+  if (!condition) throw new Error(message);
+}
+
+const parsed = parseArgs([
+  "--url",
+  "https://example.com",
+  "--profile",
+  "researcher",
+  "--no-trace",
+  "--limit",
+  "7",
+]);
+assert(parsed.url === "https://example.com", "CLI parser lost url");
+assert(parsed.profile === "researcher", "CLI parser lost profile");
+assert(parsed.includeTrace === false, "CLI parser did not parse --no-trace");
+assert(parsed.limit === 7, "CLI parser did not parse numeric limit");
+assert(usage().includes("--json"), "CLI usage missing --json");
+
+const parsedWithReport = parseArgs([
+  "--url",
+  "https://example.com",
+  "--report-md",
+  "./tmp/operator-demo-report.md",
+]);
+assert(parsedWithReport.reportMd === "./tmp/operator-demo-report.md", "CLI parser lost --report-md");
+assert(usage().includes("--report-md"), "CLI usage missing --report-md");
+
+const lines = [];
+printSummary({
+  backend: "managed-cdp",
+  page: { url: "https://example.com" },
+  workflow: {
+    task: "professional-appsec",
+    defaultPath: ["browser_open", "browser_capture", "browser_inspect", "browser_security_pack", "drilldownPlan"],
+  },
+  agentEntryPoints: {
+    defaultMode: "facade-first",
+    recommendedFirstCall: "browser_professional_readiness",
+    professionalPath: ["browser_open", "browser_capture", "browser_inspect", "browser_security_pack"],
+    drilldownRule: "Use low-level browser_* tools only after concrete evidence exists.",
+  },
+  summary: {
+    url: "https://example.com",
+    requestCount: 2,
+    failedRequestCount: 0,
+    consoleEntryCount: 1,
+    artifactFileCount: 8,
+    artifactKinds: { har: 1, "research-pack": 1, "drilldown-plan": 1 },
+    evidenceTimelineEventCount: 5,
+    f12ParityPanelCount: 9,
+    drilldownCount: 3,
+    f12NavigationRequestCount: 2,
+    handoffReady: true,
+    handoffPresentCount: 7,
+    handoffMissing: [],
+    artifactCoverageReady: true,
+    artifactCoverageMissing: [],
+    artifactCoverageSkipped: ["trace"],
+    harPath: "tmp/example.har",
+    researchPackPath: "tmp/security-research-pack.json",
+    capture: {
+      enabled: true,
+      label: "hard-reload",
+      startedAt: "2026-05-18T00:00:00.000Z",
+      stoppedAt: null,
+      trafficCount: 2,
+    },
+  },
+  f12Navigation: {
+    requestNodeCount: 2,
+    requests: [{
+      label: "GET /api/data",
+      requestId: "request-1",
+      f12Columns: { name: "data", status: 200, type: "fetch" },
+      detail: { tool: "profile_request_detail", input: { requestId: "request-1" } },
+    }],
+  },
+  firstF12RequestDetail: {
+    requestId: "request-1",
+    status: 200,
+    sectionAvailability: {
+      overview: true,
+      headers: true,
+      payload: true,
+      cookies: true,
+      timing: true,
+      initiator: true,
+      redirects: true,
+      security: true,
+    },
+    sections: {
+      headers: {
+        requestHeaderCount: 6,
+        responseHeaderCount: 4,
+      },
+      payload: {
+        bodyReadable: true,
+        bodyBytes: 42,
+      },
+    },
+  },
+  nextTools: ["profile_request_detail"],
+  handoffCompleteness: {
+    ready: true,
+    presentCount: 7,
+    missing: [],
+  },
+  artifactCoverage: {
+    ready: true,
+    missing: [],
+    skipped: ["trace"],
+  },
+  professionalReadiness: {
+    ready: true,
+    evidenceReady: true,
+    missing: [],
+    nextActions: [{ tool: "browser_workflow_guide" }],
+    routeArtifacts: {
+      f12Navigation: {
+        path: "tmp/f12-navigation-compact.json",
+        inspect: { tool: "browser_artifact_inspect", input: { path: "tmp/f12-navigation-compact.json" } },
+        read: { tool: "browser_artifact_read", input: { path: "tmp/f12-navigation-compact.json" } },
+      },
+      harCompleteness: {
+        path: "tmp/har-completeness.json",
+        inspect: { tool: "browser_artifact_inspect", input: { path: "tmp/har-completeness.json" } },
+        read: { tool: "browser_artifact_read", input: { path: "tmp/har-completeness.json" } },
+      },
+    },
+    summary: {
+      routeArtifactCount: 5,
+      routeArtifactNames: ["f12Navigation", "harCompleteness", "correlationGraph", "authBoundary", "workerFrameBoundary"],
+    },
+    routeSummary: {
+      firstStep: { tool: "browser_artifact_inspect", input: { path: "tmp/security-research-pack.json" } },
+      latestHandoffInspect: { tool: "browser_artifact_inspect", input: { path: "tmp/security-research-pack.json" } },
+      latestHandoffRead: { tool: "browser_artifact_read", input: { path: "tmp/security-research-pack.json", mode: "line", startLine: 1, maxLines: 120 } },
+      firstF12RequestDetail: { label: "GET /api/data", tool: "profile_request_detail", input: { requestId: "request-1" }, f12Columns: { name: "data" } },
+      firstConcreteDrilldown: { label: "Request detail", tool: "profile_request_detail", input: { requestId: "request-1" } },
+      f12NavigationRequestCount: 2,
+      artifactEntrypointCount: 3,
+      f12NavigationArtifact: {
+        path: "tmp/f12-navigation.json",
+        inspect: { tool: "browser_artifact_inspect", input: { path: "tmp/f12-navigation.json" } },
+        read: { tool: "browser_artifact_read", input: { path: "tmp/f12-navigation.json" } },
+      },
+      correlationGraphArtifact: {
+        path: "tmp/correlation-graph.json",
+        inspect: { tool: "browser_artifact_inspect", input: { path: "tmp/correlation-graph.json" } },
+        read: { tool: "browser_artifact_read", input: { path: "tmp/correlation-graph.json" } },
+      },
+      authBoundaryArtifact: {
+        path: "tmp/auth-boundary.json",
+        inspect: { tool: "browser_artifact_inspect", input: { path: "tmp/auth-boundary.json" } },
+        read: { tool: "browser_artifact_read", input: { path: "tmp/auth-boundary.json" } },
+      },
+      workerFrameArtifact: {
+        path: "tmp/worker-frame.json",
+        inspect: { tool: "browser_artifact_inspect", input: { path: "tmp/worker-frame.json" } },
+        read: { tool: "browser_artifact_read", input: { path: "tmp/worker-frame.json" } },
+      },
+    },
+  },
+  drilldownPlan: {
+    drilldowns: [{ label: "Request detail", tool: "profile_request_detail" }],
+  },
+}, (line) => lines.push(line));
+
+const output = lines.join("\n");
+assert(output.includes("- workflow: professional-appsec"), "summary missing workflow");
+assert(output.includes("- handoff ready: true"), "summary missing handoff readiness");
+assert(output.includes("present: 7"), "summary missing handoff present count");
+assert(output.includes("missing: (none)"), "summary missing handoff missing list");
+assert(output.includes("- artifact coverage ready: true"), "summary missing artifact coverage readiness");
+assert(output.includes("skipped: trace"), "summary missing artifact coverage skipped list");
+assert(output.includes("- professional readiness: true"), "summary missing professional readiness");
+assert(output.includes("evidence ready: true"), "summary missing professional evidence readiness");
+assert(output.includes("next action: browser_workflow_guide"), "summary missing readiness next action");
+assert(output.includes("route artifact count: 5"), "summary missing readiness route artifact count");
+assert(output.includes("route artifact names: f12Navigation, harCompleteness, correlationGraph, authBoundary, workerFrameBoundary"), "summary missing readiness route artifact names");
+assert(output.includes("route first step: browser_artifact_inspect"), "summary missing readiness route first step");
+assert(output.includes("route handoff inspect: browser_artifact_inspect path=tmp/security-research-pack.json"), "summary missing route handoff inspect");
+assert(output.includes("route handoff read: browser_artifact_read path=tmp/security-research-pack.json"), "summary missing route handoff read");
+assert(output.includes("route first drilldown: Request detail: profile_request_detail"), "summary missing route first drilldown");
+assert(output.includes("route first F12 request: data: profile_request_detail requestId=request-1"), "summary missing route first F12 request");
+assert(output.includes("route F12 navigation requests: 2"), "summary missing route F12 navigation count");
+assert(output.includes("route evidence entrypoints: 3"), "summary missing route evidence entrypoint count");
+assert(output.includes("- route artifacts:"), "summary missing route artifact section");
+assert(output.includes("F12 navigation: tmp/f12-navigation-compact.json"), "summary missing compact F12 navigation artifact route");
+assert(output.includes("HAR completeness: tmp/har-completeness.json"), "summary missing compact HAR completeness artifact route");
+assert(output.includes("correlation graph: tmp/correlation-graph.json"), "summary missing correlation graph artifact route");
+assert(output.includes("auth boundary: tmp/auth-boundary.json"), "summary missing auth boundary artifact route");
+assert(output.includes("worker/frame boundary: tmp/worker-frame.json"), "summary missing worker/frame artifact route");
+assert(output.includes("inspect: browser_artifact_inspect"), "summary missing route artifact inspect command");
+assert(output.includes("read: browser_artifact_read"), "summary missing route artifact read command");
+assert(output.includes("- F12 navigation requests: 2"), "summary missing F12 navigation request count");
+assert(output.includes("first request detail: data: profile_request_detail requestId=request-1"), "summary missing F12 navigation request detail");
+assert(output.includes("browser_open -> browser_capture -> browser_inspect -> browser_security_pack -> drilldownPlan"), "summary missing workflow path");
+assert(output.includes("- agent entry mode: facade-first"), "summary missing agent entry mode");
+assert(output.includes("first call: browser_professional_readiness"), "summary missing recommended first call");
+assert(output.includes("professional path: browser_open -> browser_capture -> browser_inspect -> browser_security_pack"), "summary missing agent professional path");
+assert(output.includes("- capture:"), "summary missing capture section");
+assert(output.includes("trafficCount: 2"), "summary missing capture traffic count");
+assert(output.includes("research-pack=1"), "summary missing artifact kind counts");
+assert(output.includes("browser_artifact_inspect path=tmp/security-research-pack.json"), "summary missing handoff inspect command");
+assert(output.includes("browser_artifact_read path=tmp/security-research-pack.json"), "summary missing handoff read command");
+assert(output.includes("- first F12 request detail:"), "summary missing first F12 request detail section");
+assert(output.includes("requestId: request-1"), "summary missing first F12 request id");
+assert(output.includes("sections: overview, headers, payload, cookies, timing, initiator, redirects, security"), "summary missing first F12 request sections");
+assert(output.includes("request headers: 6"), "summary missing first F12 request header count");
+assert(output.includes("body readable: true"), "summary missing first F12 request body readability");
+assert(output.includes("Request detail: profile_request_detail"), "summary missing first drilldown");
+
+// ── adaptPackForReport + demo report generation ────────────────────────────
+const mockPack = {
+  backend: "managed-cdp",
+  page: { url: "https://example.com" },
+  summary: {
+    url: "https://example.com",
+    requestCount: 2,
+    failedRequestCount: 0,
+    consoleEntryCount: 1,
+    handoffReady: true,
+    handoffMissing: [],
+    artifactCoverageReady: true,
+    artifactCoverageMissing: [],
+    artifactCoverageSkipped: ["trace"],
+    harPath: "tmp/example.har",
+    researchPackPath: "tmp/security-research-pack.json",
+    drilldownPlanPath: "tmp/drilldown-plan.json",
+    capture: {
+      startedAt: "2026-05-19T00:00:00.000Z",
+      stoppedAt: null,
+    },
+  },
+  f12Navigation: {
+    requestNodeCount: 2,
+    firstDetailRoute: {
+      tool: "profile_request_detail",
+      input: { requestId: "request-1" },
+    },
+  },
+  firstF12RequestDetail: {
+    requestId: "request-1",
+    status: 200,
+    sectionAvailability: { headers: true },
+    sections: { headers: { requestHeaderCount: 6, responseHeaderCount: 4 } },
+  },
+  handoffCompleteness: { ready: true, presentCount: 7, missing: [] },
+  artifactCoverage: { ready: true, missing: [], skipped: ["trace"] },
+  professionalReadiness: {
+    ready: true,
+    evidenceReady: true,
+    missing: [],
+    objectiveBoundary: "Collect browser evidence only; does not classify findings as vulnerabilities.",
+    routeArtifacts: {
+      f12Navigation: {
+        path: "tmp/f12-navigation.json",
+        inspect: { tool: "browser_artifact_inspect", input: { path: "tmp/f12-navigation.json" } },
+        read: { tool: "browser_artifact_read", input: { path: "tmp/f12-navigation.json" } },
+      },
+    },
+    routeSummary: {
+      latestHandoffRead: {
+        tool: "browser_artifact_read",
+        input: { path: "tmp/security-research-pack.json", mode: "line", startLine: 1, maxLines: 120 },
+      },
+      firstF12RequestDetail: {
+        tool: "profile_request_detail",
+        input: { requestId: "request-1" },
+      },
+    },
+  },
+  drilldownPlan: {
+    drilldowns: [
+      { label: "Request detail", tool: "profile_request_detail", input: { requestId: "request-1" } },
+    ],
+  },
+};
+
+const adapted = adaptPackForReport(mockPack, "researcher");
+assert(adapted.backend === "managed-cdp", "adaptPackForReport lost backend");
+assert(adapted.profile === "researcher", "adaptPackForReport lost profile");
+assert(adapted.url === "https://example.com", "adaptPackForReport lost url");
+assert(adapted.artifactPaths.researchPackPath === "tmp/security-research-pack.json", "adaptPackForReport lost researchPackPath");
+assert(adapted.operatorHandoff.firstRead?.route?.tool === "browser_artifact_read", "adaptPackForReport missing firstRead route");
+assert(adapted.operatorHandoff.routeArtifacts.length >= 1, "adaptPackForReport missing route artifacts");
+assert(adapted.operatorHandoff.drilldowns.length >= 1, "adaptPackForReport missing drilldowns");
+assert(adapted.firstF12RequestDetail.headerSummary?.requestHeaderCount === 6, "adaptPackForReport lost headerSummary");
+
+const tempDir = mkdtempSync(join(tmpdir(), "cli-smoke-report-"));
+try {
+  const { writeFileSync } = await import("node:fs");
+  const reportPath = join(tempDir, "operator-demo-report.md");
+  const md = buildOperatorDemoReport(adapted);
+  writeFileSync(reportPath, md, "utf8");
+
+  assert(md.length > 0, "demo report from adapter is empty");
+  assert(md.includes("## Operator Handoff"), "demo report missing Operator Handoff");
+  assert(md.includes("## Objective Boundary"), "demo report missing Objective Boundary");
+  assert(md.includes("browser_artifact_read"), "demo report missing browser_artifact_read");
+  assert(md.includes("tmp/security-research-pack.json"), "demo report missing artifact path");
+  assert(!md.toLowerCase().includes("vulnerability found"), "demo report contains forbidden text 'vulnerability found'");
+  assert(!md.toLowerCase().includes("high risk"), "demo report contains forbidden text 'high risk'");
+  assert(!md.toLowerCase().includes("exploitable"), "demo report contains forbidden text 'exploitable'");
+
+  const fromDisk = readFileSync(reportPath, "utf8");
+  assert(fromDisk === md, "demo report written to disk does not match generated content");
+} finally {
+  rmSync(tempDir, { recursive: true, force: true });
+}
+
+console.log("Research pack CLI smoke passed");

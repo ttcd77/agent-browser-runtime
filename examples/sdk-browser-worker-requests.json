@@ -1,0 +1,50 @@
+{
+  "schema": "agent-browser-runtime.sdk-browser-worker-requests.v1",
+  "runtime": {
+    "baseUrlEnv": "AGENT_BROWSER_RUNTIME_URL",
+    "defaultBaseUrl": "http://127.0.0.1:17335"
+  },
+  "requests": [
+    {
+      "type": "browser_runtime_call",
+      "toolName": "browser_open",
+      "profile": "demo-fixture",
+      "params": {
+        "url": "https://example.com",
+        "waitMs": 1000
+      },
+      "reason": "Open an authorized page in a target-scoped Browser Worker profile."
+    },
+    {
+      "type": "browser_runtime_call",
+      "toolName": "browser_capture",
+      "profile": "demo-fixture",
+      "params": {
+        "action": "start",
+        "label": "demo-capture"
+      },
+      "reason": "Start objective F12-style capture before interacting with the page."
+    },
+    {
+      "type": "browser_runtime_call",
+      "toolName": "browser_inspect",
+      "profile": "demo-fixture",
+      "params": {
+        "focus": "overview"
+      },
+      "reason": "Collect a bounded first-screen route summary for the agent."
+    },
+    {
+      "type": "browser_runtime_call",
+      "toolName": "browser_security_pack",
+      "profile": "demo-fixture",
+      "params": {
+        "includeHar": true,
+        "includeTrace": true,
+        "includeApplicationExport": true
+      },
+      "reason": "Create a portable objective evidence pack with local artifact paths."
+    }
+  ],
+  "objectiveBoundary": "These requests collect browser evidence. They do not classify vulnerabilities or replace human or model reasoning."
+}

@@ -1,0 +1,23 @@
+{
+  "plugins": {
+    "load": {
+      "paths": [
+        "C:/path/to/agent-browser-runtime/dist/plugins/cdp-traffic-capture/index.js",
+        "C:/path/to/agent-browser-runtime/dist/plugins/browser-profile-pool/index.js"
+      ]
+    }
+  },
+  "browser": {
+    "profiles": {
+      "demo-attacker": {
+        "cdpUrl": "http://127.0.0.1:9326/demo-attacker"
+      },
+      "demo-victim": {
+        "cdpUrl": "http://127.0.0.1:9326/demo-victim"
+      },
+      "demo-clean": {
+        "cdpUrl": "http://127.0.0.1:9326/demo-clean"
+      }
+    }
+  }
+}

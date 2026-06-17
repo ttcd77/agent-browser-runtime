@@ -1,0 +1,56 @@
+# Test files
+**/*.test.mjs
+**/*.test.js
+**/*.test.ts
+**/__fixtures__/
+
+# Internal modules — not part of the public API
+scripts/lib/openclaw-shim/
+scripts/lib/hub-client/
+
+# Runtime state
+tmp/
+logs/
+.env
+.env.*
+
+# Internal research and agent notes
+research/
+feedback/
+
+# TypeScript sources (compiled output in dist/ is included)
+src/
+
+# CI/dev config
+.github/
+.gitattributes
+.editorconfig
+tsconfig.json
+CLAUDE.md
+
+# Test/smoke scripts (keep core scripts/ for bin entrypoints)
+scripts/*.smoke.mjs
+scripts/demo-fixture-smoke.mjs
+scripts/devtools-contract-check.mjs
+scripts/devtools-f12-smoke.mjs
+scripts/jwt-forge-smoke.mjs
+scripts/live-browser-smoke.mjs
+scripts/mcp-server-smoke.mjs
+scripts/oob-smoke.mjs
+scripts/personal-chrome-smoke.mjs
+scripts/product-smoke.mjs
+scripts/professional-appsec-smoke.mjs
+scripts/raw-request-smoke.mjs
+scripts/agent-server-smoke.mjs
+scripts/browser-worker-smoke.mjs
+
+# Scorecard / internal tooling
+scripts/professional-scorecard.mjs
+scripts/stealth-scorecard.mjs
+scripts/open-source-readiness.mjs
+
+# Build artifacts inside dist that are test files
+dist/**/*.test.js
+dist/**/*.test.d.ts
+dist/**/*.test.js.map
+dist/**/*.test.d.ts.map

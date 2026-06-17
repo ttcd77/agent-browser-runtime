@@ -1,0 +1,296 @@
+# Agent Operator Runbook
+
+This runbook is for an AI agent using Agent Browser Runtime professionally.
+
+## First Principle
+
+The runtime is an evidence tool. It reports browser facts, artifact paths, capture
+boundaries, and unavailable data. It does not decide whether something is a
+vulnerability.
+
+## Default Workflow
+
+For professional AppSec work, the default route is:
+
+```text
+browser_open -> browser_capture -> browser_inspect -> browser_security_pack -> drilldownPlan
+```
+
+You can retrieve this as machine-readable instructions:
+
+```bash
+curl -X POST http://127.0.0.1:17335/tool/devtools_workflow_guide \
+  -H "content-type: application/json" \
+  -d "{\"profile\":\"default\",\"task\":\"professional-appsec\"}"
+```
+
+1. Check backend capability.
+
+```bash
+curl -X POST http://127.0.0.1:17335/tool/devtools_backend_capabilities \
+  -H "content-type: application/json" \
+  -d "{\"profile\":\"default\"}"
+```
+
+Optional readiness check:
+
+```bash
+curl -X POST http://127.0.0.1:17335/tool/devtools_professional_readiness \
+  -H "content-type: application/json" \
+  -d "{\"profile\":\"default\"}"
+```
+
+This reports mechanical workflow/evidence readiness and next tool calls. It is
+not a vulnerability or impact assessment.
+
+If `routeSummary` is present, use it before scanning `nextActions` or the full
+artifact index. It gives the first step, latest handoff inspect/read commands,
+the first concrete drilldown, and the number of high-level evidence entrypoints.
+It is routing metadata only, not analysis.
+
+The same readiness tool is also listed by `devtools_workflow_guide` for
+`task="professional-appsec"` and by the `professionalWorkflow` summary returned
+from `browser_inspect`.
+
+2. Open or attach to a page.
+
+```bash
+curl -X POST http://127.0.0.1:17335/tool/browser_open \
+  -H "content-type: application/json" \
+  -d "{\"profile\":\"default\",\"url\":\"https://example.com\"}"
+```
+
+3. Start capture before reproducing behavior.
+
+```bash
+curl -X POST http://127.0.0.1:17335/tool/browser_capture \
+  -H "content-type: application/json" \
+  -d "{\"profile\":\"default\",\"action\":\"start\",\"clear\":true,\"label\":\"first-pass\"}"
+```
+
+4. Interact through the facade.
+
+```bash
+curl -X POST http://127.0.0.1:17335/tool/browser_act \
+  -H "content-type: application/json" \
+  -d "{\"profile\":\"default\",\"action\":\"snapshot\"}"
+```
+
+5. Inspect by focus area instead of guessing tools.
+
+```bash
+curl -X POST http://127.0.0.1:17335/tool/browser_inspect \
+  -H "content-type: application/json" \
+  -d "{\"profile\":\"default\",\"focus\":\"overview\",\"limit\":10}"
+```
+
+Read `summary`, `completeness`, `nextTools`, and `toolPlan` before drilling
+down. If data is missing, decide whether a reload/capture boundary is needed.
+
+## Network Table Drilldown
+
+Use `devtools_network_summary` for first-pass counts. When the table is large,
+use `devtools_network_log` or `devtools_network_timeline` with filters instead
+of asking the model to scan everything:
+
+```bash
+curl -X POST http://127.0.0.1:17335/tool/devtools_network_log \
+  -H "content-type: application/json" \
+  -d "{\"profile\":\"default\",\"url_contains\":\"/api/\",\"status_min\":200,\"status_max\":299,\"resource_type\":\"Fetch\",\"sort_by\":\"start\",\"sort_dir\":\"asc\",\"limit\":50}"
+```
+
+Useful objective filters: `url_contains`, `hostname`, `method`, `status`,
+`status_min`, `status_max`, `resource_type`, `mime_contains`, `failed`,
+`redirected`, `from_cache`, `from_service_worker`, `has_request_body`,
+`has_response_body`, `request_header`, and `response_header`. Header filters use
+`{"name":"content-type","valueContains":"json"}`. The tool returns
+`filtersApplied` so the evidence record shows how the table was reduced.
+
+## Redirect Drilldown
+
+Use `browser_inspect` or `devtools_network_summary` first. If a row reports a
+redirect chain, call:
+
+```bash
+curl -X POST http://127.0.0.1:17335/tool/devtools_request_detail \
+  -H "content-type: application/json" \
+  -d "{\"profile\":\"default\",\"requestId\":\"<request-id>\"}"
+```
+
+Read `redirectChain`, `status`, response headers, `initiator`, and
+`initiatorSourceContext` together. The runtime reports the chain Chrome observed
+during capture; it does not infer missing historical redirects from cache or
+server logs.
+
+## Request Replay Boundary
+
+`devtools_request_replay` and `devtools_request_replay_batch` replay captured
+requests with browser `fetch` from the current page context. Always read
+`replayBoundary`:
+
+- `headerHandling.skippedHeaders` explains headers the browser refused to send.
+- `bodyHandling` explains whether the replay included a body and how it was
+  encoded.
+- `replayTransport` records credential mode, redirect mode, cache mode, method,
+  and URL.
+- `captureBoundaries` states what this replay cannot prove: it is not a raw
+  socket/TLS/HTTP2-level reproduction.
+
+Use replay output as evidence for follow-up reasoning, not as a standalone
+finding.
+
+## Trace Drilldown
+
+Capture a short trace around the smallest reproducible action:
+
+```bash
+curl -X POST http://127.0.0.1:17335/tool/devtools_chrome_trace \
+  -H "content-type: application/json" \
+  -d "{\"profile\":\"default\",\"durationMs\":1000,\"maxEvents\":20}"
+```
+
+Then query by category, event name, duration, thread, or time range:
+
+```bash
+curl -X POST http://127.0.0.1:17335/tool/devtools_trace_query \
+  -H "content-type: application/json" \
+  -d "{\"profile\":\"default\",\"tracePath\":\"<trace-path>\",\"minDurationMs\":5,\"contextEvents\":2}"
+```
+
+`contextWindows` returns neighboring events on the same trace thread around the
+first matched events. Use it like the Performance panel's local context: helpful
+for orientation, but not causal proof by itself.
+
+## Consuming the Operator Handoff
+
+When the example or another orchestrator passes an `operatorHandoff` object, use
+it as the entry point instead of scanning the full research pack JSON.
+
+```
+operatorHandoff.firstRead.route       → call this first (bounded artifact read)
+operatorHandoff.routeArtifacts[]      → pick the evidence area you need, call inspectRoute or readRoute
+operatorHandoff.firstRequest          → devtools_request_detail for the first captured request
+operatorHandoff.drilldowns[]          → concrete tool calls for deeper investigation
+operatorHandoff.objectiveBoundary     → reminder: evidence only, no vulnerability conclusions
+```
+
+Step-by-step:
+
+1. **Orient**: call `operatorHandoff.firstRead.route`. This gives the first 120
+   lines of the research pack — enough to see request counts, artifact paths,
+   and capture boundaries without loading the whole file.
+
+2. **Pick an evidence area**: scan `operatorHandoff.routeArtifacts`. Each entry
+   has a `name` (e.g. `f12Navigation`, `harCompleteness`, `correlationGraph`),
+   an `inspectRoute`, and a `readRoute`. Call the route you need.
+
+3. **First request detail**: call `operatorHandoff.firstRequest` directly. It is
+   a ready-to-execute `devtools_request_detail` call with the correct profile and
+   requestId already populated.
+
+4. **Drilldowns**: `operatorHandoff.drilldowns` contains up to three concrete
+   tool calls with labels, tool names, and populated inputs. Use them when the
+   first-pass evidence points to a specific request or artifact.
+
+5. **Objective boundary**: `operatorHandoff.objectiveBoundary` is always
+   `"Collect browser evidence only; do not classify findings as vulnerabilities."`
+   Keep this rule active when reasoning over the evidence.
+
+Do not paste large JSON blobs (full HAR, full trace, full research pack) into
+model context. Use `devtools_artifact_read` with `mode: "line"` and bounded
+`maxLines`, or `devtools_artifact_inspect` to get a structural summary first.
+
+## One-Call Evidence Pack
+
+For a repeatable first-pass evidence package:
+
+```bash
+npm run research:pack -- --url https://example.com --profile researcher
+```
+
+For a local professional gate before handing the tool to another agent or
+reviewer:
+
+```bash
+npm run check:professional
+```
+
+This calls `devtools_security_research_pack` and prints local artifact paths,
+the workflow used, capture status, artifact kind counts, handoff readiness, and
+first drill-down tools. It also prints the readiness route summary so the next
+agent can immediately inspect the latest handoff or run the first concrete
+drilldown. The CLI summary also prints route artifacts for direct
+`devtools_artifact_inspect` / `devtools_artifact_read` follow-up into F12
+navigation, HAR completeness, trace, Application export, evidence bundle,
+drilldown plan, evidence manifest, correlation graph, auth boundary, and
+worker/frame boundary evidence. It also prints `routeArtifactCount` and
+`routeArtifactNames` as a low-token check before expanding the full route map.
+Use `--json` for the full response.
+
+When reading a returned pack, check these fields before deeper analysis:
+
+- `summary.handoffReady`: whether the mechanical handoff checklist is complete.
+- `summary.handoffMissing`: missing handoff components, if any.
+- `handoffCompleteness.checks`: objective checklist for workflow, research pack,
+  drilldown plan, artifact index, evidence timeline, capture status, and F12
+  parity matrix.
+- `summary.researchPackPath`: the saved cross-session handoff JSON.
+- `summary.drilldownPlanPath`: deterministic next tool routes.
+- `summary.capture`: final capture status and observed traffic count.
+- `professionalReadiness.routeSummary`: the low-token resume map, including the
+  first step, latest handoff inspect/read commands, first concrete drilldown, and
+  evidence entrypoint count.
+- `professionalReadiness.routeSummary.*Artifact`: direct inspect/read routes for
+  saved F12 artifacts; use these before loading the full research pack when the
+  next question is about one evidence area.
+- `professionalReadiness.summary.routeArtifactCount` and
+  `professionalReadiness.summary.routeArtifactNames`: quick signal for whether
+  route artifacts exist and which evidence areas are available.
+
+Read the handoff file with bounded artifact tools instead of loading every
+artifact into context:
+
+```bash
+curl -X POST http://127.0.0.1:17335/tool/devtools_artifact_read \
+  -H "content-type: application/json" \
+  -d "{\"profile\":\"researcher\",\"path\":\"<researchPackPath>\",\"mode\":\"line\",\"startLine\":1,\"maxLines\":120}"
+```
+
+## Choosing Tools
+
+Use this order:
+
+1. `browser_*` facade.
+2. `agent_inspect` or `browser_inspect` with a focus area.
+3. `devtools_capability_map` or `devtools_workflow_guide`.
+4. Exact `devtools_*` drill-down tool.
+5. Raw CDP command only when there is no wrapper.
+
+## Backend Choice
+
+Use Personal Profile when the user says:
+
+- "inspect what I am seeing",
+- "use my current browser",
+- "this only happens in my logged-in state".
+
+Use Agent Browser when the task needs:
+
+- clean profile state,
+- repeatable target work,
+- profile-scoped evidence directories,
+- broader direct-CDP coverage.
+
+## Artifact Discipline
+
+Prefer saved paths for large evidence:
+
+- HAR,
+- trace JSON,
+- Application export,
+- evidence bundle,
+- manifest,
+- request correlation graph.
+
+Do not paste large bodies, traces, or heap files into model context. Read or
+query artifacts only when needed.
