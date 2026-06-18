@@ -31,9 +31,9 @@ const PLAYWRIGHT_CHANNEL = process.env.ABR_PLAYWRIGHT_CHANNEL || "chrome";
 function playwrightArgs() {
   const base = ["--disable-blink-features=AutomationControlled"];
   if (minimizeEnabled()) {
-    // Small window at top-left so the brief flash is minimal.
-    // CDP minimize to taskbar immediately after context creation.
-    return [...base, "--window-size=1280,720", "--window-position=0,0"];
+    // Window born off-screen — zero flash, zero focus steal.
+    // CDP then moves it to taskbar with a visible restore position.
+    return [...base, "--window-position=-32000,-32000", "--window-size=1280,720"];
   }
   return [...base, "--start-maximized"];
 }
@@ -45,9 +45,17 @@ async function minimizePlaywrightContext(context) {
     if (!pages.length) return;
     const cdp = await context.newCDPSession(pages[0]);
     try {
+      // Step 1: minimize — window goes from off-screen to taskbar.
+      // No flash because window was never on a visible screen.
       await cdp.send("Browser.setWindowBounds", {
         windowId: 1,
         bounds: { windowState: "minimized" },
+      });
+      // Step 2: set restore bounds while minimized.
+      // Clicking taskbar restores to this position.
+      await cdp.send("Browser.setWindowBounds", {
+        windowId: 1,
+        bounds: { left: 100, top: 100, width: 1280, height: 720 },
       });
     } finally {
       await cdp.detach().catch(() => {});
