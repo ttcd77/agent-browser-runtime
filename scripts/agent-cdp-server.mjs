@@ -401,6 +401,42 @@ async function cdpJson(port, path, init = {}) {
   return await response.json();
 }
 
+async function minimizeBrowserWindow(port) {
+  // Default-minimized: the managed browser stays headful (anti-bot / fingerprint
+  // intact) but the window is immediately minimized so it doesn't steal focus.
+  // Set CDP_BROWSER_START_MINIMIZED=0 to keep the browser window visible on start.
+  if (process.env.CDP_BROWSER_START_MINIMIZED === "0") return;
+  try {
+    // Browser.setWindowBounds with windowState "minimized" — works on
+    // CDP page-target connections (not browser-level). We go through
+    // /json/version to get the browser WebSocket, then Target.getTargets
+    // to find a page, then use that page's session.
+    const version = await cdpJson(port, "/json/version");
+    if (!version?.webSocketDebuggerUrl) return;
+    const browserClient = await CDP({ target: version.webSocketDebuggerUrl });
+    try {
+      const targets = await browserClient.send("Target.getTargets");
+      const pageTarget = targets?.targetInfos?.find(
+        (t) => t.type === "page" && t.url && t.url !== "about:blank",
+      );
+      if (pageTarget) {
+        const session = await browserClient.send("Target.attachToTarget", {
+          targetId: pageTarget.targetId,
+          flatten: true,
+        });
+        await browserClient.send("Browser.setWindowBounds", {
+          windowId: 1, // CDP only ever reports windowId 1
+          bounds: { windowState: "minimized" },
+        }, { sessionId: session.sessionId });
+      }
+    } finally {
+      await browserClient.close().catch(() => {});
+    }
+  } catch {
+    // Best-effort only — never block startup if minimize fails
+  }
+}
+
 async function runBrowserProcessCdpCommand(port, method, commandParams = {}) {
   const versionResponse = await fetch(`http://127.0.0.1:${port}/json/version`);
   if (!versionResponse.ok) {
@@ -5750,6 +5786,7 @@ async function main() {
     });
     cdpPort = await waitForManagedCdpEndpoint({ requestedPort: launchPort, userDataDir });
     browserProcessState.lastLaunchSucceededAt = new Date().toISOString();
+    await minimizeBrowserWindow(cdpPort);
     return child;
   }
 

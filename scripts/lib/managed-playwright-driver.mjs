@@ -174,13 +174,23 @@ export class ManagedPlaywrightDriver {
       this.contexts.set(profileName, entry);
     }
     const pages = entry.context.pages().filter((candidate) => !candidate.isClosed());
+    // Keep the first real page; close only about:blank / newtab leftovers.
+    // Previously ALL extra pages were unconditionally closed, which destroyed
+    // tabs the agent had open for multi-step workflows. Now only clean up the
+    // truly empty ones.
     let page = pages.find((candidate) => {
       const url = candidate.url();
       return url && url !== "about:blank" && url !== "edge://newtab/" && url !== "chrome://newtab/";
     }) || pages[0];
     if (!page) page = await entry.context.newPage();
     for (const extra of pages) {
-      if (extra !== page) await extra.close().catch(() => {});
+      if (extra !== page) {
+        const url = extra.url();
+        if (url === "about:blank" || url === "edge://newtab/" || url === "chrome://newtab/") {
+          await extra.close().catch(() => {});
+        }
+        // Real pages with content are NOT closed — the agent may need them.
+      }
     }
     return {
       profile: profileName,
@@ -255,9 +265,17 @@ export class ManagedPlaywrightDriver {
       try {
         await this.navigate(profileName, params);
       } catch (err) {
-        // Navigate failed — close the context so this profile doesn't linger
-        // in a half-initialised state (about:blank with no URL).
-        await this.closeProfile(profileName).catch(() => {});
+        // Navigate failures are normal in pentesting (rate limits, WAF, captchas).
+        // Do NOT close the profile context — that destroys session cookies and
+        // forces a full browser relaunch on next retry, producing the "open, close,
+        // open, close" loop. Instead, just clean up only stale about:blank pages.
+        const pages = handle.context.pages().filter((candidate) => !candidate.isClosed());
+        for (const p of pages) {
+          const url = p.url();
+          if (url === "about:blank" || url === "edge://newtab/" || url === "chrome://newtab/") {
+            await p.close().catch(() => {});
+          }
+        }
         throw err;
       }
     }
