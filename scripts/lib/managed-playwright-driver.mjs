@@ -1,6 +1,5 @@
 import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
-import { execFile } from "node:child_process";
 import { normalizeProfileName } from "./result-format.mjs";
 
 // ── Minimize helpers ──────────────────────────────────────────────────
@@ -9,33 +8,6 @@ function minimizeEnabled() {
   if (_minimizeEnabled !== null) return _minimizeEnabled;
   _minimizeEnabled = process.env.CDP_BROWSER_START_MINIMIZED !== "0";
   return _minimizeEnabled;
-}
-
-function minimizeChromeWindow(userDataDir) {
-  if (!minimizeEnabled()) return;
-  if (process.platform !== "win32") return;
-  const escaped = userDataDir.replace(/\\/g, "\\\\");
-  const psCmd =
-    `Add-Type -Name W -Namespace C -MemberDefinition '[DllImport("user32.dll")]public static extern bool ShowWindow(IntPtr h,int n);';` +
-    `Get-CimInstance Win32_Process -Filter "Name='chrome.exe'" | ` +
-    `Where-Object { $_.CommandLine -like '*--user-data-dir=${escaped}*' } | ` +
-    `ForEach-Object { $p = Get-Process -Id $_.ProcessId -ErrorAction SilentlyContinue; ` +
-    `if ($p.MainWindowHandle) { [C.W]::ShowWindow($p.MainWindowHandle, 6) | Out-Null } }`;
-  execFile(
-    "powershell.exe",
-    ["-NoProfile", "-NonInteractive", "-Command", psCmd],
-    { timeout: 5000, windowsHide: true },
-    () => { /* fire-and-forget */ },
-  );
-  // Retry after 2s — Chrome window handle may not exist immediately
-  setTimeout(() => {
-    execFile(
-      "powershell.exe",
-      ["-NoProfile", "-NonInteractive", "-Command", psCmd],
-      { timeout: 5000, windowsHide: true },
-      () => {},
-    );
-  }, 2000);
 }
 
 // Install with PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1. Runtime drives the locally
@@ -56,15 +28,45 @@ const PLAYWRIGHT_CHANNEL = process.env.ABR_PLAYWRIGHT_CHANNEL || "chrome";
 // red by stealth-scorecard 2026-06-06. The flag triggers a LOCAL "unsupported
 // command-line flag" infobar, but that is cosmetic: the page/WAF cannot see it.
 // Do NOT remove it to hide the banner — you would re-expose the automation tell.
-// Off-screen position: window renders (headful, anti-bot intact) but does not
-// steal focus.  Taskbar icon stays visible so the user can see & restore it.
-// Set CDP_BROWSER_START_MINIMIZED=0 to leave the browser window visible on-screen.
 function playwrightArgs() {
   const base = ["--disable-blink-features=AutomationControlled"];
   if (minimizeEnabled()) {
+    // Start off-screen so the window never flashes on the user's desktop.
+    // Then minimizePlaywrightContext moves it to the taskbar via CDP.
     return [...base, "--window-position=-32000,-32000", "--window-size=1280,720"];
   }
   return [...base, "--start-maximized"];
+}
+
+/**
+ * Move browser window from off-screen to the taskbar.
+ * launchPersistentContext creates the window off-screen (--window-position=-32000).
+ * This call moves it to the taskbar via CDP so the user can click to restore.
+ */
+async function minimizePlaywrightContext(context) {
+  if (!minimizeEnabled()) return;
+  try {
+    const pages = context.pages().filter((p) => !p.isClosed());
+    if (!pages.length) return;
+    const cdp = await context.newCDPSession(pages[0]);
+    try {
+      // Step 1: move window from off-screen (-32000,-32000) to a valid position.
+      // The window rendered off-screen so user never saw it flash.
+      await cdp.send("Browser.setWindowBounds", {
+        windowId: 1,
+        bounds: { left: 100, top: 100, width: 1280, height: 720, windowState: "normal" },
+      });
+      // Step 2: now minimize to taskbar. User can click taskbar icon to restore.
+      await cdp.send("Browser.setWindowBounds", {
+        windowId: 1,
+        bounds: { windowState: "minimized" },
+      });
+    } finally {
+      await cdp.detach().catch(() => {});
+    }
+  } catch {
+    // Never block on minimize failure
+  }
 }
 
 function actionTimeoutMs(params = {}, fallback = 8000) {
@@ -217,6 +219,7 @@ export class ManagedPlaywrightDriver {
       });
       entry = { context, userDataDir };
       this.contexts.set(profileName, entry);
+      await minimizePlaywrightContext(context);
     }
     const pages = entry.context.pages().filter((candidate) => !candidate.isClosed());
     // Keep the first real page; close only about:blank / newtab leftovers.
