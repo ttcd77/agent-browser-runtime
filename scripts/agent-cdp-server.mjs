@@ -402,10 +402,9 @@ async function cdpJson(port, path, init = {}) {
 }
 
 async function minimizeBrowserWindow(port) {
-  // Default-minimized: the managed browser stays headful (anti-bot / fingerprint
-  // intact) but the window is immediately minimized so it doesn't steal focus.
-  // Set CDP_BROWSER_START_MINIMIZED=0 to keep the browser window visible on start.
-  if (process.env.CDP_BROWSER_START_MINIMIZED === "0") return;
+  // Opt-in: set CDP_BROWSER_START_MINIMIZED=1 to auto-minimize the managed
+  // browser window on launch (headful but not stealing focus).
+  if (process.env.CDP_BROWSER_START_MINIMIZED !== "1") return;
   try {
     // Browser.setWindowBounds with windowState "minimized" — works on
     // CDP page-target connections (not browser-level). We go through
