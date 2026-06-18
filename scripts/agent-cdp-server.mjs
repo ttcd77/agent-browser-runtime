@@ -401,38 +401,52 @@ async function cdpJson(port, path, init = {}) {
   return await response.json();
 }
 
-async function minimizeBrowserWindow(port) {
-  // Opt-in: set CDP_BROWSER_START_MINIMIZED=1 to auto-minimize the managed
-  // browser window on launch (headful but not stealing focus).
-  if (process.env.CDP_BROWSER_START_MINIMIZED !== "1") return;
+async function minimizeBrowserWindow(childPid) {
+  // Default: minimize on launch so the headful browser doesn't steal focus.
+  // Window stays in taskbar — user can see it and restore if needed.
+  // Set CDP_BROWSER_START_MINIMIZED=0 to keep the browser window visible.
+  if (process.env.CDP_BROWSER_START_MINIMIZED === "0") return;
+  if (!childPid) return;
   try {
-    // Browser.setWindowBounds with windowState "minimized" — works on
-    // CDP page-target connections (not browser-level). We go through
-    // /json/version to get the browser WebSocket, then Target.getTargets
-    // to find a page, then use that page's session.
-    const version = await cdpJson(port, "/json/version");
-    if (!version?.webSocketDebuggerUrl) return;
-    const browserClient = await CDP({ target: version.webSocketDebuggerUrl });
-    try {
-      const targets = await browserClient.send("Target.getTargets");
-      const pageTarget = targets?.targetInfos?.find(
-        (t) => t.type === "page" && t.url && t.url !== "about:blank",
-      );
-      if (pageTarget) {
-        const session = await browserClient.send("Target.attachToTarget", {
-          targetId: pageTarget.targetId,
-          flatten: true,
-        });
-        await browserClient.send("Browser.setWindowBounds", {
-          windowId: 1, // CDP only ever reports windowId 1
-          bounds: { windowState: "minimized" },
-        }, { sessionId: session.sessionId });
-      }
-    } finally {
-      await browserClient.close().catch(() => {});
+    if (process.platform === "win32") {
+      // ShowWindow SW_MINIMIZE = 6 — minimizes to taskbar, keeps icon visible.
+      // This is more reliable than CDP Browser.setWindowBounds which can hide
+      // the window entirely (no taskbar entry → user loses visibility).
+      const { execFile } = await import("node:child_process");
+      await new Promise((resolve) => {
+        const ps = execFile(
+          "powershell.exe",
+          [
+            "-NoProfile", "-NonInteractive", "-Command",
+            `Add-Type -Name W -Namespace C -MemberDefinition '[DllImport("user32.dll")]public static extern bool ShowWindow(IntPtr h,int n);';` +
+            `Get-Process -Id ${childPid} -ErrorAction SilentlyContinue | ` +
+            `ForEach-Object { if($_.MainWindowHandle) { [C.W]::ShowWindow($_.MainWindowHandle, 6) | Out-Null } }`,
+          ],
+          { timeout: 5000, windowsHide: true },
+          (err) => resolve(err ? null : true),
+        );
+        ps.on("error", () => resolve(null));
+      });
+      // Fallback retry after a short delay — Chrome may not have created its
+      // window handle yet on the first attempt.
+      await sleep(2000);
+      await new Promise((resolve) => {
+        const ps = execFile(
+          "powershell.exe",
+          [
+            "-NoProfile", "-NonInteractive", "-Command",
+            `Add-Type -Name W -Namespace C -MemberDefinition '[DllImport("user32.dll")]public static extern bool ShowWindow(IntPtr h,int n);';` +
+            `Get-Process -Id ${childPid} -ErrorAction SilentlyContinue | ` +
+            `ForEach-Object { if($_.MainWindowHandle) { [C.W]::ShowWindow($_.MainWindowHandle, 6) | Out-Null } }`,
+          ],
+          { timeout: 5000, windowsHide: true },
+          (err) => resolve(err ? null : true),
+        );
+        ps.on("error", () => resolve(null));
+      });
     }
   } catch {
-    // Best-effort only — never block startup if minimize fails
+    // Best-effort — never block startup if minimize fails
   }
 }
 
@@ -5785,7 +5799,7 @@ async function main() {
     });
     cdpPort = await waitForManagedCdpEndpoint({ requestedPort: launchPort, userDataDir });
     browserProcessState.lastLaunchSucceededAt = new Date().toISOString();
-    await minimizeBrowserWindow(cdpPort);
+    await minimizeBrowserWindow(child.pid);
     return child;
   }
 
