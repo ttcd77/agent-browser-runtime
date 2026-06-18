@@ -31,18 +31,14 @@ const PLAYWRIGHT_CHANNEL = process.env.ABR_PLAYWRIGHT_CHANNEL || "chrome";
 function playwrightArgs() {
   const base = ["--disable-blink-features=AutomationControlled"];
   if (minimizeEnabled()) {
-    // Start off-screen so the window never flashes on the user's desktop.
-    // Then minimizePlaywrightContext moves it to the taskbar via CDP.
-    return [...base, "--window-position=-32000,-32000", "--window-size=1280,720"];
+    // Small window on primary monitor — brief flash, but clicking taskbar
+    // icon always restores to a visible position. Off-screen positioning
+    // breaks taskbar restore because Windows doesn't know where to put it.
+    return [...base, "--window-size=1280,720"];
   }
   return [...base, "--start-maximized"];
 }
 
-/**
- * Move browser window from off-screen to the taskbar.
- * launchPersistentContext creates the window off-screen (--window-position=-32000).
- * This call moves it to the taskbar via CDP so the user can click to restore.
- */
 async function minimizePlaywrightContext(context) {
   if (!minimizeEnabled()) return;
   try {
@@ -50,13 +46,6 @@ async function minimizePlaywrightContext(context) {
     if (!pages.length) return;
     const cdp = await context.newCDPSession(pages[0]);
     try {
-      // Step 1: move window from off-screen (-32000,-32000) to a valid position.
-      // The window rendered off-screen so user never saw it flash.
-      await cdp.send("Browser.setWindowBounds", {
-        windowId: 1,
-        bounds: { left: 100, top: 100, width: 1280, height: 720, windowState: "normal" },
-      });
-      // Step 2: now minimize to taskbar. User can click taskbar icon to restore.
       await cdp.send("Browser.setWindowBounds", {
         windowId: 1,
         bounds: { windowState: "minimized" },
