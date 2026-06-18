@@ -1,5 +1,6 @@
 import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
+import { execSync } from "node:child_process";
 import { normalizeProfileName } from "./result-format.mjs";
 
 // ── Minimize helpers ──────────────────────────────────────────────────
@@ -28,15 +29,37 @@ const PLAYWRIGHT_CHANNEL = process.env.ABR_PLAYWRIGHT_CHANNEL || "chrome";
 // red by stealth-scorecard 2026-06-06. The flag triggers a LOCAL "unsupported
 // command-line flag" infobar, but that is cosmetic: the page/WAF cannot see it.
 // Do NOT remove it to hide the banner — you would re-expose the automation tell.
+// Auto-detect secondary monitor position at first use
+let _secondaryMonitor = null;
+function secondaryMonitor() {
+  if (_secondaryMonitor) return _secondaryMonitor;
+  if (process.env.CDP_BROWSER_SECONDARY_X) {
+    _secondaryMonitor = {
+      x: Number(process.env.CDP_BROWSER_SECONDARY_X),
+      y: Number(process.env.CDP_BROWSER_SECONDARY_Y) || 0,
+    };
+    return _secondaryMonitor;
+  }
+  try {
+    const out = execSync(
+      `powershell -NoProfile -Command "Add-Type -AssemblyName System.Windows.Forms; [System.Windows.Forms.Screen]::AllScreens | Where-Object { -not $_.Primary } | ForEach-Object { $_.Bounds.X; $_.Bounds.Y }"`,
+      { timeout: 3000, windowsHide: true },
+    ).toString().trim();
+    if (out) {
+      const [x, y] = out.split(/\r?\n/).map(Number);
+      _secondaryMonitor = { x: x || 3440, y: y || 0 };
+      return _secondaryMonitor;
+    }
+  } catch { /* fall through */ }
+  _secondaryMonitor = { x: 3440, y: 0 }; // default: right of 3440-wide primary
+  return _secondaryMonitor;
+}
+
 function playwrightArgs() {
   const base = ["--disable-blink-features=AutomationControlled"];
   if (minimizeEnabled()) {
-    // Open on secondary monitor — doesn't steal focus from primary screen.
-    // Default x=1920 (typical right-side external monitor). Override with
-    // CDP_BROWSER_SECONDARY_X / CDP_BROWSER_SECONDARY_Y if your layout differs.
-    const sx = Number(process.env.CDP_BROWSER_SECONDARY_X) || 1920;
-    const sy = Number(process.env.CDP_BROWSER_SECONDARY_Y) || 0;
-    return [...base, `--window-position=${sx},${sy}`, "--window-size=1280,720"];
+    const sm = secondaryMonitor();
+    return [...base, `--window-position=${sm.x},${sm.y}`, "--window-size=1280,720"];
   }
   return [...base, "--start-maximized"];
 }
