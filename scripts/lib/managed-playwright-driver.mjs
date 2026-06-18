@@ -31,36 +31,14 @@ const PLAYWRIGHT_CHANNEL = process.env.ABR_PLAYWRIGHT_CHANNEL || "chrome";
 function playwrightArgs() {
   const base = ["--disable-blink-features=AutomationControlled"];
   if (minimizeEnabled()) {
-    // Window born off-screen — zero flash, zero focus steal.
-    // CDP then moves it to taskbar with a visible restore position.
-    return [...base, "--window-position=-32000,-32000", "--window-size=1280,720"];
+    // Open on secondary monitor — doesn't steal focus from primary screen.
+    // Default x=1920 (typical right-side external monitor). Override with
+    // CDP_BROWSER_SECONDARY_X / CDP_BROWSER_SECONDARY_Y if your layout differs.
+    const sx = Number(process.env.CDP_BROWSER_SECONDARY_X) || 1920;
+    const sy = Number(process.env.CDP_BROWSER_SECONDARY_Y) || 0;
+    return [...base, `--window-position=${sx},${sy}`, "--window-size=1280,720"];
   }
   return [...base, "--start-maximized"];
-}
-
-async function minimizePlaywrightContext(context) {
-  if (!minimizeEnabled()) return;
-  try {
-    const pages = context.pages().filter((p) => !p.isClosed());
-    if (!pages.length) return;
-    const cdp = await context.newCDPSession(pages[0]);
-    try {
-      // Step 1: minimize — window goes from off-screen to taskbar.
-      // No flash because window was never on a visible screen.
-      await cdp.send("Browser.setWindowBounds", {
-        windowId: 1,
-        bounds: { windowState: "minimized" },
-      });
-      // Step 2: set restore bounds while minimized.
-      // Clicking taskbar restores to this position.
-      await cdp.send("Browser.setWindowBounds", {
-        windowId: 1,
-        bounds: { left: 100, top: 100, width: 1280, height: 720 },
-      });
-    } finally {
-      await cdp.detach().catch(() => {});
-    }
-  } catch { /* never block */ }
 }
 
 function actionTimeoutMs(params = {}, fallback = 8000) {
@@ -213,7 +191,6 @@ export class ManagedPlaywrightDriver {
       });
       entry = { context, userDataDir };
       this.contexts.set(profileName, entry);
-      await minimizePlaywrightContext(context);
     }
     const pages = entry.context.pages().filter((candidate) => !candidate.isClosed());
     // Keep the first real page; close only about:blank / newtab leftovers.
