@@ -36,6 +36,20 @@ import { registerDeepEvidenceTools } from "./lib/register-deep-evidence.mjs";
 import { registerCapabilityFacadeTools } from "./lib/register-capability-facades.mjs";
 import { registerAliases } from "./lib/register-aliases.mjs";
 import { registerUnifiedFacades } from "./lib/register-unified-facades.mjs";
+import {
+  workspaceDir,
+  recordToolUsage,
+  getToolUsage,
+  rankTools,
+  loadAgentHelpers,
+  writeAgentHelpers,
+  readAgentHelpersSource,
+  listDomainSkills,
+  readDomainSkill,
+  writeDomainSkill,
+  listDomainSkillHosts,
+  workspaceStatus,
+} from "./lib/agent-workspace.mjs";
 import { truncateText } from "./lib/text-utils.mjs";
 import { prettyPrintJavaScript } from "./lib/pretty-print.mjs";
 import {
@@ -134,6 +148,7 @@ import {
   summarizeF12RequestDetail,
 } from "./lib/research-pack.mjs";
 import { registerScanTools } from "./lib/register-scan-tools.mjs";
+import { registerAgentWorkspaceTools } from "./lib/register-agent-workspace-tools.mjs";
 
 const root = process.cwd();
 const DIRECT_CDP_CORE_DOMAINS = [
@@ -5114,6 +5129,15 @@ function registerStandaloneBrowserTools(tools, cdpPort, profileRegistry, default
   registerUnifiedFacades({ tools, defaultProfileName, profileRegistry, managedPlaywrightDriver, resolveProfile, withManagedPageClient, maybeRoutePersonal, withBackendParameters, rememberActiveBackend, profileTargetStatus, runManagedPlaywrightAction, getLastBoundBackend: () => lastBoundBackend });
 
   registerScanTools({ tools, resolveProfile });
+
+  registerAgentWorkspaceTools({
+    tools,
+    profileRegistry,
+    resolveProfile,
+    cdpPort,
+    managedPlaywrightDriver,
+    maybeRoutePersonal,
+  });
 }
 
 // Profile-port config file the worker maintains (browser.profiles -> cdpPort).
@@ -6106,6 +6130,7 @@ async function main() {
           sendJson(res, 400, validation);
           return;
         }
+        const t0 = Date.now();
         let result;
         try {
           result = await tool.execute("agent-cdp-server", params);
@@ -6113,6 +6138,7 @@ async function main() {
           if (typeof err?.httpStatus === "number") throw err;
           result = toolResult({ ok: false, error: String(err?.message || err), tool: toolName });
         }
+        const durationMs = Date.now() - t0;
         const text = result.content?.[0]?.text ?? "{}";
         const payload = JSON.parse(text);
         // Preserve MCP-shaped content array (e.g. image) so the MCP bridge can pass
@@ -6120,6 +6146,20 @@ async function main() {
         // do not consume _mcp can ignore this field; the original payload is unchanged.
         if (Array.isArray(result.content) && result.content.length > 1) {
           payload._mcp = { content: result.content };
+        }
+        // Agent Workspace: record tool usage for self-improving tool selection
+        if (params?.profile) {
+          try {
+            const pDir = profileRegistry && typeof profileRegistry.profileDir === "function"
+              ? profileRegistry.profileDir(params.profile)
+              : null;
+            if (pDir) {
+              recordToolUsage(pDir, toolName, {
+                ok: payload?.ok !== false,
+                durationMs,
+              });
+            }
+          } catch { /* best-effort telemetry */ }
         }
         sendJson(res, 200, payload);
         return;

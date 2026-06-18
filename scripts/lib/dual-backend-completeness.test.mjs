@@ -120,6 +120,17 @@ const MANAGED_ONLY_TOOLS = new Set([
   "browser_scan_status",
   // Composite / meta tool
   "agent_inspect",
+  // Agent Workspace tools (managed-only: file I/O, tool usage stats, coordinate-click, framework fill)
+  "browser_workspace_status",
+  "browser_agent_helpers_read",
+  "browser_agent_helpers_write",
+  "browser_domain_skills_list",
+  "browser_domain_skills_read",
+  "browser_domain_skills_write",
+  "browser_tool_usage",
+  "browser_click_xy",
+  "browser_fill_framework",
+  "browser_screenshot_drive",
 ]);
 
 // Prefixes that identify dual-backend-capable tool families.
