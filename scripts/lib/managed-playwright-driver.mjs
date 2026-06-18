@@ -59,7 +59,10 @@ function playwrightArgs() {
   const base = ["--disable-blink-features=AutomationControlled"];
   if (minimizeEnabled()) {
     const sm = secondaryMonitor();
-    return [...base, `--window-position=${sm.x},${sm.y}`, "--window-size=1280,720"];
+    // Open on the secondary monitor, sized to fit. Position at the left edge
+    // so it doesn't overlap with the center of the user's secondary display.
+    // Window is headful and interactable but doesn't touch the primary screen.
+    return [...base, `--window-position=${sm.x},0`, "--start-maximized"];
   }
   return [...base, "--start-maximized"];
 }
@@ -214,6 +217,22 @@ export class ManagedPlaywrightDriver {
       });
       entry = { context, userDataDir };
       this.contexts.set(profileName, entry);
+      // Minimize immediately: window appears only on secondary monitor briefly,
+      // then goes to taskbar. Click taskbar icon to restore.
+      if (minimizeEnabled()) {
+        try {
+          const pages = context.pages().filter((p) => !p.isClosed());
+          if (pages.length) {
+            const cdp = await context.newCDPSession(pages[0]);
+            try {
+              await cdp.send("Browser.setWindowBounds", {
+                windowId: 1,
+                bounds: { windowState: "minimized" },
+              });
+            } finally { await cdp.detach().catch(() => {}); }
+          }
+        } catch { /* never block */ }
+      }
     }
     const pages = entry.context.pages().filter((candidate) => !candidate.isClosed());
     // Keep the first real page; close only about:blank / newtab leftovers.
