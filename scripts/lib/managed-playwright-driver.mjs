@@ -31,13 +31,28 @@ const PLAYWRIGHT_CHANNEL = process.env.ABR_PLAYWRIGHT_CHANNEL || "chrome";
 function playwrightArgs() {
   const base = ["--disable-blink-features=AutomationControlled"];
   if (minimizeEnabled()) {
-    // Open off-screen: window renders (headful, anti-bot intact) but never
-    // flashes on the desktop or steals focus. Taskbar icon is visible so
-    // the user knows it's running. To view: click taskbar icon → press
-    // Win+Shift+← or Win+Shift+→ to move it to the current monitor.
-    return [...base, "--window-position=-32000,-32000", "--window-size=1280,720"];
+    // Small window at top-left so the brief flash is minimal.
+    // CDP minimize to taskbar immediately after context creation.
+    return [...base, "--window-size=1280,720", "--window-position=0,0"];
   }
   return [...base, "--start-maximized"];
+}
+
+async function minimizePlaywrightContext(context) {
+  if (!minimizeEnabled()) return;
+  try {
+    const pages = context.pages().filter((p) => !p.isClosed());
+    if (!pages.length) return;
+    const cdp = await context.newCDPSession(pages[0]);
+    try {
+      await cdp.send("Browser.setWindowBounds", {
+        windowId: 1,
+        bounds: { windowState: "minimized" },
+      });
+    } finally {
+      await cdp.detach().catch(() => {});
+    }
+  } catch { /* never block */ }
 }
 
 function actionTimeoutMs(params = {}, fallback = 8000) {
@@ -190,6 +205,7 @@ export class ManagedPlaywrightDriver {
       });
       entry = { context, userDataDir };
       this.contexts.set(profileName, entry);
+      await minimizePlaywrightContext(context);
     }
     const pages = entry.context.pages().filter((candidate) => !candidate.isClosed());
     // Keep the first real page; close only about:blank / newtab leftovers.
