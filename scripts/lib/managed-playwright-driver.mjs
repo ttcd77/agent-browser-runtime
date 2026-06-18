@@ -29,7 +29,7 @@ const PLAYWRIGHT_CHANNEL = process.env.ABR_PLAYWRIGHT_CHANNEL || "chrome";
 // red by stealth-scorecard 2026-06-06. The flag triggers a LOCAL "unsupported
 // command-line flag" infobar, but that is cosmetic: the page/WAF cannot see it.
 // Do NOT remove it to hide the banner — you would re-expose the automation tell.
-// Auto-detect secondary monitor position at first use
+// Auto-detect secondary monitor bounds at first use
 let _secondaryMonitor = null;
 function secondaryMonitor() {
   if (_secondaryMonitor) return _secondaryMonitor;
@@ -37,21 +37,23 @@ function secondaryMonitor() {
     _secondaryMonitor = {
       x: Number(process.env.CDP_BROWSER_SECONDARY_X),
       y: Number(process.env.CDP_BROWSER_SECONDARY_Y) || 0,
+      w: Number(process.env.CDP_BROWSER_SECONDARY_W) || 1920,
+      h: Number(process.env.CDP_BROWSER_SECONDARY_H) || 1080,
     };
     return _secondaryMonitor;
   }
   try {
     const out = execSync(
-      `powershell -NoProfile -Command "Add-Type -AssemblyName System.Windows.Forms; [System.Windows.Forms.Screen]::AllScreens | Where-Object { -not $_.Primary } | ForEach-Object { $_.Bounds.X; $_.Bounds.Y }"`,
+      `powershell -NoProfile -Command "Add-Type -AssemblyName System.Windows.Forms; [System.Windows.Forms.Screen]::AllScreens | Where-Object { -not $_.Primary } | ForEach-Object { $_.Bounds.X; $_.Bounds.Y; $_.Bounds.Width; $_.Bounds.Height }"`,
       { timeout: 3000, windowsHide: true },
     ).toString().trim();
     if (out) {
-      const [x, y] = out.split(/\r?\n/).map(Number);
-      _secondaryMonitor = { x: x || 3440, y: y || 0 };
+      const [x, y, w, h] = out.split(/\r?\n/).map(Number);
+      _secondaryMonitor = { x: x || 3440, y: y || 0, w: w || 1920, h: h || 1080 };
       return _secondaryMonitor;
     }
   } catch { /* fall through */ }
-  _secondaryMonitor = { x: 3440, y: 0 }; // default: right of 3440-wide primary
+  _secondaryMonitor = { x: 3440, y: 0, w: 1920, h: 1080 };
   return _secondaryMonitor;
 }
 
@@ -59,9 +61,10 @@ function playwrightArgs() {
   const base = ["--disable-blink-features=AutomationControlled"];
   if (minimizeEnabled()) {
     const sm = secondaryMonitor();
-    // Small window on the secondary monitor — doesn't flash, doesn't steal
-    // focus, doesn't cover the user's work. Click to interact normally.
-    return [...base, `--window-position=${sm.x},0`, "--window-size=1280,720"];
+    // Top-right corner of secondary monitor (sm.x + sm.w - 480, 0).
+    // Small window, doesn't steal focus, doesn't cover the user's work.
+    const rightX = sm.x + sm.w - 480;
+    return [...base, `--window-position=${rightX},0`, "--window-size=480,360"];
   }
   return [...base, "--start-maximized"];
 }
