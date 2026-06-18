@@ -1,6 +1,42 @@
 import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
+import { execFile } from "node:child_process";
 import { normalizeProfileName } from "./result-format.mjs";
+
+// ── Minimize helpers ──────────────────────────────────────────────────
+let _minimizeEnabled = null;
+function minimizeEnabled() {
+  if (_minimizeEnabled !== null) return _minimizeEnabled;
+  _minimizeEnabled = process.env.CDP_BROWSER_START_MINIMIZED !== "0";
+  return _minimizeEnabled;
+}
+
+function minimizeChromeWindow(userDataDir) {
+  if (!minimizeEnabled()) return;
+  if (process.platform !== "win32") return;
+  const escaped = userDataDir.replace(/\\/g, "\\\\");
+  const psCmd =
+    `Add-Type -Name W -Namespace C -MemberDefinition '[DllImport("user32.dll")]public static extern bool ShowWindow(IntPtr h,int n);';` +
+    `Get-CimInstance Win32_Process -Filter "Name='chrome.exe'" | ` +
+    `Where-Object { $_.CommandLine -like '*--user-data-dir=${escaped}*' } | ` +
+    `ForEach-Object { $p = Get-Process -Id $_.ProcessId -ErrorAction SilentlyContinue; ` +
+    `if ($p.MainWindowHandle) { [C.W]::ShowWindow($p.MainWindowHandle, 6) | Out-Null } }`;
+  execFile(
+    "powershell.exe",
+    ["-NoProfile", "-NonInteractive", "-Command", psCmd],
+    { timeout: 5000, windowsHide: true },
+    () => { /* fire-and-forget */ },
+  );
+  // Retry after 2s — Chrome window handle may not exist immediately
+  setTimeout(() => {
+    execFile(
+      "powershell.exe",
+      ["-NoProfile", "-NonInteractive", "-Command", psCmd],
+      { timeout: 5000, windowsHide: true },
+      () => {},
+    );
+  }, 2000);
+}
 
 // Install with PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1. Runtime drives the locally
 // installed real browser channel, not Playwright's bundled Chromium.
@@ -20,7 +56,16 @@ const PLAYWRIGHT_CHANNEL = process.env.ABR_PLAYWRIGHT_CHANNEL || "chrome";
 // red by stealth-scorecard 2026-06-06. The flag triggers a LOCAL "unsupported
 // command-line flag" infobar, but that is cosmetic: the page/WAF cannot see it.
 // Do NOT remove it to hide the banner — you would re-expose the automation tell.
-const PLAYWRIGHT_ARGS = ["--disable-blink-features=AutomationControlled", "--start-maximized"];
+// Off-screen position: window renders (headful, anti-bot intact) but does not
+// steal focus.  Taskbar icon stays visible so the user can see & restore it.
+// Set CDP_BROWSER_START_MINIMIZED=0 to leave the browser window visible on-screen.
+function playwrightArgs() {
+  const base = ["--disable-blink-features=AutomationControlled"];
+  if (minimizeEnabled()) {
+    return [...base, "--window-position=-32000,-32000", "--window-size=1280,720"];
+  }
+  return [...base, "--start-maximized"];
+}
 
 function actionTimeoutMs(params = {}, fallback = 8000) {
   const raw = params.actionTimeoutMs ?? params.timeoutMs;
@@ -166,7 +211,7 @@ export class ManagedPlaywrightDriver {
       const context = await chromium.launchPersistentContext(userDataDir, {
         channel: PLAYWRIGHT_CHANNEL,
         headless: false,
-        args: PLAYWRIGHT_ARGS,
+        args: playwrightArgs(),
         chromiumSandbox: true,
         viewport: null,
       });
@@ -708,7 +753,7 @@ export class ManagedPlaywrightDriver {
       launch: {
         channel: PLAYWRIGHT_CHANNEL,
         headless: false,
-        args: PLAYWRIGHT_ARGS,
+        args: playwrightArgs(),
         viewport: null,
       },
     };
