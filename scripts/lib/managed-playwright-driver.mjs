@@ -219,19 +219,8 @@ export class ManagedPlaywrightDriver {
       });
       entry = { context, userDataDir };
       this.contexts.set(profileName, entry);
-      // Push to background: SetWindowPos HWND_BOTTOM so the window opens
-      // behind other windows on the secondary monitor without focus steal.
-      if (minimizeEnabled() && process.platform === "win32") {
-        try {
-          const escaped = userDataDir.replace(/\\/g, "\\\\");
-          execSync(
-            `powershell -NoProfile -Command "Add-Type -Name W -Namespace C -MemberDefinition '[DllImport(\\\"user32.dll\\\")]public static extern bool SetWindowPos(IntPtr h,IntPtr a,int x,int y,int w,int h,uint f);';` +
-            `\\$HWND_BOTTOM = [IntPtr]1; \\$SWP_NOACTIVATE = 4; \\$SWP_NOMOVE = 2; \\$SWP_NOSIZE = 1;` +
-            `Get-CimInstance Win32_Process -Filter \\\"Name='chrome.exe'\\\" | Where-Object { \\$_.CommandLine -like '*--user-data-dir=${escaped}*' } | ForEach-Object { \\$p = Get-Process -Id \\$_.ProcessId -ErrorAction SilentlyContinue; if (\\$p.MainWindowHandle) { [C.W]::SetWindowPos(\\$p.MainWindowHandle, \\$HWND_BOTTOM, 0, 0, 0, 0, \\$SWP_NOACTIVATE + \\$SWP_NOMOVE + \\$SWP_NOSIZE) | Out-Null } }"`,
-            { timeout: 5000, windowsHide: true },
-          );
-        } catch { /* best-effort, never block */ }
-      }
+        // Auto-hide after creation: push window behind all others.
+      if (minimizeEnabled()) hideChromeWindow(userDataDir);
     }
     const pages = entry.context.pages().filter((candidate) => !candidate.isClosed());
     // Keep the first real page; close only about:blank / newtab leftovers.
@@ -838,4 +827,28 @@ export class ManagedPlaywrightDriver {
     }
     return rows;
   }
+}
+
+// ── Window visibility helpers (exported for tools) ────────────────────
+
+function _windowPs(userDataDir, action) {
+  if (process.platform !== "win32") return;
+  const escaped = userDataDir.replace(/\\/g, "\\\\");
+  const flag = action === "hide" ? "[IntPtr]1" : "[IntPtr](-1)"; // HWND_BOTTOM / HWND_TOP
+  execSync(
+    `powershell -NoProfile -Command "Add-Type -Name W -Namespace C -MemberDefinition '[DllImport(\\\"user32.dll\\\")]public static extern bool SetWindowPos(IntPtr h,IntPtr a,int x,int y,int w,int h,uint f);';` +
+    `\\$flag = ${flag}; \\$SWP_NOACTIVATE = 4; \\$SWP_NOMOVE = 2; \\$SWP_NOSIZE = 1;` +
+    `Get-CimInstance Win32_Process -Filter \\\"Name='chrome.exe'\\\" | Where-Object { \\$_.CommandLine -like '*--user-data-dir=${escaped}*' } | ForEach-Object { \\$p = Get-Process -Id \\$_.ProcessId -ErrorAction SilentlyContinue; if (\\$p.MainWindowHandle) { [C.W]::SetWindowPos(\\$p.MainWindowHandle, \\$flag, 0, 0, 0, 0, \\$SWP_NOACTIVATE + \\$SWP_NOMOVE + \\$SWP_NOSIZE) | Out-Null } }"`,
+    { timeout: 5000, windowsHide: true },
+  );
+}
+
+/** Push Chrome window to background (HWND_BOTTOM). Fire-and-forget, never throws. */
+export function hideChromeWindow(userDataDir) {
+  try { _windowPs(userDataDir, "hide"); } catch { /* never block */ }
+}
+
+/** Bring Chrome window to foreground (HWND_TOP). Fire-and-forget, never throws. */
+export function showChromeWindow(userDataDir) {
+  try { _windowPs(userDataDir, "show"); } catch { /* never block */ }
 }

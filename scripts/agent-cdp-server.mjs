@@ -11,7 +11,7 @@ import { createFeedbackNote, listFeedbackNotes } from "./lib/feedback-notes.mjs"
 import { rawSocketRequest, rawRaceRequest } from "./lib/raw-request.mjs";
 import { forgeJwt } from "./lib/jwt-forge.mjs";
 import { oobAlloc, oobPoll } from "./lib/oob-client.mjs";
-import { ManagedPlaywrightDriver } from "./lib/managed-playwright-driver.mjs";
+import { ManagedPlaywrightDriver, hideChromeWindow, showChromeWindow } from "./lib/managed-playwright-driver.mjs";
 import {
   buildAttackIntruderEvidence,
   buildAttackIntruderResults,
@@ -5186,6 +5186,50 @@ function registerStandaloneBrowserTools(tools, cdpPort, profileRegistry, default
     cdpPort,
     managedPlaywrightDriver,
     maybeRoutePersonal,
+  });
+
+  // ── Window visibility toggle ─────────────────────────────────────
+  tools.set("browser_window_hide", {
+    name: "browser_window_hide",
+    description:
+      "Push the managed browser window to the background (HWND_BOTTOM). " +
+      "Use after agent interactions to keep the window from popping to the foreground. " +
+      "The window stays open and functional — just behind other windows.",
+    parameters: {
+      type: "object",
+      properties: {
+        profile: { type: "string", description: "Profile name." },
+      },
+    },
+    async execute(_id, params) {
+      const profile = await resolveProfile(params?.profile);
+      const dir = profileRegistry.profileDir(profile.name);
+      const userDataDir = join(dir, "..", "..", "playwright-profiles", profile.name);
+      hideChromeWindow(userDataDir);
+      // Also try the managed browser identity dir
+      try { hideChromeWindow(join(dir, "..", "..", "browser-identities", profile.name)); } catch {}
+      return { content: [{ type: "text", text: JSON.stringify({ ok: true, profile: profile.name, action: "hide" }) }] };
+    },
+  });
+
+  tools.set("browser_window_show", {
+    name: "browser_window_show",
+    description:
+      "Bring the managed browser window to the foreground (HWND_TOP). " +
+      "Use when you want to look at what the agent is doing in the browser.",
+    parameters: {
+      type: "object",
+      properties: {
+        profile: { type: "string", description: "Profile name." },
+      },
+    },
+    async execute(_id, params) {
+      const profile = await resolveProfile(params?.profile);
+      const dir = profileRegistry.profileDir(profile.name);
+      const userDataDir = join(dir, "..", "..", "playwright-profiles", profile.name);
+      showChromeWindow(userDataDir);
+      return { content: [{ type: "text", text: JSON.stringify({ ok: true, profile: profile.name, action: "show" }) }] };
+    },
   });
 }
 
