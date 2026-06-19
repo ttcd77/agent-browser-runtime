@@ -60,9 +60,14 @@ function secondaryMonitor() {
 function playwrightArgs() {
   const base = ["--disable-blink-features=AutomationControlled"];
   if (minimizeEnabled()) {
+    const mode = process.env.CDP_BROWSER_START_MINIMIZED || "secondary";
+    if (mode === "offscreen") {
+      // Window at -32000,-32000: completely off-screen, zero flash.
+      // Use Win+Shift+→ to move to current monitor when needed.
+      return [...base, "--window-position=-32000,-32000", "--window-size=1280,720"];
+    }
+    // Default: top-right corner of secondary monitor.
     const sm = secondaryMonitor();
-    // Top-right corner of secondary monitor (sm.x + sm.w - 480, 0).
-    // Small window, doesn't steal focus, doesn't cover the user's work.
     const rightX = sm.x + sm.w - 480;
     return [...base, `--window-position=${rightX},0`, "--window-size=480,360"];
   }
