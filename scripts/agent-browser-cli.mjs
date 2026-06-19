@@ -7128,6 +7128,14 @@ async function runCommand(args, flags) {
     return await callTool(server, tool, payloadFromFlags(flags));
   }
 
+  // Shortcut: agent-browser window hide|show --profile <name>
+  if (command === "window") {
+    const action = args[1] || "show";
+    if (!["hide", "show"].includes(action)) throw new Error("window action must be hide or show");
+    const toolName = `browser_window_${action}`;
+    return await callTool(server, toolName, payloadFromFlags(flags));
+  }
+
   if (command === "raw") {
     const toolName = args[1];
     if (!toolName) throw new Error("raw requires a browser_* / profile_* / attack_* tool name");
