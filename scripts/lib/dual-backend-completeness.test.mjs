@@ -131,8 +131,6 @@ const MANAGED_ONLY_TOOLS = new Set([
   "browser_click_xy",
   "browser_fill_framework",
   "browser_screenshot_drive",
-  "browser_window_hide",
-  "browser_window_show",
 ]);
 
 // Prefixes that identify dual-backend-capable tool families.

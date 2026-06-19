@@ -848,7 +848,3 @@ export function hideChromeWindow(userDataDir) {
   try { _windowPs(userDataDir, "hide"); } catch { /* never block */ }
 }
 
-/** Bring Chrome window to foreground (HWND_TOP). Fire-and-forget, never throws. */
-export function showChromeWindow(userDataDir) {
-  try { _windowPs(userDataDir, "show"); } catch { /* never block */ }
-}
