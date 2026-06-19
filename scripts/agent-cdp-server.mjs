@@ -2,7 +2,7 @@
 import { homedir } from "node:os";
 import { dirname, join, resolve, sep } from "node:path";
 import { pathToFileURL } from "node:url";
-import { spawn, execFile } from "node:child_process";
+import { spawn, execFile, execSync } from "node:child_process";
 import { createHash, timingSafeEqual } from "node:crypto";
 import http from "node:http";
 import CDP from "chrome-remote-interface";
@@ -5203,11 +5203,9 @@ function registerStandaloneBrowserTools(tools, cdpPort, profileRegistry, default
     },
     async execute(_id, params) {
       const profile = await resolveProfile(params?.profile);
-      const dir = profileRegistry.profileDir(profile.name);
-      const userDataDir = join(dir, "..", "..", "playwright-profiles", profile.name);
+      const pDir = profileRegistry.profileDir(profile.name);
+      const userDataDir = join(pDir, "..", "..", "playwright-profiles", profile.name);
       hideChromeWindow(userDataDir);
-      // Also try the managed browser identity dir
-      try { hideChromeWindow(join(dir, "..", "..", "browser-identities", profile.name)); } catch {}
       return { content: [{ type: "text", text: JSON.stringify({ ok: true, profile: profile.name, action: "hide" }) }] };
     },
   });
@@ -5224,9 +5222,31 @@ function registerStandaloneBrowserTools(tools, cdpPort, profileRegistry, default
       },
     },
     async execute(_id, params) {
+      // If no profile given, find any Chrome process under playwright-profiles
+      // and bring its window to the foreground.
+      if (!params?.profile) {
+        try {
+          const out = execSync(
+            `powershell -NoProfile -Command "Get-CimInstance Win32_Process -Filter 'Name=''chrome.exe''' | Where-Object { $_.CommandLine -like '*playwright-profiles*' } | ForEach-Object { $_.ProcessId }"`,
+            { timeout: 3000, windowsHide: true },
+          ).toString().trim();
+          if (out) {
+            for (const pid of out.split(/\r?\n/)) {
+              try {
+                execSync(
+                  `powershell -NoProfile -Command "Add-Type -Name W -Namespace C -MemberDefinition '[DllImport(\\\"user32.dll\\\")]public static extern bool SetWindowPos(IntPtr h,IntPtr a,int x,int y,int w,int h,uint f);'; $HWND_TOP = [IntPtr](-1); $SWP_SHOWWINDOW = 0x40; $SWP_NOACTIVATE = 4; $p = Get-Process -Id ${pid} -ErrorAction SilentlyContinue; if ($p.MainWindowHandle) { [C.W]::SetWindowPos($p.MainWindowHandle, $HWND_TOP, 0, 0, 0, 0, $SWP_SHOWWINDOW) | Out-Null }"`,
+                  { timeout: 3000, windowsHide: true },
+                );
+              } catch {}
+            }
+            return { content: [{ type: "text", text: JSON.stringify({ ok: true, action: "show", pids: out.split(/\r?\n/) }) }] };
+          }
+        } catch {}
+        return { content: [{ type: "text", text: JSON.stringify({ ok: false, error: "no active playwright browser found" }) }] };
+      }
       const profile = await resolveProfile(params?.profile);
-      const dir = profileRegistry.profileDir(profile.name);
-      const userDataDir = join(dir, "..", "..", "playwright-profiles", profile.name);
+      const pDir = profileRegistry.profileDir(profile.name);
+      const userDataDir = join(pDir, "..", "..", "playwright-profiles", profile.name);
       showChromeWindow(userDataDir);
       return { content: [{ type: "text", text: JSON.stringify({ ok: true, profile: profile.name, action: "show" }) }] };
     },
