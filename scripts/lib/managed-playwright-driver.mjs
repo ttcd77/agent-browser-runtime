@@ -58,18 +58,31 @@ function secondaryMonitor() {
 }
 
 function playwrightArgs() {
-  const base = ["--disable-blink-features=AutomationControlled"];
+  // --lang sets Accept-Language + navigator.language. Default Chrome inherits the
+  // OS locale (zh-CN on this box), which mismatches an English-site visit and is a
+  // geo/locale-coherence flag for DataDome/Akamai-class anti-bot. Pin a neutral
+  // en-US. Override per target with ABR_BROWSER_LANG.
+  const lang = process.env.ABR_BROWSER_LANG || "en-US";
+  const base = ["--disable-blink-features=AutomationControlled", `--lang=${lang}`];
+  // Human-plausible window size. A 480x360 corner window (or Playwright's default
+  // 1280x720) is itself a behavioral bot tell — real users don't browse in a
+  // 480x360 viewport. Keep a normal 1366x768 window even in background mode, just
+  // parked on the secondary monitor so it doesn't cover the user's primary screen.
+  // viewport:null (set at launch) makes the page report this real OS size.
+  // ponytail: 1366x768 hardcoded; ABR_WINDOW_W/H override if a target needs another size.
+  const W = Number(process.env.ABR_WINDOW_W) || 1366;
+  const H = Number(process.env.ABR_WINDOW_H) || 768;
   if (minimizeEnabled()) {
     const mode = process.env.CDP_BROWSER_START_MINIMIZED || "secondary";
     if (mode === "offscreen") {
-      // Window at -32000,-32000: completely off-screen, zero flash.
-      // Use Win+Shift+→ to move to current monitor when needed.
-      return [...base, "--window-position=-32000,-32000", "--window-size=1280,720"];
+      // Off-screen (-32000): zero flash. visibilityState stays "visible" (only a
+      // minimized window / backgrounded tab flips it to hidden), so a real size
+      // still matters for the fingerprint.
+      return [...base, "--window-position=-32000,-32000", `--window-size=${W},${H}`];
     }
-    // Default: top-right corner of secondary monitor.
+    // Default: normal-size window parked on the secondary monitor, fully on-screen.
     const sm = secondaryMonitor();
-    const rightX = sm.x + sm.w - 480;
-    return [...base, `--window-position=${rightX},0`, "--window-size=480,360"];
+    return [...base, `--window-position=${sm.x + 40},${sm.y + 40}`, `--window-size=${W},${H}`];
   }
   return [...base, "--start-maximized"];
 }
@@ -221,6 +234,10 @@ export class ManagedPlaywrightDriver {
         args: playwrightArgs(),
         chromiumSandbox: true,
         viewport: null,
+        // Coherent English locale: navigator.language + Accept-Language become
+        // en-US instead of the OS default zh-CN, which mismatches an English-site
+        // visit and trips geo/locale coherence checks. Matches --lang in args.
+        locale: process.env.ABR_BROWSER_LANG || "en-US",
       });
       entry = { context, userDataDir };
       this.contexts.set(profileName, entry);

@@ -58,12 +58,20 @@ export function registerInteractionTools(deps) {
 
   tools.set("browser_tabs", {
     name: "browser_tabs",
-    description: "List visible browser tabs available through the local CDP endpoint and show which durable profiles are attached or stale. Use browser_tab_close to close a tab; this tool does not accept action/close/profile parameters (profile param is silently ignored). Returns top-level `tabs` array on both managed and personal backends; `staleProfiles` and `summary` are null on personal (profile registry is in the worker).",
-    parameters: { type: "object", properties: {} },
+    description: "List the LIVE browser tabs — pages open RIGHT NOW. `tabs` is the answer to \"what is open / what am I driving\". `summary` counts durable profiles by state (liveTabs / attachedProfiles / staleProfiles / unboundProfiles). A 'stale' profile is just a registry snapshot of a tab that is ALREADY CLOSED — hundreds pile up on a busy box, so by default `staleProfiles` shows only the 5 most-recently-used (full count is in summary; `staleProfilesOmitted` says how many were hidden). Pass includeStale:true for the whole stale list. Use browser_tab_close to close a tab; profile param is ignored. On personal backend `staleProfiles`/`summary` are null (registry lives in the worker).",
+    parameters: { type: "object", properties: { includeStale: { type: "boolean", description: "Return the full stale-profile list instead of the 5-most-recent preview (default false)." } } },
     async execute(_id, params = {}) {
       const routed = await maybeRoutePersonal("browser_tabs", params);
       if (routed) return toolResult(routed);
       const { pages, profiles, profileNamesByTab } = await profileTargetStatus();
+      // Stale = profile whose last-seen tab is already closed. They accumulate into
+      // the hundreds and bury the (usually 1-2) live tabs above, which is exactly
+      // what makes "what's actually open?" unanswerable. Default to recent-5 + count;
+      // full list only on includeStale. summary keeps the true total either way.
+      const stale = profiles
+        .filter((profile) => profile.status === "stale")
+        .sort((a, b) => String(b.lastUsedAt || "").localeCompare(String(a.lastUsedAt || "")));
+      const shownStale = params?.includeStale === true ? stale : stale.slice(0, 5);
       return toolResult({
         tabs: pages.map((target) => ({
           id: target.id,
@@ -71,17 +79,18 @@ export function registerInteractionTools(deps) {
           url: target.url,
           profiles: profileNamesByTab.get(target.id) || [],
         })),
-        staleProfiles: profiles.filter((profile) => profile.status === "stale").map((profile) => ({
+        staleProfiles: shownStale.map((profile) => ({
           name: profile.name,
           tabId: profile.tabId,
           title: profile.title,
           url: profile.url,
           lastUsedAt: profile.lastUsedAt,
         })),
+        staleProfilesOmitted: stale.length - shownStale.length,
         summary: {
           liveTabs: pages.length,
           attachedProfiles: profiles.filter((profile) => profile.status === "attached").length,
-          staleProfiles: profiles.filter((profile) => profile.status === "stale").length,
+          staleProfiles: stale.length,
           unboundProfiles: profiles.filter((profile) => profile.status === "unbound").length,
         },
       });

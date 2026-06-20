@@ -34,6 +34,11 @@ const TEXT_INLINE_THRESHOLD = 200_000;
 
 const clients = new Map();
 const pending = new Map();
+// Per-agent tab isolation: each `profile` gets its OWN tab in the user's Chrome.
+// Tab-scoped commands inject this tabId so the extension targets that tab instead
+// of whatever the user is currently looking at. Two agents with different profiles
+// never collide with each other — or steal the human's active tab.
+const profileTabs = new Map(); // profile -> tabId
 
 function sendJson(res, status, payload) {
   res.writeHead(status, {
@@ -286,6 +291,46 @@ function rejectPendingForClient(clientId, error) {
     pending.delete(id);
     waiter.reject(error);
   }
+}
+
+// Tools that operate on a SINGLE page get profile->tab isolation. Registry/global
+// tools (list every tab, status, close-by-id, local artifact/trace reads) must NOT
+// be pinned to one tab — exempt them so they still see the whole browser.
+const TAB_ISOLATION_EXEMPT = new Set([
+  "personal_chrome_tabs",
+  "personal_chrome_status",
+  "personal_chrome_tab_close",
+  "personal_chrome_extension_reload",
+  "personal_chrome_trace_query",
+  "personal_chrome_trace_compare",
+  "personal_chrome_artifact_inspect",
+  "personal_chrome_artifact_index",
+  "personal_chrome_artifact_search",
+  "personal_chrome_artifact_read",
+  "personal_chrome_source_map_source_get",
+]);
+
+// Resolve the tab a profile owns, allocating a fresh background tab on first use
+// or if the human closed the previous one. active:false so we never steal focus.
+async function ensureProfileTab(profile) {
+  const existing = profileTabs.get(profile);
+  if (existing != null) {
+    const live = await callExtension("chrome_tabs", {})
+      .then((r) => (r.tabs || []).some((t) => Number(t.id) === Number(existing)))
+      .catch(() => false);
+    if (live) return existing;
+    profileTabs.delete(profile); // human closed it — fall through and re-open
+  }
+  // Seed with the bridge's own local marker page: it's http (passes the
+  // extension's http/https-only guard), never hits the network, and literally
+  // labels the tab with its owning profile. The first real open/navigate moves
+  // it to the target URL.
+  const seedUrl = `http://127.0.0.1:${httpPort}/agent-chrome-marker?profile=${encodeURIComponent(profile)}`;
+  const opened = await callExtension("chrome_open", { url: seedUrl, newTab: true, active: false });
+  const tabId = opened?.tab?.id;
+  if (tabId == null) throw new Error(`could not allocate a tab for profile "${profile}"`);
+  profileTabs.set(profile, tabId);
+  return tabId;
 }
 
 // If the snapshot page.text exceeds the inline threshold, save it to disk and
@@ -3695,6 +3740,16 @@ function postProcessToolResult(toolName, result, params = {}) {
 }
 
 async function callBridgeTool(toolName, params = {}) {
+  // Per-agent tab isolation: a caller that passes `profile` operates in its OWN
+  // tab. Resolve/allocate it once and inject tabId; the inner
+  // facade -> safeBridgeTool -> callBridgeTool re-entry sees tabId already set
+  // (the `== null` guard) and skips re-allocation. No profile -> legacy active-tab.
+  if (params?.profile && params.tabId == null && !TAB_ISOLATION_EXEMPT.has(toolName)) {
+    const tabId = await ensureProfileTab(params.profile);
+    // Agent work stays in the background by default — never yank the human's
+    // focus onto the agent's tab. Caller can pass active:true to surface it.
+    params = { active: false, ...params, tabId };
+  }
   if (toolName === "browser_open") {
     return await browserOpenFacade(params);
   }
