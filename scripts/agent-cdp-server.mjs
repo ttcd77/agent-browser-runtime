@@ -24,9 +24,7 @@ import {
 import { findSourceMatches } from "./lib/source-search.mjs";
 import { buildInitiatorSummary } from "./lib/initiator-summary.mjs";
 import { registerRealtimeHarTools } from "./lib/register-realtime-har.mjs";
-import { registerProfileLifecycleTools } from "./lib/register-profile-lifecycle.mjs";
 import { registerEvidenceConsoleTools } from "./lib/register-evidence-console.mjs";
-import { registerReplayAttackTools } from "./lib/register-replay-attack.mjs";
 import { registerEvidenceCaptureTools } from "./lib/register-evidence-capture.mjs";
 import { registerApplicationStorageTools } from "./lib/register-application-storage.mjs";
 import { registerPageHealthTools } from "./lib/register-page-health.mjs";
@@ -34,7 +32,6 @@ import { registerSnapshotDomTools } from "./lib/register-snapshot-dom.mjs";
 import { registerInteractionTools } from "./lib/register-interaction.mjs";
 import { registerDeepEvidenceTools } from "./lib/register-deep-evidence.mjs";
 import { registerCapabilityFacadeTools } from "./lib/register-capability-facades.mjs";
-import { registerAliases } from "./lib/register-aliases.mjs";
 import { registerUnifiedFacades } from "./lib/register-unified-facades.mjs";
 import {
   workspaceDir,
@@ -147,8 +144,6 @@ import {
   buildResearchPackF12Navigation,
   summarizeF12RequestDetail,
 } from "./lib/research-pack.mjs";
-import { registerScanTools } from "./lib/register-scan-tools.mjs";
-import { registerAgentWorkspaceTools } from "./lib/register-agent-workspace-tools.mjs";
 
 const root = process.cwd();
 const DIRECT_CDP_CORE_DOMAINS = [
@@ -3155,13 +3150,11 @@ function registerStandaloneBrowserTools(tools, cdpPort, profileRegistry, default
     return "about:blank";
   }
 
-  registerProfileLifecycleTools({ tools, cdpPort, profileRegistry, defaultProfileName, managedPlaywrightDriver, sleep, createBrowserContext, createPageTarget, resolveProfile, runManagedPlaywrightAction, withManagedPageClient, profileTargetStatus, findAdoptableTarget, summarizeTargetForRegistry, resumableUrlFromProfile });
 
   registerEvidenceCaptureTools({ tools, profileRegistry, sleep, resolveProfile, withManagedPageClient, startManagedCaptureSession, stopManagedCaptureSession, clearManagedCaptureSessionBuffer, managedCaptureSessions, maybeRoutePersonal });
 
   registerEvidenceConsoleTools({ tools, profileRegistry, sleep, resolveProfile, withManagedPageClient, maybeRoutePersonal });
 
-  registerReplayAttackTools({ tools, profileRegistry, resolveProfile, withManagedPageClient, executeProfileRequestReplayBatch, maybeRoutePersonal });
 
   async function executeProfileRequestReplayBatch(params = {}) {
     const profile = await resolveProfile(params?.profile);
@@ -5037,7 +5030,6 @@ function registerStandaloneBrowserTools(tools, cdpPort, profileRegistry, default
     });
   }
 
-  registerAliases({ aliasTool });
 
   tools.set("browser_tool_catalog", {
     name: "browser_tool_catalog",
@@ -5177,16 +5169,6 @@ function registerStandaloneBrowserTools(tools, cdpPort, profileRegistry, default
 
   registerUnifiedFacades({ tools, defaultProfileName, profileRegistry, managedPlaywrightDriver, resolveProfile, withManagedPageClient, maybeRoutePersonal, withBackendParameters, rememberActiveBackend, profileTargetStatus, runManagedPlaywrightAction, getLastBoundBackend: () => lastBoundBackend });
 
-  registerScanTools({ tools, resolveProfile });
-
-  registerAgentWorkspaceTools({
-    tools,
-    profileRegistry,
-    resolveProfile,
-    cdpPort,
-    managedPlaywrightDriver,
-    maybeRoutePersonal,
-  });
 }
 
 // Profile-port config file the worker maintains (browser.profiles -> cdpPort).
