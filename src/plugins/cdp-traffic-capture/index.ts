@@ -537,7 +537,28 @@ class TrafficCapture {
     if (g[SYM_STARTED]) return;
     g[SYM_STARTED] = true;
 
-    this.reconnectTimer = setInterval(() => {
+    this.reconnectTimer = setInterval(async () => {
+      // Slim Step 4h+: re-read profiles config each tick so newly profile_create'd
+      // entries (added by bridge into browser-profiles.json) become visible.
+      // Auto-activate any profile tagged backend:"personal-spawn" so its
+      // traffic gets captured under cdp-traffic/<name>/ for after-the-fact
+      // analysis — agent doesn't need a separate "start capture" call.
+      await this.loadProfiles();
+      try {
+        const cfgRaw = (await readFile(PROFILE_CONFIG_PATH, "utf-8")).replace(/^﻿/, "");
+        const cfg = JSON.parse(cfgRaw) as { browser?: { profiles?: Record<string, { backend?: string }> } };
+        const entries = Object.entries(cfg.browser?.profiles ?? {});
+        for (const [name, meta] of entries) {
+          if (meta?.backend === "personal-spawn"
+              && !this.activated.has(name)
+              && this.profiles.has(name)) {
+            this.activate(name);
+          }
+        }
+      } catch {
+        // Config file may be transiently unreadable; next tick will retry.
+      }
+
       // Only iterate ACTIVATED profiles. Dormant profiles (loaded but never
       // touched by a tool) are skipped entirely so a fresh worker with 119
       // historical profiles does zero attach work until something uses them.

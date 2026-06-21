@@ -80,6 +80,41 @@ ABR cannot fix this layer. Resolution paths:
   B. wait out reputation (days to weeks, Akamai doesn't publish)
   C. drop Expedia from active targets
 
+### Step 4i — traffic body capture on spawned profiles (incomplete)
+
+Plugin auto-activate fix (commit 712abe5 + this commit) successfully:
+  - re-reads browser-profiles.json each 5s reconnect tick
+  - detects new backend:"personal-spawn" entries (added by bridge's
+    profile_create) and auto-activates them
+  - attaches CDP session to the spawned chrome's --remote-debugging-port
+
+Live evidence (worker log):
+  [cdp-traffic] loaded 204 profiles  (was 203, new entry appeared)
+  [cdp-traffic] traffic-test: activated (lazy attach on first use)
+  [cdp-traffic] traffic-test: Target.setAutoAttach enabled (flatten=true)
+  [cdp-traffic] traffic-test:9300 attached to 1 page(s)
+
+BUT: cdp-traffic/<name>/ directory never gets created and no body files
+land on disk. Navigation was driven both as newTab:true and newTab:false
+with multi-second waits — no bodies.
+
+Hypothesis (not yet verified): chrome.tabs.update navigation on the
+attached page may dispatch Network events on a sessionId routing path
+the plugin's top-level c.Network.X handlers don't see. Plugin has
+enableChildSession() for OOPIF child targets but the navigation in
+the original tab may need similar treatment, or the loadingFinished →
+getResponseBody chain silently fails.
+
+Fix path: add debug logging around getResponseBody / writeFile, run a
+spawn cycle, see which step actually fails. May need to call
+enableChildSession on the navigated page's sessionId. ~30 min debug.
+
+Workaround until fixed: agent can spawn a profile and operate it
+(read_page / click_ref / cookies / tabs all work), traffic-capture
+metadata (URLs, status codes, headers) is still recorded in-memory and
+queryable via profile_traffic_query — only the per-request body files
+on disk are missing.
+
 ### remaining managed deps still injected into register modules
 
 `registerInteractionTools` and the other surviving register modules still
