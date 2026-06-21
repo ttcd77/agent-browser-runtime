@@ -7,10 +7,49 @@
 // and therefore injected via deps.
 import { join, dirname } from "node:path";
 import { mkdirSync, writeFileSync, readFileSync } from "node:fs";
+import { spawn } from "node:child_process";
+import { fileURLToPath } from "node:url";
 
 // Never silently truncate source text returned to the agent.
 // Content below this limit is inlined; above it is written to disk and a filePath is returned.
 const TEXT_INLINE_THRESHOLD = 200_000;
+
+// ── attack-harness subprocess proxy (same pattern as register-replay-attack.mjs) ──
+const __filename_deep = fileURLToPath(import.meta.url);
+const __dirname_deep = dirname(__filename_deep);
+const PYTHON_DEEP = process.env.PYTHON_BIN || "python";
+const AH_CWD_DEEP = process.env.ATTACK_HARNESS_CWD
+  || join(__dirname_deep, "..", "..", "..", "helloworld", "attack-harness");
+
+function attackHarnessDeep(pyCode, timeoutMs = 30000) {
+  return new Promise((resolve, reject) => {
+    const proc = spawn(PYTHON_DEEP, ["-c", pyCode], {
+      cwd: AH_CWD_DEEP,
+      env: { ...process.env, PYTHONIOENCODING: "utf-8" },
+    });
+    let out = "", err = "";
+    proc.stdout.on("data", (d) => out += d.toString("utf-8"));
+    proc.stderr.on("data", (d) => err += d.toString("utf-8"));
+    const timer = setTimeout(() => {
+      proc.kill();
+      reject(new Error(`attack-harness timed out after ${timeoutMs}ms: ${err || out}`));
+    }, timeoutMs);
+    proc.on("close", (code) => {
+      clearTimeout(timer);
+      if (code === 0) {
+        try {
+          resolve(JSON.parse(out.trim() || "{}"));
+        } catch (e) {
+          resolve({ ok: true, _raw: out.trim(), _parse_note: String(e.message) });
+        }
+      } else {
+        reject(new Error(err || out || `exit code ${code}`));
+      }
+    });
+    proc.on("error", (e) => { clearTimeout(timer); reject(e); });
+  });
+}
+
 import { toolResult } from "./result-format.mjs";
 import { prettyPrintJavaScript } from "./pretty-print.mjs";
 import { findSourceMatches } from "./source-search.mjs";
@@ -308,31 +347,25 @@ export function registerDeepEvidenceTools(deps) {
       },
     },
     async execute(_id, params) {
-      const routed = await maybeRoutePersonal("browser_token_flow_trace", params);
-      if (routed) return toolResult(routed);
       const profile = await resolveProfile(params?.profile);
-      const durationMs = Math.min(Math.max(typeof params?.durationMs === "number" ? params.durationMs : 1000, 50), 10000);
-      return toolResult(await withManagedPageClient(profile, params?.tabId || profile.tabId, async (client, target) => {
-        await client.Runtime.enable().catch(() => {});
-        const result = await client.Runtime.evaluate({
-          expression: `(${tokenFlowTracePageFunction.toString()})(${JSON.stringify({
-            durationMs,
-            maxEvents: typeof params?.maxEvents === "number" ? Math.min(Math.max(1, params.maxEvents), 10_000) : 100,
-            maxValueChars: typeof params?.maxValueChars === "number" ? Math.min(Math.max(1, params.maxValueChars), 100_000) : 4000,
-            includeValues: params?.includeValues !== false,
-            triggerExpression: params?.triggerExpression || "",
-          })})`,
-          awaitPromise: true,
-          returnByValue: true,
-        });
-        await profileRegistry.touchProfile(profile.name, { tabId: target.id });
-        return {
-          profile: profile.name,
-          tabId: target.id,
-          trace: result.result?.value || null,
-          exception: result.exceptionDetails || null,
-        };
-      }));
+      // Ported to attack-harness Python — operates on captured traffic JSON, no CDP needed.
+      // Collect recent captured traffic from profile's evidence store.
+      const limit = typeof params?.maxEvents === "number" ? Math.min(Math.max(1, params.maxEvents), 10_000) : 500;
+      const rows = profileRegistry.queryTraffic(profile.name, { limit });
+      const safe = (v) => v != null ? JSON.stringify(v) : "None";
+      const py = `
+from attack_harness.diff import token_flow_trace
+import json
+r = token_flow_trace(
+    captured_requests=${safe(rows)},
+    target_token_pattern=${safe(params?.targetTokenPattern)},
+    max_events=${safe(params?.maxEvents)},
+    include_values=${safe(params?.includeValues)},
+)
+print(json.dumps(r, ensure_ascii=False))
+`;
+      const result = await attackHarnessDeep(py, 15000);
+      return toolResult({ profile: profile.name, ...result });
     },
   });
 
@@ -347,6 +380,8 @@ export function registerDeepEvidenceTools(deps) {
       },
     },
     async execute(_id, params) {
+      const routed = await maybeRoutePersonal("browser_memory_snapshot", params);
+      if (routed) return toolResult(routed);
       const profile = await resolveProfile(params?.profile);
       return toolResult(await withManagedPageClient(profile, params?.tabId || profile.tabId, async (client, target) => {
         await client.Runtime.enable().catch(() => {});
@@ -381,6 +416,8 @@ export function registerDeepEvidenceTools(deps) {
       },
     },
     async execute(_id, params) {
+      const routed = await maybeRoutePersonal("browser_heap_snapshot", params);
+      if (routed) return toolResult(routed);
       const profile = await resolveProfile(params?.profile);
       return toolResult(await withManagedPageClient(profile, params?.tabId || profile.tabId, async (client, target) => {
         await client.HeapProfiler.enable();
@@ -1072,89 +1109,25 @@ export function registerDeepEvidenceTools(deps) {
       required: ["query"],
     },
     async execute(_id, params) {
-      const routed = await maybeRoutePersonal("browser_sources_search", params);
-      if (routed) return toolResult(routed);
       if (!params?.query) throw new Error("query is required");
       const profile = await resolveProfile(params?.profile);
-      const query = String(params.query);
-      const maxScripts = typeof params?.maxScripts === "number" ? Math.min(Math.max(1, params.maxScripts), 10_000) : 120;
-      const maxMatches = typeof params?.maxMatches === "number" ? Math.min(Math.max(1, params.maxMatches), 10_000) : 50;
-      const waitMs = typeof params?.waitMs === "number" ? Math.min(Math.max(0, params.waitMs), 60_000) : 1200;
-      return toolResult(await withManagedPageClient(profile, params?.tabId || profile.tabId, async (client, target) => {
-        const scripts = new Map();
-        await client.Debugger.enable();
-        client.Debugger.scriptParsed((event) => {
-          scripts.set(event.scriptId, {
-            timestamp: new Date().toISOString(),
-            scriptId: event.scriptId,
-            url: event.url,
-            startLine: event.startLine,
-            startColumn: event.startColumn,
-            endLine: event.endLine,
-            endColumn: event.endColumn,
-            executionContextId: event.executionContextId,
-            hash: event.hash,
-            executionContextAuxData: event.executionContextAuxData,
-            isLiveEdit: event.isLiveEdit,
-            sourceMapURL: event.sourceMapURL,
-            hasSourceURL: event.hasSourceURL,
-            isModule: event.isModule,
-            length: event.length,
-            stackTrace: event.stackTrace,
-          });
-        });
-        if (params?.reload !== false) {
-          await client.Page.enable();
-          await client.Page.reload({ ignoreCache: Boolean(params?.ignoreCache) });
-          await sleep(waitMs);
-        } else {
-          await sleep(300);
-        }
-        const rows = [...scripts.values()].filter((script) => sourceMatches(script, params)).slice(-maxScripts);
-        const results = [];
-        for (const script of rows) {
-          if (results.length >= maxMatches) break;
-          let source = null;
-          let error = null;
-          try {
-            source = await client.Debugger.getScriptSource({ scriptId: script.scriptId });
-          } catch (err) {
-            error = String(err?.message || err);
-          }
-          if (error) {
-            results.push({ scriptId: script.scriptId, url: script.url, error });
-            continue;
-          }
-          const text = String(source?.scriptSource || "");
-          const matches = findSourceMatches(text, query, { ...params, maxMatches: maxMatches - results.length });
-          for (const match of matches) {
-            results.push({
-              scriptId: script.scriptId,
-              url: script.url,
-              sourceMapURL: script.sourceMapURL,
-              isModule: script.isModule,
-              ...match,
-            });
-            if (results.length >= maxMatches) break;
-          }
-        }
-        await profileRegistry.touchProfile(profile.name, { tabId: target.id });
-        return {
-          profile: profile.name,
-          tabId: target.id,
-          query,
-          searchedScripts: rows.length,
-          matchCount: results.filter((entry) => !entry.error).length,
-          errorCount: results.filter((entry) => entry.error).length,
-          results,
-          recommendedDrilldowns: buildSourceSearchDrilldowns(results, params),
-          captureBoundaries: [
-            "Sources search only covers scripts parsed in the active DevTools Debugger session.",
-            "Source-map extraction is available only when Chrome exposes sourceMappingURL data and the map contains readable sources.",
-            "Breakpoint recommendations identify generated-script locations; they do not interpret runtime behavior.",
-          ],
-        };
-      }));
+      // Ported to attack-harness Python — searches source files in evidence dir, no CDP needed.
+      const safe = (v) => v != null ? JSON.stringify(v) : "None";
+      const py = `
+from attack_harness.diff import sources_search
+import json
+r = sources_search(
+    sources_dir=${safe(profile.evidenceDir)},
+    query=${safe(params.query)},
+    ignore_case=${safe(!params?.caseSensitive)},
+    max_files=${safe(params?.maxScripts)},
+    max_matches=${safe(params?.maxMatches)},
+    context_chars=${safe(params?.contextChars)},
+)
+print(json.dumps(r, ensure_ascii=False))
+`;
+      const result = await attackHarnessDeep(py, 30000);
+      return toolResult({ profile: profile.name, ...result });
     },
   });
 
@@ -1171,6 +1144,8 @@ export function registerDeepEvidenceTools(deps) {
     },
     async execute(_id, params) {
       const profile = await resolveProfile(params?.profile);
+      const routed = await maybeRoutePersonal("browser_performance_trace", params);
+      if (routed) return toolResult(routed);
       const durationMs = Math.min(typeof params?.durationMs === "number" ? params.durationMs : 3000, 15000);
       return toolResult(await withManagedPageClient(profile, params?.tabId || profile.tabId, async (client, target) => {
         const result = await client.Runtime.evaluate({
@@ -1229,6 +1204,8 @@ export function registerDeepEvidenceTools(deps) {
     },
     async execute(_id, params) {
       const profile = await resolveProfile(params?.profile);
+      const routed = await maybeRoutePersonal("browser_chrome_trace", params);
+      if (routed) return toolResult(routed);
       const durationMs = Math.min(Math.max(typeof params?.durationMs === "number" ? params.durationMs : 1500, 250), 10000);
       const categories = Array.isArray(params?.categories) && params.categories.length
         ? params.categories.map(String)
@@ -1445,6 +1422,8 @@ export function registerDeepEvidenceTools(deps) {
       },
     },
     async execute(_id, params) {
+      const routed = await maybeRoutePersonal("browser_performance_observer", params);
+      if (routed) return toolResult(routed);
       const profile = await resolveProfile(params?.profile);
       const options = {
         durationMs: Math.min(Math.max(typeof params?.durationMs === "number" ? params.durationMs : 1000, 100), 15000),
@@ -1597,6 +1576,8 @@ export function registerDeepEvidenceTools(deps) {
     async execute(_id, params) {
       const profile = await resolveProfile(params?.profile);
       const durationMs = Math.min(Math.max(typeof params?.durationMs === "number" ? params.durationMs : 1000, 100), 30000);
+      const routed = await maybeRoutePersonal("browser_cpu_profile", params);
+      if (routed) return toolResult(routed);
       const maxNodes = typeof params?.maxNodes === "number" ? Math.min(Math.max(1, params.maxNodes), 10_000) : 20;
       return toolResult(await withManagedPageClient(profile, params?.tabId || profile.tabId, async (client, target) => {
         await client.Runtime.enable().catch(() => {});
@@ -1646,6 +1627,8 @@ export function registerDeepEvidenceTools(deps) {
     },
     async execute(_id, params) {
       const profile = await resolveProfile(params?.profile);
+      const routed = await maybeRoutePersonal("browser_coverage_snapshot", params);
+      if (routed) return toolResult(routed);
       const durationMs = Math.min(Math.max(typeof params?.durationMs === "number" ? params.durationMs : 1000, 250), 10000);
       const maxEntries = typeof params?.maxEntries === "number" ? Math.min(Math.max(1, params.maxEntries), 10_000) : 200;
       return toolResult(await withManagedPageClient(profile, params?.tabId || profile.tabId, async (client, target) => {
@@ -1736,6 +1719,8 @@ export function registerDeepEvidenceTools(deps) {
       const maxEntries = typeof params?.maxEntries === "number" ? Math.min(Math.max(1, params.maxEntries), 10_000) : 50;
       const maxRangesPerEntry = typeof params?.maxRangesPerEntry === "number" ? Math.min(Math.max(1, params.maxRangesPerEntry), 1_000) : 20;
       const maxSnippetChars = typeof params?.maxSnippetChars === "number" ? Math.min(Math.max(1, params.maxSnippetChars), 1_000_000) : 300;
+      const routed = await maybeRoutePersonal("browser_coverage_detail", params);
+      if (routed) return toolResult(routed);
       const includeSource = params?.includeSource !== false;
       const includeUsed = params?.includeUsed !== false;
       const includeUnused = params?.includeUnused !== false;
@@ -1868,72 +1853,18 @@ export function registerDeepEvidenceTools(deps) {
       },
     },
     async execute(_id, params) {
-      const routed = await maybeRoutePersonal("browser_token_scan", params);
-      if (routed) return toolResult(routed);
       const profile = await resolveProfile(params?.profile);
-      const findings = [];
-      const rows = profileRegistry.queryTraffic(profile.name, { limit: typeof params?.limit === "number" ? Math.min(Math.max(1, params.limit), 10_000) : 500 });
-
-      for (const request of rows) {
-        for (const [key, value] of Object.entries(request.requestHeaders || {})) {
-          const finding = scanRecord("request-header", key, value, {
-            requestId: request.requestId,
-            url: request.url,
-          });
-          if (finding) findings.push(finding);
-        }
-        for (const [key, value] of Object.entries(request.responseHeaders || {})) {
-          const finding = scanRecord("response-header", key, value, {
-            requestId: request.requestId,
-            url: request.url,
-          });
-          if (finding) findings.push(finding);
-        }
-        if (request.postData || request.hasPostData) {
-          const finding = scanRecord("request-payload", "postData", request.postData || "present", {
-            requestId: request.requestId,
-            url: request.url,
-            postDataLength: request.postDataLength,
-          });
-          if (finding) findings.push(finding);
-        }
-      }
-
-      const storage = await tools.get("browser_storage_snapshot").execute("agent-cdp-server", { profile: profile.name });
-      const storagePayload = JSON.parse(storage.content?.[0]?.text || "{}");
-      for (const [key, value] of Object.entries(storagePayload.page?.localStorage || {})) {
-        const finding = scanRecord("localStorage", key, value);
-        if (finding) findings.push(finding);
-      }
-      for (const [key, value] of Object.entries(storagePayload.page?.sessionStorage || {})) {
-        const finding = scanRecord("sessionStorage", key, value);
-        if (finding) findings.push(finding);
-      }
-      if (storagePayload.page?.cookieVisibleToDocument) {
-        const finding = scanRecord("document.cookie", "cookie", storagePayload.page.cookieVisibleToDocument);
-        if (finding) findings.push(finding);
-      }
-      if (Array.isArray(storagePayload.cookies)) {
-        for (const cookie of storagePayload.cookies) {
-          const finding = scanRecord("cdp-cookies", cookie.name, cookie.value, {
-            domain: cookie.domain,
-            path: cookie.path,
-            httpOnly: cookie.httpOnly,
-            secure: cookie.secure,
-            sameSite: cookie.sameSite,
-          });
-          if (finding) findings.push(finding);
-        }
-      }
-
-      return toolResult({
-        backend: "managed-cdp",
-        profile: profile.name,
-        redacted: false,
-        findingCount: findings.length,
-        findings,
-        note: "Full values are returned by design in authorized runtime mode.",
-      });
+      // Ported to attack-harness Python — scans disk files, no CDP/browser needed.
+      const safe = (v) => v != null ? JSON.stringify(v) : "None";
+      const py = `
+from attack_harness.diff import token_scan
+import json
+r = token_scan(
+    traffic_dir=${safe(profile.evidenceDir)},
+)
+print(json.dumps(r, ensure_ascii=False))
+`;
+      return toolResult({ profile: profile.name, ...(await attackHarnessDeep(py, 60000)) });
     },
   });
 }

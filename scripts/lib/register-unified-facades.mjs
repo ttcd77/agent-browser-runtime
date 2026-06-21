@@ -14,10 +14,48 @@
 import { toolResult } from "./result-format.mjs";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { spawn } from "node:child_process";
+import { fileURLToPath } from "node:url";
 
 // Never silently truncate text returned to the agent.
 // If content exceeds this threshold, write to disk and return a filePath instead.
 const TEXT_INLINE_THRESHOLD = 200_000;
+
+// ── attack-harness subprocess proxy (same pattern as register-replay-attack.mjs) ──
+const __filename_facade = fileURLToPath(import.meta.url);
+const __dirname_facade = join(__filename_facade, "..");
+const PYTHON_FACADE = process.env.PYTHON_BIN || "python";
+const AH_CWD_FACADE = process.env.ATTACK_HARNESS_CWD
+  || join(__dirname_facade, "..", "..", "..", "helloworld", "attack-harness");
+
+function attackHarnessFacade(pyCode, timeoutMs = 30000) {
+  return new Promise((resolve, reject) => {
+    const proc = spawn(PYTHON_FACADE, ["-c", pyCode], {
+      cwd: AH_CWD_FACADE,
+      env: { ...process.env, PYTHONIOENCODING: "utf-8" },
+    });
+    let out = "", err = "";
+    proc.stdout.on("data", (d) => out += d.toString("utf-8"));
+    proc.stderr.on("data", (d) => err += d.toString("utf-8"));
+    const timer = setTimeout(() => {
+      proc.kill();
+      reject(new Error(`attack-harness timed out after ${timeoutMs}ms: ${err || out}`));
+    }, timeoutMs);
+    proc.on("close", (code) => {
+      clearTimeout(timer);
+      if (code === 0) {
+        try {
+          resolve(JSON.parse(out.trim() || "{}"));
+        } catch (e) {
+          resolve({ ok: true, _raw: out.trim(), _parse_note: String(e.message) });
+        }
+      } else {
+        reject(new Error(err || out || `exit code ${code}`));
+      }
+    });
+    proc.on("error", (e) => { clearTimeout(timer); reject(e); });
+  });
+}
 
 // ───────────────────────────────────────────────────────────────────────────
 // TRAP for future readers: the backend strings below mislead.
@@ -323,13 +361,54 @@ export function registerUnifiedFacades(deps) {
 
   tools.set("browser_security_pack", {
     name: "browser_security_pack",
-    description: "Facade: composite one-call security research evidence workflow. Requires an already-open tab in the profile (run browser_open first). Internally calls capture start, snapshot, network summary, storage snapshot, cookie summary, token scan, and application export — then saves all artifacts and returns their paths. Returns {ok, artifactPaths, ...}. No manual capture setup needed before calling this; it starts its own capture window.",
-    parameters: withBackendParameters(tools.get("browser_security_research_pack").parameters),
+    description: "Facade: composite one-call security research evidence workflow. Runs token_scan + token_flow_trace + sources_search against the profile evidence directory via Python primitives (no CDP/browser needed). For browser-dependent steps (snapshot, capture, storage), use browser_open + browser_act with backend=personal.",
+    parameters: {
+      type: "object",
+      properties: {
+        profile: { type: "string", description: "Profile name. Defaults to the server default profile." },
+        query: { type: "string", description: "Optional search query for sources_search." },
+        limit: { type: "number", description: "Max items per section. Default 25." },
+      },
+    },
     async execute(id, params) {
-      const routed = await maybeRoutePersonal("browser_security_pack", params);
-      if (routed) return toolResult(routed);
-      const result = JSON.parse((await tools.get("browser_security_research_pack").execute(id, { ...params, profile: params?.profile || defaultProfileName })).content?.[0]?.text || "{}");
-      return toolResult({ facade: "browser_security_pack", ...result });
+      const profile = await resolveProfile(params?.profile || defaultProfileName);
+      const safe = (v) => v != null ? JSON.stringify(v) : "None";
+      const results = { facade: "browser_security_pack", profile: profile.name };
+      try {
+        // token_scan
+        const tokenScanPy = `
+from attack_harness.diff import token_scan
+import json
+r = token_scan(traffic_dir=${safe(profile.evidenceDir)})
+print(json.dumps(r, ensure_ascii=False))
+`;
+        results.token_scan = await attackHarnessFacade(tokenScanPy, 60000);
+      } catch (e) { results.token_scan = { ok: false, error: String(e.message) }; }
+      try {
+        // token_flow_trace
+        const rows = profileRegistry.queryTraffic(profile.name, { limit: 500 });
+        const tracePy = `
+from attack_harness.diff import token_flow_trace
+import json
+r = token_flow_trace(captured_requests=${safe(rows)})
+print(json.dumps(r, ensure_ascii=False))
+`;
+        results.token_flow_trace = await attackHarnessFacade(tracePy, 15000);
+      } catch (e) { results.token_flow_trace = { ok: false, error: String(e.message) }; }
+      if (params?.query) {
+        try {
+          const searchPy = `
+from attack_harness.diff import sources_search
+import json
+r = sources_search(sources_dir=${safe(profile.evidenceDir)}, query=${safe(params.query)})
+print(json.dumps(r, ensure_ascii=False))
+`;
+          results.sources_search = await attackHarnessFacade(searchPy, 15000);
+        } catch (e) { results.sources_search = { ok: false, error: String(e.message) }; }
+      }
+      results.ok = true;
+      results.note = "browser_security_pack V3: runs Python primitives only (no CDP). For browser-dependent steps, use browser_open + browser_act with backend=personal.";
+      return toolResult(results);
     },
   });
 
@@ -385,12 +464,16 @@ export function registerUnifiedFacades(deps) {
       required: ["requestId"],
     }),
     async execute(id, params) {
-      const routed = await maybeRoutePersonal("browser_replay", params);
-      if (routed) return toolResult(routed);
+      // Skip personal routing — this is a pure replay tool, no browser needed.
+      // Delegates to profile_request_replay which proxies to attack-harness raw_http.
       const profileName = params?.profile || defaultProfileName;
       const toolName = Array.isArray(params?.variants) && params.variants.length ? "profile_request_replay_batch" : "profile_request_replay";
-      const result = JSON.parse((await tools.get(toolName).execute(id, { ...params, profile: profileName })).content?.[0]?.text || "{}");
-      return toolResult({ backend: "managed-cdp", facade: "browser_replay", tool: toolName, profile: profileName, result });
+      try {
+        const result = JSON.parse((await tools.get(toolName).execute(id, { ...params, profile: profileName })).content?.[0]?.text || "{}");
+        return toolResult({ facade: "browser_replay", tool: toolName, profile: profileName, result });
+      } catch (e) {
+        return toolResult({ ok: false, facade: "browser_replay", error: String(e.message) });
+      }
     },
   });
 

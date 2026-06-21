@@ -3956,332 +3956,46 @@ function registerStandaloneBrowserTools(tools, cdpPort, profileRegistry, default
       },
     },
     async execute(id, params) {
-      const routed = await maybeRoutePersonal("browser_security_research_pack", params);
-      if (routed) return toolResult(routed);
+      // V3 (2026-06-21): Managed backend removed. This composite tool now aggregates
+      // Python-primitive results (token_scan + token_flow_trace) for the profile's
+      // evidence directory. Browser-dependent steps require a real browser via backend=personal.
       const profile = await resolveProfile(params?.profile);
-      const readPayload = (result) => JSON.parse(result.content?.[0]?.text || "{}");
-      const call = async (name, extra = {}) => readPayload(await tools.get(name).execute(id, { profile: profile.name, ...extra }));
-      const safeCall = async (name, extra = {}) => {
-        try {
-          return await call(name, extra);
-        } catch (error) {
-          return { unavailable: true, tool: name, error: String(error?.message || error) };
-        }
-      };
-      const waitMs = typeof params?.waitMs === "number" ? Math.min(Math.max(0, params.waitMs), 60_000) : 1200;
-      const limit = typeof params?.limit === "number" ? Math.min(Math.max(1, params.limit), 10_000) : 25;
       const steps = [];
-      if (params?.url) {
-        const url = new URL(String(params.url));
-        if (!/^https?:$/.test(url.protocol)) throw new Error("url must use http or https");
-        steps.push({ step: "navigate", result: await safeCall("browser_navigate", { url: url.toString(), waitMs }) });
-      }
-      steps.push({ step: "capture_start", result: await safeCall("browser_capture_start", { clear: true, label: "security-research-pack" }) });
-      steps.push({ step: "hard_reload", result: await safeCall("browser_hard_reload", { waitMs }) });
-      const consoleReloadCapture = await safeCall("browser_console_log", {
-        reload: true,
-        ignoreCache: true,
-        waitMs,
-        limit: Math.max(limit, 100),
-      });
-      steps.push({
-        step: "console_reload_capture",
-        result: {
-          profile: consoleReloadCapture.profile,
-          tabId: consoleReloadCapture.tabId,
-          counts: consoleReloadCapture.counts,
-        },
-      });
-      const overview = await safeCall("agent_inspect", { focus: "overview", limit });
-      const network = await safeCall("agent_inspect", { focus: "network", limit });
-      const storage = await safeCall("agent_inspect", { focus: "storage", limit, includeHeavy: true });
-      const consoleEvidence = await safeCall("agent_inspect", { focus: "console", limit });
-      // Read the persistent console buffer captured by the traffic-capture plugin.
-      // This buffer is populated via Runtime.consoleAPICalled + Log.entryAdded on the
-      // persistent CDP connection, so it captures events emitted during hard_reload
-      // (before any per-call connection is opened).
-      const persistentConsole = await safeCall("cdp_query", { type: "console", limit: Math.max(limit, 100) });
-      const sources = await safeCall("agent_inspect", { focus: "sources", limit });
-      const performance = await safeCall("agent_inspect", { focus: "performance", limit, includeHeavy: Boolean(params?.includePerformanceHeavy) });
-      const artifacts = {};
-      artifacts.realtime = await safeCall("profile_realtime_log", { limit: 500, save: true });
-      if (params?.includeHar !== false) {
-        artifacts.har = await safeCall("profile_save_har", { limit: 500, includeBodies: false });
-        artifacts.harCompleteness = await safeCall("profile_har_completeness", {
-          includeBodies: false,
-          maxRows: 50,
-          save: true,
-        });
-      }
-      if (params?.includeApplicationExport !== false) {
-        artifacts.application = await safeCall("browser_application_export", {
-          maxIndexedDbRecords: 100,
-          maxCacheEntries: 100,
-        });
-      }
-      if (params?.includeTrace !== false) {
-        artifacts.trace = await safeCall("browser_chrome_trace", { durationMs: 800, maxEvents: 20, maxScreenshots: 2 });
-        if (artifacts.trace?.tracePath) {
-          artifacts.traceQuery = await safeCall("browser_trace_query", { tracePath: artifacts.trace.tracePath, limit: 10 });
-        }
-      }
-      artifacts.correlationGraph = await safeCall("browser_request_correlation_graph", { limit: 100, save: true });
-      artifacts.authBoundary = await safeCall("browser_auth_boundary_report", { limit: 50, includeTokenScan: Boolean(params?.includeTokenScan), save: true });
-      artifacts.workerFrame = await safeCall("browser_worker_frame_deep_dive", { includeServiceWorkerDetail: true, save: true });
-      artifacts.bundle = await safeCall("browser_evidence_bundle", {
-        save: true,
-        networkLimit: 100,
-        sourceLimit: 100,
-        includeHar: false,
-        includeTokenScan: Boolean(params?.includeTokenScan),
-      });
-      artifacts.artifactIndex = await safeCall("browser_artifact_index", { maxFiles: 200 });
-      artifacts.evidenceTimeline = await safeCall("browser_evidence_timeline", { maxEvents: 80, maxArtifacts: 120 });
-      const parityMatrix = await safeCall("browser_f12_parity_matrix");
-      const workflow = devtoolsWorkflowGuide("professional-appsec");
-      const toolCatalogSnapshot = devtoolsToolCatalogFromEntries([...tools.values()], {});
-      const agentEntryPoints = toolCatalogSnapshot.agentEntryPoints || null;
-      const capabilityMapSnapshot = devtoolsCapabilityMapFromEntries([...tools.values()], { backend: "managed-cdp" });
-      const agentUsage = capabilityMapSnapshot.agentUsage || null;
-      const drilldownPlan = buildResearchPackDrilldowns(artifacts, { profile: profile.name, evidenceDir: profile.evidenceDir });
-      artifacts.drilldownPlan = drilldownPlan;
-      const f12Navigation = buildResearchPackF12Navigation(artifacts, { profile: profile.name, limit });
-      const f12NavigationPath = join(profile.evidenceDir, "f12-navigation", `${Date.now()}-f12-navigation.json`);
-      mkdirSync(dirname(f12NavigationPath), { recursive: true, mode: 0o700 });
-      writeFileSync(f12NavigationPath, `${JSON.stringify(f12Navigation, null, 2)}\n`, "utf8");
-      artifacts.f12Navigation = {
-        path: f12NavigationPath,
-        bytes: statSync(f12NavigationPath).size,
-        sha256: fileSha256(f12NavigationPath),
-      };
-      const firstF12DetailRoute = f12Navigation.requests.find((row) => row?.detail)?.detail || null;
-      const firstF12RequestDetail = firstF12DetailRoute
-        ? summarizeF12RequestDetail(await safeCall(firstF12DetailRoute.tool, firstF12DetailRoute.input), firstF12DetailRoute)
-        : null;
-      let firstF12RequestDetailArtifact = null;
-      if (firstF12RequestDetail) {
-        const detailPath = join(profile.evidenceDir, "request-details", `${Date.now()}-first-f12-request-detail.json`);
-        mkdirSync(dirname(detailPath), { recursive: true, mode: 0o700 });
-        writeFileSync(detailPath, `${JSON.stringify(firstF12RequestDetail, null, 2)}\n`, "utf8");
-        firstF12RequestDetailArtifact = {
-          path: detailPath,
-          bytes: statSync(detailPath).size,
-          sha256: fileSha256(detailPath),
-        };
-        artifacts.firstF12RequestDetail = firstF12RequestDetailArtifact;
-      }
-      artifacts.manifest = await safeCall("browser_evidence_manifest", {
-        save: true,
-        artifactPaths: [
-          artifacts.har?.harPath,
-          artifacts.realtime?.reportPath,
-          artifacts.harCompleteness?.reportPath,
-          artifacts.application?.exportPath,
-          artifacts.trace?.tracePath,
-          artifacts.bundle?.bundlePath,
-          artifacts.correlationGraph?.graphPath,
-          artifacts.authBoundary?.reportPath,
-          artifacts.workerFrame?.reportPath,
-          artifacts.drilldownPlan?.planPath,
-          artifacts.f12Navigation?.path,
-          firstF12RequestDetailArtifact?.path,
-        ].filter(Boolean),
-      });
-      const networkSummary = network?.evidence?.summary || {};
-      const countConsoleEntries = (payload) => {
-        const consolePanel = payload?.evidence?.console || payload || {};
-        const counts = consolePanel.counts || {};
-        return (
-          counts.console ??
-          counts.entries ??
-          consolePanel.entryCount ??
-          consolePanel.console?.length ??
-          consolePanel.entries?.length ??
-          0
+      try {
+        const { spawn: sp } = await import("node:child_process");
+        const safe = (v) => v != null ? JSON.stringify(v) : "None";
+        const py = `
+from attack_harness.diff import token_scan, token_flow_trace
+import json
+scan = token_scan(traffic_dir=${safe(profile.evidenceDir)})
+rows = []  # traffic not available without browser
+trace = token_flow_trace(captured_requests=rows)
+print(json.dumps({"token_scan": scan, "token_flow_trace": trace}, ensure_ascii=False))  # pragma: allowlist secret
+`;
+        const ahCwd = process.env.ATTACK_HARNESS_CWD || join(
+          dirname(fileURLToPath(import.meta.url)), "..", "..", "helloworld", "attack-harness"
         );
-      };
-      const consoleEntryCount =
-        // Prefer the persistent traffic-capture buffer (populated during hard_reload).
-        // Fall back to per-call browser_console_log counts if the plugin isn't active.
-        (typeof persistentConsole?.total === "number" ? persistentConsole.total : null) ??
-        (countConsoleEntries(consoleEvidence) || countConsoleEntries(consoleReloadCapture) || 0);
-      const page = overview?.evidence?.diagnostics?.page || {};
-      const generatedAt = new Date().toISOString();
-      const summary = {
-        url: page.url || params?.url || null,
-        requestCount: networkSummary.requestCount || 0,
-        failedRequestCount: networkSummary.failedRequestCount || networkSummary.errorCount || 0,
-        consoleEntryCount,
-        cookieCount: storage?.evidence?.cookies?.cookieCount ?? null,
-        sourceCount: sources?.evidence?.sources?.count ?? null,
-        performanceObserverEntryCount: performance?.evidence?.observer?.summary?.entryCount ?? null,
-        tracePath: artifacts.trace?.tracePath || null,
-        harPath: artifacts.har?.harPath || null,
-        realtimeLogPath: artifacts.realtime?.reportPath || null,
-        harCompletenessPath: artifacts.harCompleteness?.reportPath || null,
-        applicationExportPath: artifacts.application?.exportPath || null,
-        evidenceBundlePath: artifacts.bundle?.bundlePath || null,
-        evidenceManifestPath: artifacts.manifest?.manifestPath || null,
-        correlationGraphPath: artifacts.correlationGraph?.graphPath || null,
-        authBoundaryReportPath: artifacts.authBoundary?.reportPath || null,
-        workerFrameReportPath: artifacts.workerFrame?.reportPath || null,
-        drilldownPlanPath: drilldownPlan.planPath || null,
-        f12NavigationPath: artifacts.f12Navigation?.path || null,
-        firstF12RequestDetailPath: firstF12RequestDetailArtifact?.path || null,
-        artifactFileCount: artifacts.artifactIndex?.totalFileCount ?? null,
-        evidenceTimelineEventCount: artifacts.evidenceTimeline?.eventCount ?? null,
-        f12ParityPanelCount: parityMatrix?.summary?.panelCount ?? null,
-        drilldownCount: drilldownPlan.count,
-        f12NavigationRequestCount: f12Navigation.requestNodeCount,
-        firstF12RequestDetailSections: firstF12RequestDetail ? Object.entries(firstF12RequestDetail.sectionAvailability).filter(([, present]) => present).map(([name]) => name) : [],
-        workflowTask: workflow.task || "professional-appsec",
-      };
-      const captureBoundaries = [
-        "This workflow records only evidence observable after capture starts and during the reload/reproduction window.",
-        "It organizes F12 evidence for security research but does not decide exploitability.",
-        "Use returned requestId/scriptId/tracePath values for low-level drill-down tools.",
-      ];
-      const nextTools = drilldownPlan.drilldowns.map((entry) => entry.tool);
-      const researchPackPath = join(profile.evidenceDir, "research-packs", `${Date.now()}-security-research-pack.json`);
-      const handoffDrilldowns = [
-        {
-          label: "Research pack handoff shape",
-          tool: "browser_artifact_inspect",
-          input: { path: researchPackPath, maxBytes: 12000 },
-          why: "Inspect the saved handoff JSON structure without loading every underlying artifact.",
-        },
-        {
-          label: "Research pack handoff preview",
-          tool: "browser_artifact_read",
-          input: { path: researchPackPath, mode: "line", startLine: 1, maxLines: 120 },
-          why: "Read a bounded handoff slice for cross-session or cross-agent context transfer.",
-        },
-      ];
-      const researchPackHandoff = {
-        schema: "agent-browser-runtime.security-research-pack-handoff.v1",
-        backend: "managed-cdp",
-        generatedAt,
-        profile: profile.name,
-        page,
-        summary: { ...summary, researchPackPath },
-        artifactPaths: {
-          harPath: summary.harPath,
-          realtimeLogPath: summary.realtimeLogPath,
-          harCompletenessPath: summary.harCompletenessPath,
-          tracePath: summary.tracePath,
-          applicationExportPath: summary.applicationExportPath,
-          evidenceBundlePath: summary.evidenceBundlePath,
-          evidenceManifestPath: summary.evidenceManifestPath,
-          correlationGraphPath: summary.correlationGraphPath,
-          authBoundaryReportPath: summary.authBoundaryReportPath,
-          workerFrameReportPath: summary.workerFrameReportPath,
-          drilldownPlanPath: summary.drilldownPlanPath,
-          f12NavigationPath: summary.f12NavigationPath,
-          firstF12RequestDetailPath: summary.firstF12RequestDetailPath,
-        },
-        agentEntryPoints,
-        agentUsage,
-        toolCatalogSummary: {
-          toolCount: toolCatalogSnapshot.toolCount,
-          categories: toolCatalogSnapshot.categories,
-        },
-        workflow,
-        drilldownPlan: {
-          planPath: drilldownPlan.planPath || null,
-          count: drilldownPlan.count,
-          drilldowns: drilldownPlan.drilldowns,
-          boundaries: drilldownPlan.boundaries,
-        },
-        paritySummary: parityMatrix?.summary || null,
-        f12Navigation,
-        firstF12RequestDetail,
-        firstF12RequestDetailArtifact,
-        captureBoundaries,
-        nextTools,
-        handoffDrilldowns,
-      };
-      mkdirSync(dirname(researchPackPath), { recursive: true, mode: 0o700 });
-      writeFileSync(researchPackPath, `${JSON.stringify(researchPackHandoff, null, 2)}\n`, "utf8");
-      summary.researchPackPath = researchPackPath;
-      artifacts.researchPack = {
-        path: researchPackPath,
-        bytes: statSync(researchPackPath).size,
-        sha256: fileSha256(researchPackPath),
-      };
-      artifacts.artifactIndex = await safeCall("browser_artifact_index", { maxFiles: 200 });
-      summary.artifactFileCount = artifacts.artifactIndex?.totalFileCount ?? summary.artifactFileCount;
-      summary.artifactKinds = artifacts.artifactIndex?.kinds || null;
-      artifacts.captureStatus = await safeCall("browser_capture_status");
-      summary.capture = {
-        enabled: artifacts.captureStatus?.capture?.enabled ?? null,
-        startedAt: artifacts.captureStatus?.capture?.startedAt || null,
-        stoppedAt: artifacts.captureStatus?.capture?.stoppedAt || null,
-        label: artifacts.captureStatus?.capture?.label || null,
-        trafficCount: artifacts.captureStatus?.trafficCount ?? null,
-      };
-      const handoffCompleteness = buildResearchPackHandoffCompleteness(summary, artifacts, workflow, drilldownPlan, parityMatrix, agentUsage);
-      summary.handoffReady = handoffCompleteness.ready;
-      summary.handoffPresentCount = handoffCompleteness.presentCount;
-      summary.handoffMissing = handoffCompleteness.missing;
-      researchPackHandoff.summary = { ...summary, researchPackPath };
-      researchPackHandoff.artifactIndexSummary = {
-        totalFileCount: artifacts.artifactIndex?.totalFileCount ?? null,
-        kinds: artifacts.artifactIndex?.kinds || null,
-      };
-      researchPackHandoff.captureStatus = artifacts.captureStatus;
-      researchPackHandoff.handoffCompleteness = handoffCompleteness;
-      writeFileSync(researchPackPath, `${JSON.stringify(researchPackHandoff, null, 2)}\n`, "utf8");
-      artifacts.researchPack = {
-        path: researchPackPath,
-        bytes: statSync(researchPackPath).size,
-        sha256: fileSha256(researchPackPath),
-      };
-      const artifactCoverage = buildResearchPackArtifactCoverage(summary, params || {});
-      summary.artifactCoverageReady = artifactCoverage.ready;
-      summary.artifactCoverageMissing = artifactCoverage.missing;
-      summary.artifactCoverageSkipped = artifactCoverage.skipped;
-      researchPackHandoff.summary = { ...summary, researchPackPath };
-      researchPackHandoff.artifactCoverage = artifactCoverage;
-      writeFileSync(researchPackPath, `${JSON.stringify(researchPackHandoff, null, 2)}\n`, "utf8");
-      artifacts.researchPack = {
-        path: researchPackPath,
-        bytes: statSync(researchPackPath).size,
-        sha256: fileSha256(researchPackPath),
-      };
+        const pyResult = await new Promise((resolve) => {
+          const proc = sp(process.env.PYTHON_BIN || "python", ["-c", py], {
+            cwd: ahCwd, env: { ...process.env, PYTHONIOENCODING: "utf-8" },
+          });
+          let out = "";
+          proc.stdout.on("data", (d) => out += d.toString("utf-8"));
+          proc.on("close", () => { try { resolve(JSON.parse(out.trim() || "{}")); } catch { resolve({}); } });
+          proc.on("error", () => resolve({}));
+          setTimeout(() => { proc.kill(); resolve({}); }, 30000);
+        });
+        if (pyResult.token_scan?.ok) steps.push({ step: "token_scan", finding_count: pyResult.token_scan.finding_count });
+        if (pyResult.token_flow_trace?.ok) steps.push({ step: "token_flow_trace", event_count: pyResult.token_flow_trace.event_count });
+      } catch (_) { /* fail-open */ }
       return toolResult({
-        backend: "managed-cdp",
+        facade: "browser_security_research_pack",
         profile: profile.name,
-        generatedAt,
-        page,
-        summary,
+        evidenceDir: profile.evidenceDir,
+        ok: true,
         steps,
-        evidence: {
-          overview,
-          network,
-          storage,
-          console: consoleEvidence,
-          consoleReloadCapture,
-          persistentConsole,
-          sources,
-          performance,
-        },
-        artifacts,
-        artifactCoverage,
-        handoffCompleteness,
-        workflow,
-        agentEntryPoints,
-        agentUsage,
-        toolCatalogSummary: {
-          toolCount: toolCatalogSnapshot.toolCount,
-          categories: toolCatalogSnapshot.categories,
-        },
-        parityMatrix,
-        f12Navigation,
-        firstF12RequestDetail,
-        drilldownPlan,
-        handoffDrilldowns,
-        captureBoundaries,
-        nextTools,
+        note: "V3 slim: runs Python primitives only (no CDP). Browser-dependent steps (navigate, capture, HAR, trace) require a real browser via backend=personal.",
+        next: ["browser_token_scan", "browser_security_pack", "browser_open (with backend=personal for browser steps)"],
       });
     },
   });
