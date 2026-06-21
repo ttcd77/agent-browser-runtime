@@ -97,8 +97,427 @@ export function registerSnapshotDomTools(deps) {
     },
   });
 
+  tools.set("browser_snapshot", {
+    name: "browser_snapshot",
+    description: "Return title, URL, visible text, and basic input/button inventory from the current tab. Hidden/aria-hidden controls are filtered and duplicates collapsed to keep the payload small; pass maxControls to change the cap. When page text exceeds 200 000 characters the full text is saved to disk and the response includes filePath + originalLength — use the Read tool on filePath to get the complete text.",
+    parameters: {
+      type: "object",
+      properties: {
+        profile: { type: "string", description: "Profile name. Defaults to the active sticky-bound profile if omitted." },
+        tabId: { type: "string", description: "Optional. Tab id override." },
+        maxControls: { type: "number", description: "Max controls to return after filtering/dedup. Default 40, max 200." },
+      },
+    },
+    async execute(_id, params) {
+      const routed = await maybeRoutePersonal("browser_snapshot", params);
+      if (routed) return toolResult(routed);
+      // H-04: profile must already exist — do not silently return about:blank for a phantom profile.
+      if (params?.profile) {
+        const requestedName = normalizeProfileName(params.profile);
+        const existing = profileRegistry.listProfiles().find((p) => p.name === requestedName);
+        if (!existing) {
+          return toolResult({ ok: false, error: "profile_not_found", profile: requestedName, hint: "Create the profile first with profile_create or browser_open." });
+        }
+      }
+      const profile = await resolveProfile(params?.profile);
+      return toolResult(await withManagedPageClient(profile, params?.tabId || profile.tabId, async (client, target) => {
+        const maxControls = typeof params?.maxControls === "number" ? Math.max(1, Math.min(200, params.maxControls)) : 40;
+        // Root cause #4 (2026-06-03 reliability redesign): the control inventory
+        // used to take querySelectorAll(...).slice(0,80) with NO filtering, so
+        // hidden / aria-hidden controls and dozens of identical links (e.g. 80
+        // language switchers) all landed in the payload and blew up tokens.
+        // Now: skip not-displayed and aria-hidden (incl. inside an aria-hidden
+        // ancestor) controls, dedup by tag+role+type+text+id, and report how
+        // many were seen vs returned.
+        const expression = `(() => {
+          const isHidden = (el) => {
+            if (el.closest('[aria-hidden="true"]')) return true;
+            const s = getComputedStyle(el);
+            if (s.display === 'none' || s.visibility === 'hidden' || Number(s.opacity) === 0) return true;
+            const r = el.getBoundingClientRect();
+            if (r.width <= 0 && r.height <= 0 && el.tagName !== 'INPUT') return true;
+            return false;
+          };
+          const all = [...document.querySelectorAll("button,a,input,textarea,select,[role=button]")];
+          const seen = new Set();
+          const controls = [];
+          let visibleCount = 0;
+          for (const el of all) {
+            if (isHidden(el)) continue;
+            visibleCount++;
+            const entry = {
+              tag: el.tagName.toLowerCase(),
+              text: (el.innerText || el.value || el.getAttribute("aria-label") || el.placeholder || "").trim().slice(0, 120),
+              id: el.id || null,
+              name: el.getAttribute("name"),
+              type: el.getAttribute("type"),
+              role: el.getAttribute("role"),
+            };
+            const key = [entry.tag, entry.role, entry.type, entry.id, entry.text].join("|");
+            if (seen.has(key)) continue;
+            seen.add(key);
+            if (controls.length < ${maxControls}) controls.push(entry);
+          }
+          return {
+            title: document.title,
+            url: location.href,
+            text: document.body?.innerText || "",
+            controls,
+            controlsSummary: { total: all.length, visible: visibleCount, unique: seen.size, returned: controls.length },
+          };
+        })()`;
+        const result = await client.Runtime.evaluate({ expression, returnByValue: true, awaitPromise: true });
+        const pageValue = result.result?.value || {};
+        await profileRegistry.touchProfile(profile.name, { tabId: target.id, url: pageValue.url, title: pageValue.title });
+        const eventFile = profileRegistry.appendEvent(profile.name, {
+          type: "browser_snapshot",
+          tabId: target.id,
+          url: pageValue.url,
+          title: pageValue.title,
+        });
 
+        const fullText = String(pageValue.text || "");
+        if (fullText.length <= TEXT_INLINE_THRESHOLD) {
+          return { profile: profile.name, tabId: target.id, evidenceDir: profile.evidenceDir, eventFile, ...pageValue };
+        }
 
+        // Text exceeds inline threshold — save to disk, return filePath.
+        const textDir = join(profile.evidenceDir, "text-dumps");
+        mkdirSync(textDir, { recursive: true });
+        const filePath = join(textDir, `browser_snapshot-${Date.now()}.txt`);
+        writeFileSync(filePath, fullText, "utf8");
+        const previewText = fullText.slice(0, 2000);
+        return {
+          profile: profile.name,
+          tabId: target.id,
+          evidenceDir: profile.evidenceDir,
+          eventFile,
+          title: pageValue.title,
+          url: pageValue.url,
+          controls: pageValue.controls,
+          controlsSummary: pageValue.controlsSummary,
+          text: `${previewText}...[truncated, see filePath]`,
+          truncated: true,
+          originalLength: fullText.length,
+          filePath,
+          next: [`browser_artifact_read {"path":"${filePath}"}`],
+        };
+      }));
+    },
+  });
+
+  tools.set("browser_find", {
+    name: "browser_find",
+    description: "Find interactive elements on the page using a natural-language query (e.g. \"search bar\", \"add to cart button\", \"login link\"). Matches against innerText, aria-label, placeholder, title, name, role and tag, returns ranked candidates with selectors and bounding boxes so the agent can click/type without writing a CSS selector by hand. Backend note (A5): browser_find is managed-backend only (Playwright DOM search); it does not have a personal-backend route and will silently run on the managed browser even when a profile's sticky backend is personal. For personal-backend DOM search use browser_dom_search instead.",
+    parameters: {
+      type: "object",
+      properties: {
+        profile: { type: "string", description: "Profile name. Defaults to the server default profile." },
+        tabId: { type: "string", description: "CDP tab ID override. Defaults to the profile's current tab." },
+        query: {
+          type: "string",
+          description: "Natural-language description of the target element (e.g. \"sign in button\", \"email input\", \"product title containing organic\").",
+        },
+        maxResults: { type: "number", description: "Default 10, max 30." },
+        includeNonInteractive: { type: "boolean", description: "Include any element with matching text, not just clickable controls." },
+        includeFrames: { type: "boolean", description: "Search same-origin iframes. Default true." },
+        includeShadow: { type: "boolean", description: "Search open shadow roots. Default true." },
+        maxShadowRoots: { type: "number", description: "Maximum open shadow roots to inspect. Default 60." },
+      },
+      required: ["query"],
+    },
+    async execute(_id, params) {
+      const profile = await resolveProfile(params?.profile);
+      const query = String(params?.query || "").trim();
+      if (!query) return toolResult({ ok: false, error: "browser_find_query_required", detail: "query must be a non-empty string" });
+      const limit = Math.max(1, Math.min(30, Number(params?.maxResults) || 10));
+      const includeAll = params?.includeNonInteractive === true;
+      const includeFrames = params?.includeFrames !== false;
+      const includeShadow = params?.includeShadow !== false;
+      const maxShadowRoots = Math.max(0, Math.min(200, Number(params?.maxShadowRoots) || 60));
+      return toolResult(await withManagedPageClient(profile, params?.tabId || profile.tabId, async (client, target) => {
+        const expression = `(() => {
+          const query = ${JSON.stringify(query)};
+          const maxResults = ${limit};
+          const includeAll = ${includeAll};
+          const includeFrames = ${includeFrames};
+          const includeShadow = ${includeShadow};
+          const maxShadowRoots = ${maxShadowRoots};
+          const tokens = query.toLowerCase().split(/\\s+/).filter(Boolean);
+          const interactiveSelector = "a,button,input,textarea,select,[role=button],[role=link],[role=textbox],[role=combobox],[role=searchbox],[role=menuitem],[role=tab],[role=switch],[role=checkbox],[role=radio],[contenteditable=\\"\\"],[contenteditable=true],[tabindex],[onclick]";
+          const baseSelector = "*";
+          const frameErrors = [];
+          function collectCandidates(root, meta = { framePath: "top", frameIndexes: [], shadowPath: [] }, acc = []) {
+            if (!root?.querySelectorAll) return acc;
+            try {
+              acc.push(...Array.from(root.querySelectorAll(baseSelector)).map((el) => ({ el, meta })));
+            } catch {
+              return acc;
+            }
+            if (includeShadow) {
+              let inspected = 0;
+              for (const host of Array.from(root.querySelectorAll("*"))) {
+                if (inspected >= maxShadowRoots) break;
+                if (!host.shadowRoot) continue;
+                inspected += 1;
+                collectCandidates(host.shadowRoot, {
+                  ...meta,
+                  shadowPath: [...(meta.shadowPath || []), host.tagName?.toLowerCase() || "host"],
+                }, acc);
+              }
+            }
+            if (includeFrames) {
+              const frames = Array.from(root.querySelectorAll("iframe,frame"));
+              frames.forEach((frame, index) => {
+                try {
+                  const childDocument = frame.contentDocument || frame.contentWindow?.document;
+                  if (!childDocument) return;
+                  collectCandidates(childDocument, {
+                    ...meta,
+                    framePath: (meta.framePath || "top") + " > frame[" + index + "]",
+                    frameIndexes: [...(meta.frameIndexes || []), index],
+                    frameUrl: frame.src || childDocument.location?.href || "",
+                  }, acc);
+                } catch (error) {
+                  frameErrors.push({
+                    path: (meta.framePath || "top") + " > frame[" + index + "]",
+                    src: frame.getAttribute("src") || "",
+                    error: String(error?.message || error),
+                  });
+                }
+              });
+            }
+            return acc;
+          }
+          const all = collectCandidates(document);
+          function textById(value) {
+            if (!value) return "";
+            return String(value).split(/\\s+/).map((id) => document.getElementById(id)?.textContent || "").join(" ");
+          }
+          function labelText(el) {
+            const labels = el.labels ? Array.from(el.labels) : [];
+            if (el.id) {
+              try {
+                labels.push(...Array.from(document.querySelectorAll("label[for=\\"" + CSS.escape(el.id) + "\\"]")));
+              } catch {
+                // Ignore invalid ids.
+              }
+            }
+            return labels.map((label) => label.textContent || "").join(" ");
+          }
+          function cssPath(el) {
+            if (!(el instanceof Element)) return "";
+            if (el.id) return "#" + CSS.escape(el.id);
+            const parts = [];
+            let node = el;
+            while (node && node.nodeType === 1 && parts.length < 8) {
+              let part = node.tagName.toLowerCase();
+              if (node.parentElement) {
+                const siblings = Array.from(node.parentElement.children).filter((c) => c.tagName === node.tagName);
+                if (siblings.length > 1) {
+                  const idx = siblings.indexOf(node) + 1;
+                  part += ":nth-of-type(" + idx + ")";
+                }
+              }
+              parts.unshift(part);
+              node = node.parentElement;
+              if (node && node.id) {
+                parts.unshift("#" + CSS.escape(node.id));
+                break;
+              }
+            }
+            return parts.join(" > ");
+          }
+          function visibleRect(el) {
+            const r = el.getBoundingClientRect();
+            if (r.width === 0 || r.height === 0) return null;
+            const style = getComputedStyle(el);
+            if (style.visibility === "hidden" || style.display === "none" || style.opacity === "0") return null;
+            return r;
+          }
+          function gatherText(el) {
+            const fields = {
+              text: (el.innerText || el.textContent || "").replace(/\\s+/g, " ").trim().slice(0, 200),
+              ariaLabel: el.getAttribute("aria-label") || "",
+              ariaLabelledBy: textById(el.getAttribute("aria-labelledby") || ""),
+              label: labelText(el),
+              placeholder: el.getAttribute("placeholder") || "",
+              title: el.getAttribute("title") || "",
+              name: el.getAttribute("name") || "",
+              role: el.getAttribute("role") || "",
+              type: el.getAttribute("type") || "",
+              alt: el.getAttribute("alt") || "",
+              testId: el.getAttribute("data-testid") || el.getAttribute("data-test") || el.getAttribute("data-cy") || "",
+              value: typeof el.value === "string" ? String(el.value).slice(0, 200) : "",
+            };
+            return fields;
+          }
+          const scored = [];
+          for (const candidate of all) {
+            const el = candidate.el;
+            const meta = candidate.meta || {};
+            const rect = visibleRect(el);
+            if (!rect) continue;
+            const fields = gatherText(el);
+            const interactive = el.matches(interactiveSelector) || Boolean(el.closest(interactiveSelector));
+            const haystack = [
+              fields.text, fields.ariaLabel, fields.ariaLabelledBy, fields.label, fields.placeholder, fields.title, fields.name, fields.role, fields.type, fields.alt, fields.testId, fields.value, el.tagName.toLowerCase(),
+            ].join(" | ").toLowerCase();
+            if (!haystack.trim()) continue;
+            let score = 0;
+            let hits = 0;
+            for (const tok of tokens) {
+              if (!tok) continue;
+              let tokScore = 0;
+              if (fields.ariaLabel.toLowerCase().includes(tok)) tokScore = Math.max(tokScore, 4);
+              if (fields.ariaLabelledBy.toLowerCase().includes(tok)) tokScore = Math.max(tokScore, 4);
+              if (fields.label.toLowerCase().includes(tok)) tokScore = Math.max(tokScore, 4);
+              if (fields.text.toLowerCase().includes(tok)) tokScore = Math.max(tokScore, 3);
+              if (fields.placeholder.toLowerCase().includes(tok)) tokScore = Math.max(tokScore, 3);
+              if (fields.testId.toLowerCase().includes(tok)) tokScore = Math.max(tokScore, 3);
+              if (fields.title.toLowerCase().includes(tok)) tokScore = Math.max(tokScore, 2);
+              if (fields.name.toLowerCase().includes(tok)) tokScore = Math.max(tokScore, 2);
+              if (fields.role.toLowerCase().includes(tok)) tokScore = Math.max(tokScore, 2);
+              if (fields.type.toLowerCase().includes(tok)) tokScore = Math.max(tokScore, 2);
+              if (fields.value.toLowerCase().includes(tok)) tokScore = Math.max(tokScore, 1);
+              if (el.tagName.toLowerCase().includes(tok)) tokScore = Math.max(tokScore, 1);
+              if (tokScore > 0) { score += tokScore; hits += 1; }
+            }
+            if (score === 0) continue;
+            // Penalty for elements with very long text (likely paragraphs).
+            if (fields.text.length > 120 && hits < tokens.length) score -= 1;
+            if (!includeAll && !interactive) score -= 0.5;
+            scored.push({ el, rect, score, hits, fields, meta, interactive });
+          }
+          scored.sort((a, b) => b.score - a.score || b.hits - a.hits || Number(b.interactive) - Number(a.interactive) || (a.fields.text.length - b.fields.text.length));
+          const top = scored.slice(0, maxResults);
+          return {
+            query,
+            totalCandidates: scored.length,
+            matches: top.map((entry, idx) => ({
+              rank: idx + 1,
+              score: entry.score,
+              tokenHits: entry.hits,
+              tag: entry.el.tagName.toLowerCase(),
+              interactive: entry.interactive,
+              role: entry.fields.role || (entry.el.getAttribute("role") || ""),
+              text: entry.fields.text,
+              attributes: {
+                id: entry.el.id || null,
+                name: entry.fields.name || null,
+                type: entry.fields.type || null,
+                ariaLabel: entry.fields.ariaLabel || null,
+                ariaLabelledBy: entry.fields.ariaLabelledBy || null,
+                label: entry.fields.label || null,
+                placeholder: entry.fields.placeholder || null,
+                title: entry.fields.title || null,
+                testId: entry.fields.testId || null,
+                href: entry.el.getAttribute("href") || null,
+              },
+              selector: cssPath(entry.el),
+              framePath: entry.meta.framePath || "top",
+              frameIndexes: entry.meta.frameIndexes || [],
+              frameUrl: entry.meta.frameUrl || null,
+              shadowPath: entry.meta.shadowPath || [],
+              bbox: { x: Math.round(entry.rect.left), y: Math.round(entry.rect.top), width: Math.round(entry.rect.width), height: Math.round(entry.rect.height) },
+              center: { x: Math.round(entry.rect.left + entry.rect.width / 2), y: Math.round(entry.rect.top + entry.rect.height / 2) },
+            })),
+            coverage: {
+              includeFrames,
+              includeShadow,
+              includeNonInteractive: true,
+              nonInteractivePenaltyApplied: !includeAll,
+              maxShadowRoots,
+              frameErrors,
+            },
+            url: location.href,
+            title: document.title,
+          };
+        })()`;
+        const result = await client.Runtime.evaluate({ expression, returnByValue: true });
+        if (result.exceptionDetails) {
+          throw new Error(result.exceptionDetails.text || "browser_find failed");
+        }
+        const payload = result.result?.value || { query, matches: [], totalCandidates: 0 };
+        await profileRegistry.touchProfile(profile.name, { tabId: target.id, url: payload.url, title: payload.title });
+        const eventFile = profileRegistry.appendEvent(profile.name, {
+          type: "browser_find",
+          tabId: target.id,
+          query,
+          totalCandidates: payload.totalCandidates,
+          matchCount: payload.matches?.length || 0,
+        });
+        return {
+          profile: profile.name,
+          tabId: target.id,
+          eventFile,
+          ...payload,
+          next: payload.matches?.length
+            ? ["browser_click", "browser_type", "browser_screenshot"]
+            : ["browser_snapshot", "browser_screenshot"],
+        };
+      }));
+    },
+  });
+
+  tools.set("browser_eval", {
+    name: "browser_eval",
+    description: "Evaluate a JavaScript expression in the current tab and return its value. Required param: expression (not 'code' or 'script'). Supported on both managed and personal backends: managed uses CDP Runtime.evaluate (bypasses page CSP); personal uses chrome.scripting.executeScript with a custom return wrapper. Returns {ok, result, exception}. 'Local trusted use only' means this tool is for authorised agent use on test targets — not for untrusted third-party page content.",
+    parameters: {
+      type: "object",
+      properties: {
+        profile: { type: "string", description: "Profile name. Defaults to the active sticky-bound profile if omitted." },
+        expression: { type: "string", description: "Required. JavaScript expression to evaluate in the page context. Use expression= not code= or script=." },
+        tabId: { type: "string", description: "Optional. Tab id override." },
+      },
+      required: ["expression"],
+    },
+    async execute(_id, params) {
+      const routed = await maybeRoutePersonal("browser_eval", params);
+      if (routed) return toolResult(routed);
+      const profile = await resolveProfile(params?.profile);
+      return toolResult(await withManagedPageClient(profile, params?.tabId || profile.tabId, async (client, target) => {
+        const capture = await runProfileAction({
+          client,
+          profile,
+          eventType: "browser_eval",
+          waitMs: typeof params?.waitMs === "number" ? Math.min(Math.max(0, params.waitMs), 30_000) : 700,
+          event: { tabId: target.id },
+          action: async () => await client.Runtime.evaluate({
+            expression: String(params.expression || ""),
+            returnByValue: true,
+            awaitPromise: true,
+          }),
+        });
+        await profileRegistry.touchProfile(profile.name, { tabId: target.id });
+        const result = capture.result;
+        const rawValue = result.result?.value;
+        const rawStr = rawValue !== undefined ? JSON.stringify(rawValue) : undefined;
+        let evalResult = rawValue;
+        let evalFilePath;
+        if (rawStr && rawStr.length > TEXT_INLINE_THRESHOLD) {
+          const evalDir = join(profile.evidenceDir, "eval-results");
+          mkdirSync(evalDir, { recursive: true });
+          evalFilePath = join(evalDir, `eval-${Date.now()}.json`);
+          writeFileSync(evalFilePath, rawStr, "utf8");
+          evalResult = undefined;
+        }
+        return {
+          ok: !result.exceptionDetails,
+          profile: profile.name,
+          tabId: target.id,
+          result: evalResult,
+          filePath: evalFilePath,
+          truncated: evalFilePath ? true : undefined,
+          originalLength: evalFilePath ? rawStr.length : undefined,
+          exception: result.exceptionDetails,
+          capturedTraffic: capture.capturedTraffic,
+          trafficFile: capture.trafficFile,
+          eventFile: capture.eventFile,
+        };
+      }));
+    },
+  });
 
   tools.set("browser_frame_tree", {
     name: "browser_frame_tree",

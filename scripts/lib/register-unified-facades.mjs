@@ -172,9 +172,166 @@ export function registerUnifiedFacades(deps) {
     },
   });
 
+  tools.set("browser_act", {
+    name: "browser_act",
+    description: "Facade: perform a common browser action: click, hover, double_click, drag, type, press, select, wait, scroll, eval, screenshot, or snapshot.",
+    parameters: withBackendParameters({
+      type: "object",
+      properties: {
+        profile: { type: "string", description: "Profile name. Defaults to server default profile." },
+        action: {
+          type: "string",
+          enum: ["click", "hover", "double_click", "dblclick", "drag", "type", "press", "select", "wait", "scroll", "eval", "screenshot", "snapshot"],
+          description: "Required. Action to perform.",
+        },
+        selector: { type: "string", description: "CSS selector for click/hover/type/select/drag actions." },
+        text: { type: "string", description: "Text to type for the type action." },
+        x: { type: "number", description: "X coordinate for drag actions." },
+        y: { type: "number", description: "Y coordinate for drag actions." },
+        expression: { type: "string", description: "JS expression for the eval action." },
+        waitMs: { type: "number", description: "Wait time in ms. Default: 8000." },
+        waitMode: { type: "string", description: "Wait mode for the wait action." },
+        waitFor: { type: "string", description: "Selector or condition to wait for." },
+        observeAfter: { type: "boolean", description: "Capture a network observation window after the action." },
+        returnSnapshot: { type: "boolean", description: "Include an accessibility snapshot in the response." },
+      },
+      required: ["action"],
+    }),
+    async execute(id, params) {
+      const routed = await maybeRoutePersonal("browser_act", params);
+      if (routed) return toolResult(routed);
+      const action = String(params?.action || "").toLowerCase();
+      const profileName = params?.profile || defaultProfileName;
+      const actionTools = {
+        click: "browser_click",
+        hover: "browser_hover",
+        double_click: "browser_double_click",
+        dblclick: "browser_double_click",
+        drag: "browser_drag",
+        type: "browser_type",
+        press: "browser_press",
+        select: "browser_select",
+        wait: "browser_wait",
+        scroll: "browser_scroll",
+        eval: "browser_eval",
+        screenshot: "browser_screenshot",
+        snapshot: "browser_snapshot",
+      };
+      const toolName = actionTools[action];
+      if (!toolName) throw new Error(`unsupported browser_act action: ${action}`);
+      const result = JSON.parse((await tools.get(toolName).execute(id, { ...params, profile: profileName })).content?.[0]?.text || "{}");
+      return toolResult({
+        backend: "managed-cdp",
+        facade: "browser_act",
+        action,
+        tool: toolName,
+        profile: profileName,
+        result,
+        next: ["browser_inspect", "browser_capture"],
+      });
+    },
+  });
 
+  tools.set("browser_inspect", {
+    name: "browser_inspect",
+    description: "Facade: inspect the current page through agent_inspect. Modes: overview, network, storage, console, dom, sources, performance, search, evidence, debug.",
+    parameters: withBackendParameters({
+      type: "object",
+      properties: {
+        profile: { type: "string", description: "Profile name. Defaults to server default profile." },
+        mode: {
+          type: "string",
+          enum: ["overview", "network", "storage", "console", "dom", "sources", "performance", "search", "evidence", "debug"],
+          description: "Inspection mode. Default: overview.",
+        },
+        query: { type: "string", description: "Search query for search mode." },
+        selector: { type: "string", description: "CSS selector for dom mode." },
+        requestId: { type: "string", description: "Request ID for network drilldown." },
+        limit: { type: "number", description: "Max items to return per category." },
+        includeHeavy: { type: "boolean", description: "Include heavy data (full DOM, all scripts). Default: false." },
+      },
+    }),
+    async execute(id, params) {
+      const routed = await maybeRoutePersonal("browser_inspect", params);
+      if (routed) return toolResult(routed);
+      const profileName = params?.profile || defaultProfileName;
+      const focus = params?.mode || params?.focus || "overview";
+      const result = JSON.parse((await tools.get("agent_inspect").execute(id, { ...params, profile: profileName, focus })).content?.[0]?.text || "{}");
+      return toolResult({
+        backend: "managed-cdp",
+        facade: "browser_inspect",
+        profile: profileName,
+        mode: focus,
+        result,
+        next: result.nextTools || ["browser_capture", "browser_security_pack"],
+      });
+    },
+  });
 
+  tools.set("browser_capture", {
+    name: "browser_capture",
+    description: "Facade: manage F12 recording with start, stop, clear, status, or reload.",
+    parameters: withBackendParameters({
+      type: "object",
+      properties: {
+        profile: { type: "string", description: "Profile name. Defaults to server default profile." },
+        action: {
+          type: "string",
+          enum: ["start", "stop", "clear", "status", "reload", "hard_reload"],
+          description: "Capture action. Default: status.",
+        },
+        label: { type: "string", description: "Label for the capture session." },
+        clear: { type: "boolean", description: "Clear existing traffic log when starting capture." },
+        waitMs: { type: "number", description: "Wait time in ms after reload actions. Default: 8000." },
+      },
+    }),
+    async execute(id, params) {
+      const routed = await maybeRoutePersonal("browser_capture", params);
+      if (routed) return toolResult(routed);
+      const action = String(params?.action || "status").toLowerCase();
+      const profileName = params?.profile || defaultProfileName;
+      const actionTools = {
+        start: "browser_capture_start",
+        stop: "browser_capture_stop",
+        clear: "browser_capture_clear",
+        status: "browser_capture_status",
+        reload: "browser_hard_reload",
+        hard_reload: "browser_hard_reload",
+      };
+      const toolName = actionTools[action];
+      if (!toolName) {
+        return toolResult({
+          ok: false,
+          facade: "browser_capture",
+          error: "unsupported_browser_capture_action",
+          receivedAction: action,
+          supportedActions: Object.keys(actionTools),
+        });
+      }
+      const result = JSON.parse((await tools.get(toolName).execute(id, { ...params, profile: profileName })).content?.[0]?.text || "{}");
+      return toolResult({
+        backend: "managed-cdp",
+        facade: "browser_capture",
+        action,
+        tool: toolName,
+        profile: profileName,
+        result,
+        next: ["browser_inspect", "browser_security_pack"],
+      });
+    },
+  });
 
+  tools.set("browser_security_pack", {
+    name: "browser_security_pack",
+    description: "Facade: composite one-call security research evidence workflow. Requires an already-open tab in the profile (run browser_open first). Internally calls capture start, snapshot, network summary, storage snapshot, cookie summary, token scan, and application export — then saves all artifacts and returns their paths. Returns {ok, artifactPaths, ...}. No manual capture setup needed before calling this; it starts its own capture window.",
+    parameters: withBackendParameters(tools.get("browser_security_research_pack").parameters),
+    async execute(id, params) {
+      const routed = await maybeRoutePersonal("browser_security_pack", params);
+      if (routed) return toolResult(routed);
+      const result = JSON.parse((await tools.get("browser_security_research_pack").execute(id, { ...params, profile: params?.profile || defaultProfileName })).content?.[0]?.text || "{}");
+      return toolResult({ facade: "browser_security_pack", ...result });
+    },
+  });
 
   tools.set("browser_auth_boundary", {
     name: "browser_auth_boundary",
@@ -215,7 +372,97 @@ export function registerUnifiedFacades(deps) {
     },
   });
 
+  tools.set("browser_replay", {
+    name: "browser_replay",
+    description: "Facade: replay one captured request or run batch variants and compare responses.",
+    parameters: withBackendParameters({
+      type: "object",
+      properties: {
+        profile: { type: "string", description: "Profile name. Defaults to server default profile." },
+        requestId: { type: "string", description: "Required. Request ID from profile_traffic_query to replay." },
+        variants: { type: "array", items: { type: "object" }, description: "Variant override objects for batch replay. If provided uses profile_request_replay_batch." },
+      },
+      required: ["requestId"],
+    }),
+    async execute(id, params) {
+      const routed = await maybeRoutePersonal("browser_replay", params);
+      if (routed) return toolResult(routed);
+      const profileName = params?.profile || defaultProfileName;
+      const toolName = Array.isArray(params?.variants) && params.variants.length ? "profile_request_replay_batch" : "profile_request_replay";
+      const result = JSON.parse((await tools.get(toolName).execute(id, { ...params, profile: profileName })).content?.[0]?.text || "{}");
+      return toolResult({ backend: "managed-cdp", facade: "browser_replay", tool: toolName, profile: profileName, result });
+    },
+  });
 
+  tools.set("browser_text", {
+    name: "browser_text",
+    description: "Facade: extract readable text content from the current page in one call. Returns plain text, page URL, title, and character count. Use instead of browser_eval + document.body.innerText for common text extraction. When the page text exceeds 200 000 characters the full content is saved to disk and the response includes filePath + originalLength — use the Read tool on filePath to get the complete text.",
+    parameters: withBackendParameters({
+      type: "object",
+      properties: {
+        profile: { type: "string", description: "Profile name. Defaults to server default profile." },
+      },
+    }),
+    async execute(_id, params) {
+      const routed = await maybeRoutePersonal("browser_text", params);
+      if (routed) return toolResult(routed);
+      const profileName = params?.profile || defaultProfileName;
+      const profile = await resolveProfile(profileName);
+      return toolResult(await withManagedPageClient(profile, profile.tabId, async (client, target) => {
+        const extractionScript = `
+          (function() {
+            var main = document.querySelector('article') || document.querySelector('[role="main"]') || document.querySelector('main');
+            var source = main || document.body;
+            if (!source) return '';
+            return source.innerText || '';
+          })()
+        `;
+        const [textResult, urlResult, titleResult] = await Promise.all([
+          client.Runtime.evaluate({ expression: extractionScript, returnByValue: true }),
+          client.Runtime.evaluate({ expression: 'document.location.href', returnByValue: true }),
+          client.Runtime.evaluate({ expression: 'document.title', returnByValue: true }),
+        ]);
+        const fullText = String(textResult.result?.value || '');
+        const url = String(urlResult.result?.value || '');
+        const title = String(titleResult.result?.value || '');
+
+        if (fullText.length <= TEXT_INLINE_THRESHOLD) {
+          return {
+            backend: "managed-cdp",
+            facade: "browser_text",
+            profile: profileName,
+            tabId: target.id,
+            url,
+            title,
+            text: fullText,
+            charCount: fullText.length,
+            next: ["browser_inspect", "browser_capture"],
+          };
+        }
+
+        // Content exceeds inline threshold — write to disk, return path.
+        const textDir = join(profile.evidenceDir, "text-dumps");
+        mkdirSync(textDir, { recursive: true });
+        const filePath = join(textDir, `browser_text-${Date.now()}.txt`);
+        writeFileSync(filePath, fullText, "utf8");
+        const previewText = fullText.slice(0, 2000);
+        return {
+          backend: "managed-cdp",
+          facade: "browser_text",
+          profile: profileName,
+          tabId: target.id,
+          url,
+          title,
+          text: `${previewText}...[truncated, see filePath]`,
+          charCount: previewText.length,
+          truncated: true,
+          originalLength: fullText.length,
+          filePath,
+          next: [`browser_artifact_read {"path":"${filePath}"}`, "browser_inspect", "browser_capture"],
+        };
+      }));
+    },
+  });
 
   tools.set("browser_raw", {
     name: "browser_raw",

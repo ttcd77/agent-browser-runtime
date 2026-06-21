@@ -292,6 +292,49 @@ export function registerDeepEvidenceTools(deps) {
     },
   });
 
+  tools.set("browser_token_flow_trace", {
+    name: "browser_token_flow_trace",
+    description: "Temporarily instrument fetch, XHR, local/session storage, and document.cookie to capture objective token-like data flow evidence during a trigger.",
+    parameters: {
+      type: "object",
+      properties: {
+        profile: { type: "string", description: "Profile name. Defaults to server default profile." },
+        tabId: { type: "string", description: "CDP tab ID. Defaults to the profile's current tab." },
+        durationMs: { type: "number", description: "Observation window in ms. Default: 1000, max 10000." },
+        maxEvents: { type: "number", description: "Max token-flow events to capture. Default: 100." },
+        maxValueChars: { type: "number", description: "Max characters per captured value. Default: 4000." },
+        includeValues: { type: "boolean", description: "Include actual token values in output. Default: true." },
+        triggerExpression: { type: "string", description: "JS expression to evaluate to trigger token flow during observation." },
+      },
+    },
+    async execute(_id, params) {
+      const routed = await maybeRoutePersonal("browser_token_flow_trace", params);
+      if (routed) return toolResult(routed);
+      const profile = await resolveProfile(params?.profile);
+      const durationMs = Math.min(Math.max(typeof params?.durationMs === "number" ? params.durationMs : 1000, 50), 10000);
+      return toolResult(await withManagedPageClient(profile, params?.tabId || profile.tabId, async (client, target) => {
+        await client.Runtime.enable().catch(() => {});
+        const result = await client.Runtime.evaluate({
+          expression: `(${tokenFlowTracePageFunction.toString()})(${JSON.stringify({
+            durationMs,
+            maxEvents: typeof params?.maxEvents === "number" ? Math.min(Math.max(1, params.maxEvents), 10_000) : 100,
+            maxValueChars: typeof params?.maxValueChars === "number" ? Math.min(Math.max(1, params.maxValueChars), 100_000) : 4000,
+            includeValues: params?.includeValues !== false,
+            triggerExpression: params?.triggerExpression || "",
+          })})`,
+          awaitPromise: true,
+          returnByValue: true,
+        });
+        await profileRegistry.touchProfile(profile.name, { tabId: target.id });
+        return {
+          profile: profile.name,
+          tabId: target.id,
+          trace: result.result?.value || null,
+          exception: result.exceptionDetails || null,
+        };
+      }));
+    },
+  });
 
   tools.set("browser_memory_snapshot", {
     name: "browser_memory_snapshot",
@@ -1006,6 +1049,114 @@ export function registerDeepEvidenceTools(deps) {
     },
   });
 
+  tools.set("browser_sources_search", {
+    name: "browser_sources_search",
+    description: "Search parsed script sources for a literal query and return line/column snippets.",
+    parameters: {
+      type: "object",
+      properties: {
+        profile: { type: "string", description: "Profile name. Defaults to server default profile." },
+        tabId: { type: "string", description: "CDP tab ID. Defaults to the profile's current tab." },
+        query: { type: "string", description: "Required. Literal string to search for in parsed script sources." },
+        urlContains: { type: "string", description: "Restrict search to scripts whose URL contains this substring (case-insensitive)." },
+        hasSourceMap: { type: "boolean", description: "Filter by source map presence." },
+        isModule: { type: "boolean", description: "Filter by ES module type." },
+        caseSensitive: { type: "boolean", description: "Case-sensitive search. Default: false." },
+        reload: { type: "boolean", description: "Reload page to capture fresh script list. Default: true." },
+        ignoreCache: { type: "boolean", description: "Bypass cache on reload. Default: false." },
+        waitMs: { type: "number", description: "Wait time in ms after reload. Default: 8000." },
+        maxScripts: { type: "number", description: "Max scripts to search. Default: 120." },
+        maxMatches: { type: "number", description: "Max total matches to return. Default: 50." },
+        contextChars: { type: "number", description: "Characters of context around each match." },
+      },
+      required: ["query"],
+    },
+    async execute(_id, params) {
+      const routed = await maybeRoutePersonal("browser_sources_search", params);
+      if (routed) return toolResult(routed);
+      if (!params?.query) throw new Error("query is required");
+      const profile = await resolveProfile(params?.profile);
+      const query = String(params.query);
+      const maxScripts = typeof params?.maxScripts === "number" ? Math.min(Math.max(1, params.maxScripts), 10_000) : 120;
+      const maxMatches = typeof params?.maxMatches === "number" ? Math.min(Math.max(1, params.maxMatches), 10_000) : 50;
+      const waitMs = typeof params?.waitMs === "number" ? Math.min(Math.max(0, params.waitMs), 60_000) : 1200;
+      return toolResult(await withManagedPageClient(profile, params?.tabId || profile.tabId, async (client, target) => {
+        const scripts = new Map();
+        await client.Debugger.enable();
+        client.Debugger.scriptParsed((event) => {
+          scripts.set(event.scriptId, {
+            timestamp: new Date().toISOString(),
+            scriptId: event.scriptId,
+            url: event.url,
+            startLine: event.startLine,
+            startColumn: event.startColumn,
+            endLine: event.endLine,
+            endColumn: event.endColumn,
+            executionContextId: event.executionContextId,
+            hash: event.hash,
+            executionContextAuxData: event.executionContextAuxData,
+            isLiveEdit: event.isLiveEdit,
+            sourceMapURL: event.sourceMapURL,
+            hasSourceURL: event.hasSourceURL,
+            isModule: event.isModule,
+            length: event.length,
+            stackTrace: event.stackTrace,
+          });
+        });
+        if (params?.reload !== false) {
+          await client.Page.enable();
+          await client.Page.reload({ ignoreCache: Boolean(params?.ignoreCache) });
+          await sleep(waitMs);
+        } else {
+          await sleep(300);
+        }
+        const rows = [...scripts.values()].filter((script) => sourceMatches(script, params)).slice(-maxScripts);
+        const results = [];
+        for (const script of rows) {
+          if (results.length >= maxMatches) break;
+          let source = null;
+          let error = null;
+          try {
+            source = await client.Debugger.getScriptSource({ scriptId: script.scriptId });
+          } catch (err) {
+            error = String(err?.message || err);
+          }
+          if (error) {
+            results.push({ scriptId: script.scriptId, url: script.url, error });
+            continue;
+          }
+          const text = String(source?.scriptSource || "");
+          const matches = findSourceMatches(text, query, { ...params, maxMatches: maxMatches - results.length });
+          for (const match of matches) {
+            results.push({
+              scriptId: script.scriptId,
+              url: script.url,
+              sourceMapURL: script.sourceMapURL,
+              isModule: script.isModule,
+              ...match,
+            });
+            if (results.length >= maxMatches) break;
+          }
+        }
+        await profileRegistry.touchProfile(profile.name, { tabId: target.id });
+        return {
+          profile: profile.name,
+          tabId: target.id,
+          query,
+          searchedScripts: rows.length,
+          matchCount: results.filter((entry) => !entry.error).length,
+          errorCount: results.filter((entry) => entry.error).length,
+          results,
+          recommendedDrilldowns: buildSourceSearchDrilldowns(results, params),
+          captureBoundaries: [
+            "Sources search only covers scripts parsed in the active DevTools Debugger session.",
+            "Source-map extraction is available only when Chrome exposes sourceMappingURL data and the map contains readable sources.",
+            "Breakpoint recommendations identify generated-script locations; they do not interpret runtime behavior.",
+          ],
+        };
+      }));
+    },
+  });
 
   tools.set("browser_performance_trace", {
     name: "browser_performance_trace",
@@ -1703,6 +1854,86 @@ export function registerDeepEvidenceTools(deps) {
           },
         };
       }));
+    },
+  });
+
+  tools.set("browser_token_scan", {
+    name: "browser_token_scan",
+    description: "Scan managed browser Network, storage, and cookies for token-like material. Returns full values in authorized runtime mode.",
+    parameters: {
+      type: "object",
+      properties: {
+        profile: { type: "string", description: "Profile name. Defaults to server default profile." },
+        limit: { type: "number", description: "Max traffic records to scan. Default: 500." },
+      },
+    },
+    async execute(_id, params) {
+      const routed = await maybeRoutePersonal("browser_token_scan", params);
+      if (routed) return toolResult(routed);
+      const profile = await resolveProfile(params?.profile);
+      const findings = [];
+      const rows = profileRegistry.queryTraffic(profile.name, { limit: typeof params?.limit === "number" ? Math.min(Math.max(1, params.limit), 10_000) : 500 });
+
+      for (const request of rows) {
+        for (const [key, value] of Object.entries(request.requestHeaders || {})) {
+          const finding = scanRecord("request-header", key, value, {
+            requestId: request.requestId,
+            url: request.url,
+          });
+          if (finding) findings.push(finding);
+        }
+        for (const [key, value] of Object.entries(request.responseHeaders || {})) {
+          const finding = scanRecord("response-header", key, value, {
+            requestId: request.requestId,
+            url: request.url,
+          });
+          if (finding) findings.push(finding);
+        }
+        if (request.postData || request.hasPostData) {
+          const finding = scanRecord("request-payload", "postData", request.postData || "present", {
+            requestId: request.requestId,
+            url: request.url,
+            postDataLength: request.postDataLength,
+          });
+          if (finding) findings.push(finding);
+        }
+      }
+
+      const storage = await tools.get("browser_storage_snapshot").execute("agent-cdp-server", { profile: profile.name });
+      const storagePayload = JSON.parse(storage.content?.[0]?.text || "{}");
+      for (const [key, value] of Object.entries(storagePayload.page?.localStorage || {})) {
+        const finding = scanRecord("localStorage", key, value);
+        if (finding) findings.push(finding);
+      }
+      for (const [key, value] of Object.entries(storagePayload.page?.sessionStorage || {})) {
+        const finding = scanRecord("sessionStorage", key, value);
+        if (finding) findings.push(finding);
+      }
+      if (storagePayload.page?.cookieVisibleToDocument) {
+        const finding = scanRecord("document.cookie", "cookie", storagePayload.page.cookieVisibleToDocument);
+        if (finding) findings.push(finding);
+      }
+      if (Array.isArray(storagePayload.cookies)) {
+        for (const cookie of storagePayload.cookies) {
+          const finding = scanRecord("cdp-cookies", cookie.name, cookie.value, {
+            domain: cookie.domain,
+            path: cookie.path,
+            httpOnly: cookie.httpOnly,
+            secure: cookie.secure,
+            sameSite: cookie.sameSite,
+          });
+          if (finding) findings.push(finding);
+        }
+      }
+
+      return toolResult({
+        backend: "managed-cdp",
+        profile: profile.name,
+        redacted: false,
+        findingCount: findings.length,
+        findings,
+        note: "Full values are returned by design in authorized runtime mode.",
+      });
     },
   });
 }
