@@ -7,13 +7,13 @@ Chrome via chrome://extensions > Developer mode > Load unpacked.
 ## Setup
 
 - Worktree bridge: HTTP 17347, WS 17346 (PERSONAL_CHROME_HTTP_PORT/WS_PORT env override)
-- Worktree extension: C:\Users\Tong\project\abr-slim\extension (ID bcojflddljdlpgmglpofdjckgjcgigjo)
-- Production extension also loaded (ID clpgddncaildipkfklffjianoeocjmbb, connects to 17337 production bridge — untouched)
+- Worktree extension: loaded from `<worktree-dir>/extension` (unpacked; Chrome assigns an ID from the path)
+- Production extension (`<main-repo>/extension`) also loaded; connects to 17337 production bridge — untouched
 
 ## Verified live
 
 1. `personal_chrome_list_browsers` → returned worktree extension as
-   `name=Windows-fe8c instance=fe8c9c0e-cb46-4ea0-b35f-9fe2049b5303`. Step 1-3 ✓.
+   `name=Windows-<4hex> instance=<random-uuid>`. Step 1-3 ✓.
 
 2. `personal_chrome_select_browser {browser:"Windows-fe8c"}` → set active. ✓
 
