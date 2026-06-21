@@ -1,5 +1,101 @@
 # Changelog
 
+## 0.5.0 - 2026-06-21 — slim refactor + attack-harness
+
+24 commits removing the Playwright managed wrapper, adding real-Chrome spawn,
+read_page / click_ref DOM walker, multi-browser routing, and (in companion
+helloworld repo) an attack-harness CLI for composable attack scripting.
+
+### Added
+
+- **`spawn-chrome-profile.mjs`** (~150 lines, replaces deleted 877-line
+  Playwright wrapper): `profile_create / list / delete` tools spawn isolated
+  real `chrome.exe` processes via `--user-data-dir` + `--remote-debugging-port`.
+  Each profile gets identical-to-daily-Chrome fingerprint (no Playwright
+  AutomationControlled flag) plus its own cookies/login/history. Template-copy
+  install bypasses Chrome 137+'s `--load-extension` ban via one-time
+  `setup-template-profile.ps1`.
+- **`personal_chrome_list_browsers / select_browser / switch_browser`** tools
+  (mirrors Claude-in-Chrome MCP surface): bridge tracks multiple connected
+  Chrome instances by `browserInstanceId` + `browserDisplayName`, routes by
+  human-readable name; `active` selector lets agent select once and have
+  subsequent calls auto-route.
+- **`personal_chrome_read_page` + `personal_chrome_click_ref`** (Claude-in-Chrome
+  pattern): DOM walker returns indented ARIA-role tree with stable `[ref_N]`
+  ids; `click_ref` uses application-layer `element.click()` (proven stable in
+  SPAs without Playwright-style actionability).
+- **Per-spawned-profile traffic capture on disk**: `cdp-traffic-capture`
+  plugin auto-attaches `personal-spawn` backend profiles via
+  `browser-profiles.json` watch (1s tick); writes bodies under
+  `~/.agent-browser-runtime/cdp-traffic/<name>/`. Verified end-to-end:
+  example.com nav produces 7 body files (HTML / JS / CSS / font / XML / favicon).
+- **Per-agent tab isolation** in personal bridge: profile param auto-pins a
+  dedicated background tab so multiple agents don't fight over the human's
+  active tab. Bridge ports configurable via `PERSONAL_CHROME_HTTP_PORT` /
+  `PERSONAL_CHROME_WS_PORT`.
+- **`profile_jwt_forge` upgraded to attack-variant generator** (BREAKING):
+  one call now returns all 6 standard JWT-bypass attack candidates
+  (alg=none / weak-secret / hs-confusion / kid-injection / jku-spoof /
+  x5u-spoof) from a sample token + mutations. Schema changed from
+  `{payload, alg, key}` to `{token, attacks, mutations, ...}`. Implementation
+  moved to helloworld `attack-harness/src/attack_harness/crypto.py` (Python),
+  ABR tool becomes a subprocess proxy.
+- **14 business tools proxied to helloworld attack-harness** via subprocess
+  spawn — single source of truth in Python: `profile_raw_request`,
+  `profile_race_request`, `profile_jwt_forge`, `profile_oob_alloc`,
+  `profile_oob_poll`, `profile_request_replay(_batch)`,
+  `attack_intruder_create/run/pause/resume/results/status/evidence`.
+- `STEP-NOTES.md` and `USAGE-FOR-AGENT.md` for the worktree refactor history
+  and current agent-facing tool catalog with examples.
+
+### Removed
+
+- **Playwright** devDependency (the 877-line
+  `scripts/lib/managed-playwright-driver.mjs` wrapper is a 44-line fail-loud
+  stub; production worker now spawns real `chrome.exe` via
+  `spawn-chrome-profile.mjs` instead).
+- **9 managed-only profile-lifecycle tools** (superseded by new
+  `profile_create / list / delete` in bridge). Net tool count 163 → 155.
+- `stealth-scorecard.mjs` and `stealth-config.test.mjs` (managed-driver
+  regression guards; managed driver no longer exists).
+- `register-aliases.mjs` (already a stub since F4 cleanup).
+
+### Changed
+
+- Worker `/health`: in personal-only mode (`CDP_LAUNCH_BROWSER=0`) the
+  `profile-port-drift` and `foreign-browser-on-cdp-port` blockers are
+  suppressed (they were managed-era checks). Stub CDP server on configured
+  port lets boot chain (`waitForCdp` / `cdpJson` / `targetWatcher`) satisfy
+  without an actual Chrome.
+- Default backend routing in `resolveBackendForCall`: when
+  `CDP_LAUNCH_BROWSER=0` and no sticky backend matches, default is `personal`
+  not `managed` (previously would route to stub and throw).
+- `browser_tabs` output: stale profiles auto-truncated to the 5
+  most-recently-used with `staleProfilesOmitted` count; `includeStale:true`
+  for the full list (was: 347 stale profiles flat).
+- `cdp-traffic-capture` reconnect tick 5s → 1s; tracks
+  `connectedTargetIds` so new tabs discovered after initial attach;
+  `loadingFinished` handler now passes `sessionId` to `getResponseBody`.
+- `setup-template-profile.ps1`: one-time operator setup to GUI-install the
+  worktree extension into a template `--user-data-dir`; every
+  `profile_create` thereafter `cpSync(template, new_profile_dir)` (Chrome
+  137+ blocks command-line `--load-extension`).
+
+### Migration
+
+- Agents calling `profile_jwt_forge` with the old `{payload, alg, key}`
+  schema must migrate to `{token, attacks, mutations, ...}`. The new API
+  produces a richer result (variants list) but requires an existing sample
+  JWT as input (use any token from the target).
+- Agents that depended on the 9 managed-only `profile_*` lifecycle tools
+  (`profile_create` etc, old managed-Playwright version) get a new but
+  equivalent implementation via the bridge's `profile_create` (spawn-based).
+  Schema for spawn-based is `{name}`; returns `{profile, pid, cdpPort,
+  userDataDir, trafficDir, alreadyRunning}`.
+- See `STEP-NOTES.md` + `USAGE-FOR-AGENT.md` for the full agent-facing flow
+  examples (template setup, profile spawn, read_page + click_ref, multi-browser
+  routing, traffic body retrieval).
+
 ## 0.4.0 - 2026-06-16
 
 Release-prep pass: full audit, P0 cleanup, open-source readiness.
