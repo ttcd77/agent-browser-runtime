@@ -2265,15 +2265,18 @@ function registerStandaloneBrowserTools(tools, cdpPort, profileRegistry, default
     browser_act: "browser_act",
     browser_inspect: "browser_inspect",
     browser_capture: "browser_capture",
-    browser_security_pack: "browser_security_pack",
+    // Python-proxy tools (browser_security_pack / browser_replay /
+    // browser_token_flow_trace / browser_token_scan / browser_sources_search /
+    // browser_security_research_pack) intentionally NOT here post-2026-06-21:
+    // DS-A's port moved them to attack-harness Python subprocess. They never
+    // touch a Chrome backend (personal or managed), so the personal-facade
+    // routing is dead code for them. They appear in MANAGED_ONLY_TOOLS exempt
+    // list in dual-backend-completeness.test.mjs.
     browser_auth_boundary: "browser_auth_boundary",
     browser_diff: "browser_diff",
-    browser_replay: "browser_replay",
     browser_raw: "browser_raw",
     browser_cookies_set: "personal_chrome_cookies_set",
     browser_cookies_get: "personal_chrome_cookies_get",
-    browser_token_flow_trace: "personal_chrome_token_flow_trace",
-    browser_token_scan: "personal_chrome_token_scan",
     // A. Network forensics / traffic capture
     browser_capture_start: "personal_chrome_capture_start",
     browser_capture_stop: "personal_chrome_capture_stop",
@@ -2324,7 +2327,7 @@ function registerStandaloneBrowserTools(tools, cdpPort, profileRegistry, default
     browser_source_map_sources: "personal_chrome_source_map_sources",
     browser_source_map_source_get: "personal_chrome_source_map_source_get",
     browser_global_search: "personal_chrome_global_search",
-    browser_sources_search: "personal_chrome_sources_search",
+    // browser_sources_search → moved to MANAGED_ONLY_TOOLS (Python proxy via attack-harness)
     // I. Evidence bundle / workflow composite tools
     browser_evidence_bundle: "personal_chrome_evidence_bundle",
     browser_evidence_manifest: "personal_chrome_evidence_manifest",
@@ -2337,7 +2340,7 @@ function registerStandaloneBrowserTools(tools, cdpPort, profileRegistry, default
     browser_capture_diff: "personal_chrome_capture_diff",
     browser_auth_boundary_report: "personal_chrome_auth_boundary_report",
     browser_worker_frame_deep_dive: "personal_chrome_worker_frame_deep_dive",
-    browser_security_research_pack: "personal_chrome_security_research_pack",
+    // browser_security_research_pack → moved to MANAGED_ONLY_TOOLS (Python composite via attack-harness)
     // C. Security / page health
     browser_security_summary: "personal_chrome_security_summary",
     browser_page_diagnostics: "personal_chrome_page_diagnostics",

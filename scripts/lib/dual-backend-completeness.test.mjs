@@ -118,6 +118,14 @@ const MANAGED_ONLY_TOOLS = new Set([
   "browser_scan_bridge",
   "browser_scan_bola",
   "browser_scan_status",
+  // Python subprocess proxies via attack-harness (DS-A 2026-06-21 port —
+  // no Chrome backend, neither personal nor managed; run as pure Python).
+  "browser_security_pack",
+  "browser_security_research_pack",
+  "browser_replay",
+  "browser_token_flow_trace",
+  "browser_token_scan",
+  "browser_sources_search",
   // Composite / meta tool
   "agent_inspect",
   // Agent Workspace tools (managed-only: file I/O, tool usage stats, coordinate-click, framework fill)
