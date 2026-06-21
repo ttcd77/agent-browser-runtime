@@ -2,6 +2,16 @@
 
 Tracks where Step 4 stopped and what each follow-up needs to unblock.
 
+## Design references
+
+- **browser-use/browser-harness** (GitHub 15.2k★, MIT, Python 100%) —
+  the "thin CDP wrapper + agent-writes-skills" pattern. Slim ABR's
+  read_page/click_ref + multi-browser routing take inspiration from its
+  application-layer primitives. The planned helloworld attack-harness
+  mirrors its whole structure (src + interaction-skills + agent-workspace).
+  Local clone: `research/competitors/browser-harness/`.
+  Cross-link: `../helloworld/reference/attack/attack-harness-design-source.md`.
+
 ## Completed
 
 - **Step 1-3** (commit 5349353): multi-browser routing in personal bridge
