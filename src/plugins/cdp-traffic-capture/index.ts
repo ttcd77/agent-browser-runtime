@@ -884,9 +884,19 @@ class TrafficCapture {
       if (entry) (entry as unknown as { signedExchange?: unknown }).signedExchange = info;
     });
 
-    (c.Network["loadingFinished"] as (cb: (e: { requestId: string }) => void) => void)(async ({ requestId }) => {
+    (c.Network["loadingFinished"] as (cb: (e: { requestId: string }, sessionId?: string) => void) => void)(async ({ requestId }, sessionId) => {
       try {
-        const result = (await (c.Network["getResponseBody"] as (p: unknown) => Promise<{ body: string; base64Encoded: boolean }>)({ requestId })) as { body: string; base64Encoded: boolean };
+        // Step 4i.2 fix: with flatten=true setAutoAttach, child-target Network
+        // events arrive on this WS with a sessionId. getResponseBody MUST be
+        // called with the same sessionId or it routes to the top-level page
+        // session (about:blank), which doesn't know the child page's request
+        // and returns "No data found for resource with given identifier" — that
+        // catch was silently swallowed at debug level, so disk bodies never
+        // landed for any navigation that happened in a new tab.
+        const result = (await (c.Network["getResponseBody"] as (p: unknown, sid?: string) => Promise<{ body: string; base64Encoded: boolean }>)(
+          { requestId },
+          sessionId,
+        )) as { body: string; base64Encoded: boolean };
         const body = result.body ?? "";
         const bodyBytes = body.length;
         const entry = p.store.find((e) => e.requestId === requestId);
@@ -908,7 +918,9 @@ class TrafficCapture {
           this.logger.warn(`[cdp-traffic] write body failed ${fullPath}: ${err}`);
         }
       } catch (err) {
-        this.logger.debug(`[cdp-traffic] getResponseBody skipped ${requestId}: ${(err as Error)?.message}`);
+        // Promote from debug to warn so any future regression surfaces.
+        // Common benign cases: redirect-only requests, 304 not modified.
+        this.logger.warn(`[cdp-traffic] getResponseBody skipped ${requestId} (sid=${sessionId || "top"}): ${(err as Error)?.message}`);
       }
     });
 
