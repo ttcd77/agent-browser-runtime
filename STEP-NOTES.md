@@ -48,6 +48,28 @@ Not blocking Step 4c — bridge (personal-chrome-bridge.mjs on 17347/17346) is
 the only thing the worktree's smoke / real-Chrome E2E uses, and it runs without
 the worker.
 
+### Expedia is IP-level blocked, not browser-level
+
+Live test against expedia.co.uk via the user's real Chrome (Windows-fe8c,
+personal extension, no AutomationControlled flag, no Playwright fingerprint):
+
+  title: "Access Denied"
+  refCount: 1 (single heading, nothing else)
+  url: https://www.expedia.co.uk/
+
+That is not the "Bot or Not?" / DataDome challenge — that is Akamai edge
+denying at TCP/HTTP level before the browser gets to render anything. Worktree
+fixes the browser layer (personal real Chrome with real fingerprint), and
+that layer is verified working on GitHub Dashboard / BBC / example.com.
+But Expedia's specific IP reputation is burnt across the whole group
+(expedia / vrbo / cheaptickets / hotwire) — any browser from this IP gets
+edge-denied.
+
+ABR cannot fix this layer. Resolution paths:
+  A. switch egress IP (mobile hotspot or UK residential proxy — NOT VPS IP)
+  B. wait out reputation (days to weeks, Akamai doesn't publish)
+  C. drop Expedia from active targets
+
 ### remaining managed deps still injected into register modules
 
 `registerInteractionTools` and the other surviving register modules still
