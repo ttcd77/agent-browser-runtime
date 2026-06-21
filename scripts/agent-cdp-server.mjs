@@ -312,7 +312,7 @@ async function startStubCdpServer(port) {
     if (url === "/json/version") {
       res.writeHead(200, { "content-type": "application/json" });
       res.end(JSON.stringify({
-        Browser: "ABR-Stub/0.1 (managed backend removed in slim-abr-raw-cdp)",
+        Browser: "ABR-Stub-CDP/0.1 (slim-abr personal-only mode)",
         "Protocol-Version": "1.3",
         webSocketDebuggerUrl: `ws://127.0.0.1:${port}/devtools/browser/abr-stub`,
         userAgent: "ABR-Stub",
