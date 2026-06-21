@@ -14,7 +14,7 @@
 // user-data-dir with the extension installed via chrome://extensions GUI, and
 // every profile_create copies that template directory before launching.
 
-import { spawn } from "node:child_process";
+import { spawn, execSync } from "node:child_process";
 import { cpSync, existsSync, mkdirSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { homedir } from "node:os";
@@ -109,6 +109,16 @@ export async function spawnChromeProfile(rawName) {
   mkdirSync(PROFILES_ROOT, { recursive: true });
   cpSync(TEMPLATE_DIR, userDataDir, { recursive: true });
 
+  // Template captured the extension's chrome.storage from setup time (instance
+  // UUID, displayName). If we kept it, every spawned profile would advertise
+  // the same browserInstanceId and bridge would conflate them. Wipe the
+  // extension storage dirs so the extension re-initializes a fresh identity
+  // on first launch.
+  for (const sub of ["Local Extension Settings", "Sync Extension Settings", "Managed Extension Settings"]) {
+    const dir = join(userDataDir, "Default", sub);
+    if (existsSync(dir)) rmSync(dir, { recursive: true, force: true });
+  }
+
   const port = nextFreePort();
   const args = [
     `--user-data-dir=${userDataDir}`,
@@ -144,18 +154,50 @@ export function listSpawnedProfiles() {
   return [...registry.values()];
 }
 
+// Windows: chrome spawns many subprocesses (renderer, gpu, utility, ...).
+// process.kill(pid) only kills the parent; subprocesses keep holding file
+// locks on user-data-dir and rm fails. taskkill /F /T /PID kills the whole
+// tree. On POSIX, plain process.kill is fine — chrome subprocesses die with
+// the parent group.
+function killChromeProcessTree(pid) {
+  if (!pid) return;
+  if (process.platform === "win32") {
+    try { execSync(`taskkill /F /T /PID ${pid}`, { stdio: "ignore" }); }
+    catch { /* already gone or no permission */ }
+  } else {
+    try { process.kill(pid); } catch { /* already gone */ }
+  }
+}
+
 export async function killChromeProfile(rawName, { removeData = false } = {}) {
   const name = safeName(rawName);
   const rec = registry.get(name);
   if (rec) {
-    try { process.kill(rec.pid); } catch { /* already gone */ }
+    killChromeProcessTree(rec.pid);
     registry.delete(name);
   }
   const dir = rec?.userDataDir || join(PROFILES_ROOT, name);
   let removed = false;
   if (removeData && existsSync(dir)) {
-    rmSync(dir, { recursive: true, force: true });
-    removed = true;
+    // Even after taskkill returns, Windows takes a moment to release file
+    // handles. Retry with backoff.
+    let lastErr = null;
+    for (let i = 0; i < 5; i++) {
+      try {
+        rmSync(dir, { recursive: true, force: true });
+        removed = true;
+        lastErr = null;
+        break;
+      } catch (err) {
+        lastErr = err;
+        await new Promise((r) => setTimeout(r, 300 * (i + 1)));
+      }
+    }
+    if (!removed && lastErr) {
+      // Don't throw — caller already got chrome killed. Surface as removed:false.
+      return { ok: true, killed: rec || null, removed: false, userDataDir: dir,
+        removeError: String(lastErr?.message || lastErr) };
+    }
   }
   return { ok: true, killed: rec || null, removed, userDataDir: dir };
 }
