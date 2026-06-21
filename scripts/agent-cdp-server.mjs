@@ -2362,6 +2362,11 @@ function registerStandaloneBrowserTools(tools, cdpPort, profileRegistry, default
     }
     const sticky = stickyBackendByProfile.get(normalizeProfileName(params?.profile || defaultProfileName));
     if (sticky) return sticky;
+    // Step 4i+ B1 fix: in personal-only mode (CDP_LAUNCH_BROWSER=0, managed
+    // backend is stubbed), any fall-through routing must default to "personal".
+    // Defaulting to "managed" causes any agent that doesn't explicitly pass
+    // backend:"personal" to immediately hit the stub and throw.
+    if (process.env.CDP_LAUNCH_BROWSER === "0") return "personal";
     return "managed";
   }
 
