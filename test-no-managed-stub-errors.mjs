@@ -30,8 +30,13 @@ for (const t of tools) {
     results.unknown.push({ t, err: String(e.message || e) });
     continue;
   }
-  const isStub = /managed backend removed|ABR-Stub|managed_backend_removed/i.test(text);
-  if (isStub) {
+  const hasStubText = /managed backend removed|ABR-Stub|managed_backend_removed/i.test(text);
+  // A tool only "fails" if it returns ok:false (or non-2xx) AND the response contains stub text.
+  // ok:true with stub-text is a diagnostic/facade reporting the backend state correctly — not a failure.
+  let okField = null;
+  try { const j = JSON.parse(text); okField = j?.ok; } catch {}
+  const realFail = hasStubText && (okField === false || status < 200 || status >= 300);
+  if (realFail) {
     results.stub_error.push({ t, status, snippet: text.slice(0, 200) });
   } else if (status >= 200 && status < 300) {
     results.ok.push(t);

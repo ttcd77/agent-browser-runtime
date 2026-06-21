@@ -751,6 +751,8 @@ export function registerSnapshotDomTools(deps) {
       },
     },
     async execute(_id, params) {
+      const routed = await maybeRoutePersonal("browser_dom_snapshot", params);
+      if (routed) return toolResult(routed);
       const profile = await resolveProfile(params?.profile);
       const computedStyles = Array.isArray(params?.computedStyles) && params.computedStyles.length
         ? params.computedStyles.map(String)
@@ -979,6 +981,8 @@ export function registerSnapshotDomTools(deps) {
       },
     },
     async execute(_id, params) {
+      const routed = await maybeRoutePersonal("browser_css_styles", params);
+      if (routed) return toolResult(routed);
       const profile = await resolveProfile(params?.profile);
       const selector = params?.selector ? String(params.selector) : "body";
       const maxRules = typeof params?.maxRules === "number" ? Math.min(Math.max(1, params.maxRules), 1_000) : 80;

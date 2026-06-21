@@ -529,6 +529,8 @@ export function registerInteractionTools(deps) {
       },
     },
     async execute(_id, params) {
+      const routed = await maybeRoutePersonal("browser_observe", params);
+      if (routed) return toolResult(routed);
       const profile = await resolveProfile(params?.profile);
       return toolResult(await withManagedPageClient(profile, params?.tabId || profile.tabId, async (client, target) => {
         const limit = Math.max(1, Math.min(200, Number(params?.limit || 60)));
