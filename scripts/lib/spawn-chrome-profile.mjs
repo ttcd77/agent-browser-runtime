@@ -14,10 +14,37 @@
 // user-data-dir with the extension installed via chrome://extensions GUI, and
 // every profile_create copies that template directory before launching.
 
-import { spawn, execSync } from "node:child_process";
+import { spawn, execSync, execFile } from "node:child_process";
 import { cpSync, existsSync, mkdirSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { homedir } from "node:os";
+
+// Minimize the spawned chrome window so it goes straight to the taskbar
+// instead of popping over the user's desktop and stealing focus. Mirrors
+// the older managed launch path (agent-cdp-server.mjs minimizeBrowserWindow).
+// CDP_BROWSER_START_MINIMIZED=0 keeps the window visible (opt-out).
+async function minimizeSpawnedWindow(childPid) {
+  if (process.env.CDP_BROWSER_START_MINIMIZED === "0") return;
+  if (!childPid || process.platform !== "win32") return;
+  // SW_MINIMIZE = 6. Two attempts because Chrome may not have created its
+  // main window handle yet on the first call.
+  const script =
+    `Add-Type -Name W -Namespace C -MemberDefinition '[DllImport("user32.dll")]public static extern bool ShowWindow(IntPtr h,int n);';` +
+    `Get-Process -Id ${childPid} -ErrorAction SilentlyContinue | ` +
+    `ForEach-Object { if($_.MainWindowHandle) { [C.W]::ShowWindow($_.MainWindowHandle, 6) | Out-Null } }`;
+  const runPs = () => new Promise((resolve) => {
+    const ps = execFile(
+      "powershell.exe",
+      ["-NoProfile", "-NonInteractive", "-Command", script],
+      { timeout: 5000, windowsHide: true },
+      () => resolve(),
+    );
+    ps.on("error", () => resolve());
+  });
+  await runPs();
+  await new Promise((r) => setTimeout(r, 2000));
+  await runPs();
+}
 import http from "node:http";
 
 const CHROME_EXE = process.env.ABR_CHROME_EXECUTABLE
@@ -141,6 +168,11 @@ export async function spawnChromeProfile(rawName) {
     rmSync(userDataDir, { recursive: true, force: true });
     throw new Error(`chrome did not become CDP-ready on port ${port} within 15s for profile ${name}`);
   }
+
+  // Minimize to taskbar so the spawned chrome doesn't overlap the user's
+  // existing windows or steal focus. Non-blocking — fire and continue;
+  // CDP is already ready and the wait below is just for the plugin attach.
+  minimizeSpawnedWindow(proc.pid).catch(() => {});
 
   const record = {
     name, pid: proc.pid, port, userDataDir,
