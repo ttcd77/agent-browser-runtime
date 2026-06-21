@@ -305,7 +305,12 @@ const MAX_FRAMES_PER_PROFILE = 1000;
 const MAX_SCRIPTS_PER_PROFILE = 5000;
 const MAX_DOM_MUTATIONS_PER_PROFILE = 5000;
 const MAX_WEBAUTHN_EVENTS_PER_PROFILE = 1000;
-const RECONNECT_MS = 5_000;
+// 1s tick (was 5s): personal-spawn profiles need plugin to attach BEFORE
+// agent drives navigation in the newly-spawned chrome. With 5s ticks the
+// first-page loadingFinished events fire before plugin's Network.enable,
+// so body capture misses them. 1s tick + bridge waits ~3s in profile_create
+// gives plugin ~3 ticks to attach and Network.enable before agent navigates.
+const RECONNECT_MS = 1_000;
 
 /** IIFE 注入生成 unique 全局名，避免跟 page JS 冲突 */
 function _domMutationVar(): string {

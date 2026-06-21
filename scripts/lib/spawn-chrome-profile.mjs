@@ -147,6 +147,16 @@ export async function spawnChromeProfile(rawName) {
     startedAt: new Date().toISOString(),
   };
   registry.set(name, record);
+
+  // Step 4i.2 fix: wait for cdp-traffic-capture plugin (in worker process,
+  // 1s reconnect tick) to (a) see the new profile entry the bridge just wrote
+  // into browser-profiles.json, (b) attach a CDP client, (c) call
+  // Network.enable. If agent drives navigation before this, the first-page
+  // loadingFinished events fire before Network is enabled and body capture
+  // misses them — the disk dir cdp-traffic/<name>/ never gets created.
+  // 3.5s = ~3 plugin reconnect ticks + Network.enable, empirically enough.
+  await new Promise((r) => setTimeout(r, 3500));
+
   return { ok: true, alreadyRunning: false, ...record };
 }
 
