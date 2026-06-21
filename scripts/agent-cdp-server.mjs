@@ -3317,7 +3317,7 @@ function registerStandaloneBrowserTools(tools, cdpPort, profileRegistry, default
   registerApplicationStorageTools({ tools, cdpPort, profileRegistry, resolveProfile, withManagedPageClient, cdpJson, managedPlaywrightDriver, maybeRoutePersonal });
 
   registerDeepEvidenceTools({ tools, profileRegistry, resolveProfile, withManagedPageClient, sleep, tokenFlowTracePageFunction, sourceMatches, buildSourceSearchDrilldowns, debuggerPausedSummary, maybeRoutePersonal });
-  registerReplayAttackTools({ tools, profileRegistry, resolveProfile, withManagedPageClient, executeProfileRequestReplayBatch, maybeRoutePersonal });
+  registerReplayAttackTools({ tools, profileRegistry, resolveProfile, executeProfileRequestReplayBatch, maybeRoutePersonal });
   registerScanTools({ tools, resolveProfile });
   registerAgentWorkspaceTools({ tools, profileRegistry, resolveProfile, cdpPort, managedPlaywrightDriver, maybeRoutePersonal });
 
