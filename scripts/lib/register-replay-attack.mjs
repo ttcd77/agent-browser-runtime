@@ -1,10 +1,12 @@
 // register-replay-attack.mjs — Raw/race/JWT/OOB request + replay + Agentic Intruder tool family.
 // V2 (2026-06-21): thin-proxied to helloworld/attack-harness Python primitives via subprocess.
+// V3 (2026-06-21): daemon fallback — tries attack-harness daemon socket first, spawns on failure.
 // The 5 helper libs (raw-request, jwt-forge, oob-client, replay-http, attack-intruder) are
 // now dead code — kept for reference, not imported.
 import { spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { dirname, resolve } from "node:path";
+import { createConnection } from "node:net";
 import { toolResult } from "./result-format.mjs";
 
 // Python executable + attack-harness working directory.
@@ -21,12 +23,77 @@ const PYTHON = process.env.PYTHON_BIN || "python";
 //     helloworld/attack-harness/
 const AH_CWD = process.env.ATTACK_HARNESS_CWD
   || resolve(__dirname, "..", "..", "..", "helloworld", "attack-harness");
+const DAEMON_HOST = process.env.ATTACK_HARNESS_DAEMON_HOST || "127.0.0.1";
+const DAEMON_PORT = parseInt(process.env.ATTACK_HARNESS_DAEMON_PORT || "17350", 10);
+const DAEMON_CONNECT_TIMEOUT_MS = 500;  // fast fail if daemon isn't running
+
+/**
+ * Try to execute via the attack-harness daemon socket.
+ * Returns {ok, result} on success, or throws on any error (connect refused, timeout, etc.)
+ */
+function attackHarnessDaemon(pyCode, timeoutMs) {
+  return new Promise((resolve, reject) => {
+    const socket = createConnection({ host: DAEMON_HOST, port: DAEMON_PORT });
+    let data = "";
+    const connectTimer = setTimeout(() => {
+      socket.destroy();
+      reject(new Error("daemon connect timeout"));
+    }, DAEMON_CONNECT_TIMEOUT_MS);
+
+    socket.on("connect", () => {
+      clearTimeout(connectTimer);
+      const request = JSON.stringify({ code: pyCode, timeout: Math.ceil(timeoutMs / 1000) });
+      socket.write(request);
+    });
+
+    socket.on("data", (chunk) => {
+      data += chunk.toString("utf-8");
+      // Daemon sends one complete JSON response per connection
+      try {
+        const parsed = JSON.parse(data);
+        socket.end();
+        if (parsed.ok) {
+          resolve(parsed.result !== undefined ? parsed.result : parsed);
+        } else {
+          reject(new Error(parsed.error || "daemon execution failed"));
+        }
+      } catch (_) {
+        // Incomplete JSON, wait for more data
+      }
+    });
+
+    const readTimer = setTimeout(() => {
+      socket.destroy();
+      reject(new Error(`daemon read timeout after ${timeoutMs}ms`));
+    }, timeoutMs);
+
+    socket.on("close", () => {
+      clearTimeout(readTimer);
+      if (!data) {
+        reject(new Error("daemon closed without response"));
+      } else {
+        try {
+          const parsed = JSON.parse(data);
+          resolve(parsed.result !== undefined ? parsed.result : parsed);
+        } catch (e) {
+          reject(new Error(`daemon unparseable response: ${data.slice(0, 200)}`));
+        }
+      }
+    });
+
+    socket.on("error", (e) => {
+      clearTimeout(connectTimer);
+      clearTimeout(readTimer);
+      reject(e);
+    });
+  });
+}
 
 /**
  * Spawn attack-harness CLI with a Python snippet on stdin, return parsed JSON result.
  * The Python snippet must print() a single JSON object to stdout.
  */
-function attackHarness(pyCode, timeoutMs = 30000) {
+function attackHarnessSpawn(pyCode, timeoutMs = 30000) {
   return new Promise((resolve, reject) => {
     const proc = spawn(PYTHON, ["-c", pyCode], {
       cwd: AH_CWD,
@@ -55,6 +122,18 @@ function attackHarness(pyCode, timeoutMs = 30000) {
       clearTimeout(timer);
       reject(e);
     });
+  });
+}
+
+/**
+ * Execute Python code via attack-harness. Tries daemon socket first,
+ * falls back to subprocess spawn if daemon isn't running.
+ */
+function attackHarness(pyCode, timeoutMs = 30000) {
+  return attackHarnessDaemon(pyCode, timeoutMs).catch((daemonErr) => {
+    // Daemon unavailable — fall back to spawn. This is the normal code path
+    // unless the operator has a daemon running.
+    return attackHarnessSpawn(pyCode, timeoutMs);
   });
 }
 
