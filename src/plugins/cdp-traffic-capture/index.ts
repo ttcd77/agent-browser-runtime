@@ -423,6 +423,12 @@ interface ProfileState {
    *  cacheStorageContentUpdated 永不 emit。Page.frameNavigated 时 lazy track。 */
   trackedOrigins: Set<string>;
   clients: Set<unknown>;
+  /** Target IDs we already have an active CDP connection to — used by
+   *  attachProfile() to skip already-connected targets so we only connect to
+   *  newly-created tabs (e.g. ensureProfileTab in the bridge creates a new page
+   *  target AFTER the initial attach, and without this tracking the reconnect
+   *  loop's old clients.size>0 guard would never discover it). */
+  connectedTargetIds: Set<string>;
   attaching: boolean;
 }
 
@@ -476,6 +482,7 @@ class TrafficCapture {
       fetchInterceptState: { patterns: new Set(), paused: new Map() },
       trackedOrigins: new Set<string>(),
       clients: new Set(),
+      connectedTargetIds: new Set(),
       attaching: false,
     };
   }
@@ -565,9 +572,11 @@ class TrafficCapture {
       for (const name of this.activated) {
         const p = this.profiles.get(name);
         if (!p) continue;
-        if (p.attaching || p.clients.size > 0) {
-          this._disconnectLogged.delete(name);
+        if (p.attaching) {
           continue;
+        }
+        if (p.clients.size > 0) {
+          this._disconnectLogged.delete(name);
         }
         // Log once per real attach failure. A cdpUrl profile with zero open
         // pages is normal: capture is passive and must not create about:blank
@@ -646,6 +655,7 @@ class TrafficCapture {
         }
       }
       p.clients.clear();
+      p.connectedTargetIds.clear();
     }
     this.logger.info(`[cdp-traffic-capture] stop complete (closed ${closed} CDP client(s))`);
   }
@@ -657,11 +667,14 @@ class TrafficCapture {
     try {
       const targets = await this.listTargets(p.endpoint);
       const pages = targets.filter((t: { type?: string }) => t.type === "page");
+      let newTargets = 0;
       for (const target of pages) {
+        if (p.connectedTargetIds.has(target.id)) continue;
         await this.attachTarget(name, p.endpoint, target);
+        newTargets++;
       }
-      if (pages.length > 0) {
-        this.logger.info(`[cdp-traffic] ${name}:${cdpEndpointLabel(p.endpoint)} attached to ${pages.length} page(s)`);
+      if (newTargets > 0) {
+        this.logger.info(`[cdp-traffic] ${name}:${cdpEndpointLabel(p.endpoint)} attached to ${newTargets} new page(s) (${pages.length} total)`);
       }
     } finally {
       p.attaching = false;
@@ -707,6 +720,7 @@ class TrafficCapture {
       return; // Browser may have exited
     }
     p.clients.add(client);
+    p.connectedTargetIds.add(target.id);
     type DomainAPI = Record<string, (...args: unknown[]) => unknown>;
     const c = client as {
       Network: DomainAPI;
@@ -1456,8 +1470,10 @@ class TrafficCapture {
       this.logger.warn(`[cdp-traffic] ${name}: Target.setAutoAttach failed: ${err}`);
     }
 
+    const targetId = target.id;
     c.on("disconnect", () => {
       p.clients.delete(client);
+      p.connectedTargetIds.delete(targetId);
     });
   }
 
