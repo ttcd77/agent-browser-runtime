@@ -50,6 +50,7 @@ import {
   listDomainSkillHosts,
   workspaceStatus,
 } from "./lib/agent-workspace.mjs";
+import { PRIMARY_TOOLS, filterPrimaryToolNames } from "./lib/primary-tools.mjs";
 import { truncateText } from "./lib/text-utils.mjs";
 import { prettyPrintJavaScript } from "./lib/pretty-print.mjs";
 import {
@@ -5855,17 +5856,41 @@ async function main() {
           configPath,
           profileRegistryFile: profileRegistry.registryFile,
           feedbackUrl: `http://${serverHost}:${serverPort}/feedback`,
-          tools: [...harness.tools.keys()],
+          // Task G: default discovery surface is thin (primary tools only).
+          // Wrappers still callable via /tool/<name> POST — only discovery filtered.
+          tools: url.searchParams.get("legacy") === "1"
+            ? [...harness.tools.keys()]
+            : filterPrimaryToolNames([...harness.tools.keys()]),
+          tools_count: filterPrimaryToolNames([...harness.tools.keys()]).length,
+          legacy_tools_count: harness.tools.size,
         });
         return;
       }
       if (req.method === "GET" && url.pathname === "/tools") {
+        const allTools = [...harness.tools.values()].map((tool) => ({
+          name: tool.name,
+          description: tool.description,
+          parameters: tool.parameters,
+        }));
+        sendJson(res, 200, {
+          // Task G: /tools also filters to primary by default; ?legacy=1 for full list.
+          tools: url.searchParams.get("legacy") === "1"
+            ? allTools
+            : allTools.filter(t => PRIMARY_TOOLS.has(t.name)),
+          tools_count: allTools.filter(t => PRIMARY_TOOLS.has(t.name)).length,
+          legacy_tools_count: allTools.length,
+        });
+        return;
+      }
+      // Task G: explicit legacy escape hatch for backward compat.
+      if (req.method === "GET" && url.pathname === "/tools-legacy") {
         sendJson(res, 200, {
           tools: [...harness.tools.values()].map((tool) => ({
             name: tool.name,
             description: tool.description,
             parameters: tool.parameters,
           })),
+          tools_count: harness.tools.size,
         });
         return;
       }
