@@ -25,28 +25,38 @@ Tracks where Step 4 stopped and what each follow-up needs to unblock.
 - Real-Chrome E2E verified (commit 2ae7506): read_page on GitHub Dashboard
   (55 refs, logged in), BBC (96 refs), example.com (full click_ref round trip).
 
-## Step 4d — known blockers to address later
+## Step 4e — DONE
 
-### worker boot still requires a CDP browser endpoint
+### worker boot personal-only mode (stub CDP server)
 
-Symptom: `node scripts/agent-cdp-server.mjs` exits with
-`Error: browser CDP endpoint is not available: http://127.0.0.1:9229/json/version`
-at agent-cdp-server.mjs:287 (`waitForCdp`).
+Worker now boots without a real managed Chrome. When the operator passes
+`CDP_LAUNCH_BROWSER=0` (no managed launch requested) and no foreign CDP
+browser is already listening on `cdpPort`, the boot chain spawns a tiny
+HTTP stub on that port that answers just the two DevTools endpoints the
+rest of startup probes (`/json/version` returns a fake "ABR-Stub"
+identity, `/json/list` returns an empty target array).
 
-Cause: server startup unconditionally waits for the managed browser's CDP port
-to be reachable. With managed gone this never succeeds.
+Real browser actions still go through the personal bridge in a separate
+process (port 17337). The stub never sees them. Verified:
 
-Fix (Step 4e):
-- Make `waitForCdp` optional. When CDP_LAUNCH_BROWSER=0 and there is no
-  pre-existing CDP browser to attach to, skip the wait and run in
-  "personal-only mode" where the worker is a thin HTTP front-end that routes
-  every browser tool through the personal bridge.
-- Drop `managedBrowserProcessSummary` / `managedCdpPort*` from /health.
-- Drop the `managedLaunchRequested` / `relaunchCount` browserProcess block.
+  $ CDP_AGENT_SERVER_PORT=17348 CDP_BROWSER_PORT=9229 CDP_LAUNCH_BROWSER=0 \
+      node scripts/agent-cdp-server.mjs
+  [agent-cdp-server] personal-only mode: stub CDP server listening on 127.0.0.1:9229
+  Agent CDP server ready: http://0.0.0.0:17348
 
-Not blocking Step 4c — bridge (personal-chrome-bridge.mjs on 17347/17346) is
-the only thing the worktree's smoke / real-Chrome E2E uses, and it runs without
-the worker.
+  $ curl http://127.0.0.1:17348/health | jq '.tools | length'
+  107
+
+  total tools 153 -> 107 (-46 worker-visible). 25 expected-deleted tools
+  (browser_snapshot/find/observe/stuck/text/click/hover/double_click/drag/
+   eval/act/inspect/capture/replay/security_pack/capabilities/ready,
+   profile_create/list/delete, attack_intruder_create, profile_jwt_forge,
+   profile_oob_alloc, browser_token_scan, browser_scan_bridge) all gone.
+
+Two cosmetic blockers remain in /health (`profile-port-drift` warning and
+`managedBrowserOwnership.verified: false`) — both are managed-era checks
+that produce noise now that the backend is stubbed. Step 4f cleanup
+will silence them.
 
 ### Expedia is IP-level blocked, not browser-level
 

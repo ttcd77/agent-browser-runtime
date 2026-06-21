@@ -297,6 +297,42 @@ async function cdpEndpointAvailable(port) {
   }
 }
 
+// Personal-only mode (Step 4e): managed backend is stubbed, so there's no
+// Chrome listening on the cdpPort the boot chain expects. We start a tiny
+// HTTP stub that satisfies just enough of the DevTools HTTP endpoint surface
+// (/json/version + empty /json target list) so waitForCdp, cdpJson, and the
+// target watcher don't error. Real browser actions route via the personal
+// bridge (separate process / port), not through this stub.
+async function startStubCdpServer(port) {
+  const server = http.createServer((req, res) => {
+    const url = req.url || "";
+    if (url === "/json/version") {
+      res.writeHead(200, { "content-type": "application/json" });
+      res.end(JSON.stringify({
+        Browser: "ABR-Stub/0.1 (managed backend removed in slim-abr-raw-cdp)",
+        "Protocol-Version": "1.3",
+        webSocketDebuggerUrl: `ws://127.0.0.1:${port}/devtools/browser/abr-stub`,
+        userAgent: "ABR-Stub",
+        "V8-Version": "0",
+        "WebKit-Version": "0",
+      }));
+      return;
+    }
+    if (url === "/json" || url === "/json/list" || url.startsWith("/json?")) {
+      res.writeHead(200, { "content-type": "application/json" });
+      res.end("[]");
+      return;
+    }
+    res.writeHead(404, { "content-type": "text/plain" });
+    res.end("not-supported-in-personal-only-mode");
+  });
+  await new Promise((resolve, reject) => {
+    server.listen(port, "127.0.0.1", () => resolve());
+    server.on("error", reject);
+  });
+  return server;
+}
+
 function devToolsActivePortPath(userDataDir) {
   return join(userDataDir, "DevToolsActivePort");
 }
@@ -5816,6 +5852,15 @@ async function main() {
 
   if (launchBrowser && !existingBrowser) {
     await launchManagedBrowser("startup");
+  }
+
+  // Step 4e: personal-only mode. When operator didn't request a managed launch
+  // and no foreign Chrome is already on cdpPort, start a stub HTTP endpoint so
+  // the boot chain's CDP probes succeed. All real browser work routes via the
+  // personal bridge separately.
+  if (!launchBrowser && !(await cdpEndpointAvailable(cdpPort))) {
+    await startStubCdpServer(cdpPort);
+    console.error(`[agent-cdp-server] personal-only mode: stub CDP server listening on 127.0.0.1:${cdpPort}`);
   }
 
   await waitForCdp(cdpPort);
