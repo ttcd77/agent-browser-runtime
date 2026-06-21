@@ -1,9 +1,18 @@
 # Persistent launcher for Agent Browser Runtime worker (port 17335).
 #
-# Started by the Windows Scheduled Task "AgentBrowserRuntime-AgentServer" at user
-# logon. The task wraps this script so that:
-#   1) the worker runs with CDP_LAUNCH_BROWSER=1 so it brings up its own Edge/
-#      Chrome session on port 9222 without needing the user to launch one;
+# v0.5 (2026-06-21) — slim refactor: worker runs in personal-only mode.
+# No more managed-Playwright Edge launch; the worker is a routing layer that
+# forwards every browser-op call to the personal Chrome bridge (port 17337),
+# and exposes attack-harness primitives via subprocess proxy. The managed
+# backend (Playwright wrapper) is now a stub that throws on call — so we
+# MUST NOT route browser ops to it.
+#
+# Started by the Windows Scheduled Task "AgentBrowserRuntime-AgentServer" at
+# user logon. The task wraps this script so that:
+#   1) the worker runs with CDP_LAUNCH_BROWSER=0 (personal-only mode) — does
+#      NOT launch a managed Edge on port 9222, instead the routing layer
+#      directs every browser-op tool through the personal Chrome extension
+#      bridge at 17337 (which the user-installed extension auto-connects);
 #   2) stdout / stderr stream into a rotating log file under
 #      $HOME/.agent-browser-runtime/logs/;
 #   3) if a worker is already listening on 17335 we exit early instead of
@@ -48,14 +57,25 @@ try {
     # not running yet, continue
 }
 
-$env:CDP_LAUNCH_BROWSER = '1'
+# v0.5 slim: personal-only mode. The managed Playwright driver is now a stub
+# that throws on every call (commit 8832fd7 — managed backend removed). With
+# CDP_LAUNCH_BROWSER=0 the worker boots its stub CDP server on port 9222
+# (so health probes / cdpJson / targetWatcher satisfy without an actual
+# Chrome) and the routing layer (maybeRoutePersonal / resolveBackendForCall)
+# defaults every fall-through to "personal" (commit d6d393c). Browser-op
+# tools route to the personal bridge; attack primitives subprocess to the
+# helloworld attack-harness CLI. No managed browser is ever launched.
+#
+# To run with the old managed Edge (incompatible with the v0.5 stub driver —
+# managed routes all throw), explicitly export CDP_LAUNCH_BROWSER=1 before
+# invoking this script — but you will hit the "managed backend removed"
+# stub for ~65 tools. Don't.
+if (-not $env:CDP_LAUNCH_BROWSER) { $env:CDP_LAUNCH_BROWSER = '0' }
 $env:CDP_AGENT_SERVER_HOST = $bindHost
 
-# Pin the managed browser to one fixed, known CDP port — deterministic, no
-# roulette. The canonical port is 9222. Letting different sessions pick
-# different ports causes them to attach-existing to the wrong browser and
-# collide. fixed mode is kept so that ephemeral mode does not discard the
-# requested port and land on a random one.
+# CDP port is now satisfied by the stub server (in personal-only mode the
+# stub listens on $env:CDP_BROWSER_PORT and answers GET /json/version etc).
+# Keep 9222 as the convention so legacy clients still find an endpoint.
 if (-not $env:CDP_BROWSER_PORT_MODE) { $env:CDP_BROWSER_PORT_MODE = 'fixed' }
 if (-not $env:CDP_BROWSER_PORT) { $env:CDP_BROWSER_PORT = '9222' }
 
