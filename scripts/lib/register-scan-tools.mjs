@@ -1,4 +1,5 @@
-// register-scan-tools.mjs — Excavator scan tools: bridge ABR traffic to analysis pipeline
+// register-scan-tools.mjs — Excavator scan tools: bridge ABR traffic to analysis pipeline.
+// V2 (2026-06-21): uses attack-harness Python path for subprocess calls.
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import { existsSync, statSync } from "node:fs";
@@ -11,12 +12,19 @@ const __dirname = dirname(__filename);
 // scripts/lib → scripts → agent-browser-runtime → project → + helloworld
 const WORKSPACE_ROOT = process.env.PROJ ?? join(__dirname, "..", "..", "..", "helloworld");
 const OBSERVER_DIR = join(WORKSPACE_ROOT, "system", "excavator", "observer");
+const AH_CWD = process.env.ATTACK_HARNESS_CWD || join(WORKSPACE_ROOT, "attack-harness");
+const PYTHON = process.env.PYTHON_BIN || "python";
 
-// Helper: run python subprocess, return stdout/stderr + exit code
+// Helper: run python subprocess, return stdout/stderr + exit code.
+// Adds attack-harness src to PYTHONPATH so observer scripts can import attack_harness.
 function runPython(args, timeoutMs = 60_000) {
   return new Promise((resolve, reject) => {
-    const proc = spawn("python", args, {
-      env: { ...process.env, PROJ: WORKSPACE_ROOT },
+    const proc = spawn(PYTHON, args, {
+      env: {
+        ...process.env,
+        PROJ: WORKSPACE_ROOT,
+        PYTHONPATH: [AH_CWD + "/src", process.env.PYTHONPATH].filter(Boolean).join(";"),
+      },
       cwd: OBSERVER_DIR,
     });
     const stdout = [];
