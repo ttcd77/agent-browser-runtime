@@ -4673,6 +4673,8 @@ const tools = {
   personal_chrome_tabs: "List tabs from the user's real Chrome.",
   personal_chrome_tab_close: "Close one or more tabs in the user's real Chrome by tabId(s).",
   personal_chrome_active_tab_snapshot: "Read title, URL, visible text, selected text, and controls from the active tab.",
+  personal_chrome_read_page: "Claude-in-Chrome-style page reader. Returns an indented role tree where every interactive node carries a stable [ref_N] id (heading/button/link/input/...). One call replaces snapshot+observe+text+dom_search for navigation. Password-shaped inputs auto-redact. Follow-up with personal_chrome_click_ref({ref}). Params: maxChars (default 8000), maxDepth (15), maxElements (1500).",
+  personal_chrome_click_ref: "Click an element by ref id from personal_chrome_read_page output. Uses application-layer click (element.click()), proven stable in SPAs. Param: ref (e.g. \"ref_42\"). Returns {ok, ref, tag} or {ok:false, error:\"stale_ref\"|\"unknown_ref\"} if page has since reloaded.",
   personal_chrome_screenshot: "Capture the active tab as a PNG and save it locally.",
   personal_chrome_click: "Click in the user's real Chrome by selector, visible text, or x/y coordinate.",
   personal_chrome_hover: "Hover in the user's real Chrome by selector, visible text, or x/y coordinate.",

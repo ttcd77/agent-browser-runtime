@@ -1,4 +1,4 @@
-const DEFAULT_BRIDGE_URL = "ws://127.0.0.1:17336/extension";
+const DEFAULT_BRIDGE_URL = "ws://127.0.0.1:17346/extension";
 const DEBUGGER_PROTOCOL_VERSION = "1.3";
 const MAX_DEVTOOLS_EVENTS = 1000;
 const CHROME_DEBUGGER_ALLOWED_DOMAINS = [
@@ -236,6 +236,10 @@ async function executeCommand(command, params) {
       return await chromeOpen(params);
     case "chrome_active_tab_snapshot":
       return await chromeSnapshot(params);
+    case "chrome_read_page":
+      return await chromeReadPage(params);
+    case "chrome_click_ref":
+      return await chromeClickRef(params);
     case "chrome_screenshot":
       return await chromeScreenshot(params);
     case "chrome_click":
@@ -673,6 +677,117 @@ async function chromeScreenshot(params) {
   const response = await chromeDebuggerSendCommand(target, "Page.captureScreenshot", screenshotParams);
   const dataUrl = `data:image/${format};base64,${response.data}`;
   return { tab: pickTab(tab), dataUrl, mimeType: `image/${format}` };
+}
+
+// Claude-in-Chrome-style page reader. One tool replacing snapshot/observe/text/
+// dom_snapshot/elements_snapshot. Walks the DOM, maps tag → role, generates an
+// indented tree where each interactive node carries a stable [ref_N] id. The
+// page keeps refN → element in window.__abrElementMap (WeakRef), so a follow-up
+// chrome_click_ref({ref:"ref_42"}) hits the exact element the agent saw —
+// no fragile CSS selector required.
+//
+// Password-shaped inputs (type=password, autocomplete=current/new-password) auto-
+// redact their displayed text (the ref still works for clicks/focus).
+async function chromeReadPage(params) {
+  const tab = await getTargetTab(params);
+  const opts = {
+    maxChars: Math.min(Math.max(Number(params?.maxChars) || 8000, 200), 50000),
+    maxDepth: Math.min(Math.max(Number(params?.maxDepth) || 15, 3), 30),
+    maxElements: Math.min(Math.max(Number(params?.maxElements) || 1500, 50), 10000),
+  };
+  const result = await runInTab(tab.id, (o) => {
+    const TAG_ROLE = {
+      h1: "heading", h2: "heading", h3: "heading", h4: "heading", h5: "heading", h6: "heading",
+      button: "button", a: "link", input: "input", textarea: "textarea", select: "select",
+      img: "image", form: "form", label: "label", summary: "summary",
+      nav: "navigation", header: "banner", footer: "contentinfo", main: "main",
+      aside: "complementary", section: "section", article: "article",
+      ul: "list", ol: "list", li: "listitem",
+      table: "table", tr: "row", td: "cell", th: "columnheader",
+      dialog: "dialog",
+    };
+    function visible(el) {
+      const s = getComputedStyle(el);
+      if (s.display === "none" || s.visibility === "hidden" || parseFloat(s.opacity) === 0) return false;
+      if (el.offsetWidth === 0 && el.offsetHeight === 0) return false;
+      return true;
+    }
+    function isPasswordLike(el) {
+      if (el.tagName !== "INPUT") return false;
+      if (el.type === "password") return true;
+      const ac = (el.autocomplete || "").toLowerCase();
+      return ac === "current-password" || ac === "new-password";
+    }
+    function nodeText(el) {
+      if (isPasswordLike(el)) return "[redacted]";
+      const v = (el.getAttribute && el.getAttribute("aria-label"))
+        || el.placeholder || el.title || el.alt
+        || (el.labels && el.labels[0] && el.labels[0].innerText)
+        || (el.value && el.tagName === "INPUT" ? String(el.value) : "")
+        || (el.innerText || "");
+      return String(v).replace(/\s+/g, " ").trim().slice(0, 80);
+    }
+    // Per-page WeakRef table. Survives reads, cleared on page navigation by
+    // Chrome (window resets). Bridge can call chrome_click_ref using these.
+    if (!window.__abrElementMap) window.__abrElementMap = new Map();
+    window.__abrElementMap.clear();
+    let refN = 0, elementsSeen = 0;
+    let out = "";
+    function walk(el, depth) {
+      if (elementsSeen >= o.maxElements) return;
+      if (out.length >= o.maxChars) return;
+      if (depth > o.maxDepth) return;
+      if (!(el instanceof Element)) return;
+      if (!visible(el)) return;
+      elementsSeen++;
+      const tag = el.tagName.toLowerCase();
+      const role = (el.getAttribute && el.getAttribute("role")) || TAG_ROLE[tag] || null;
+      let pushed = false;
+      if (role) {
+        refN++;
+        const ref = "ref_" + refN;
+        window.__abrElementMap.set(ref, new WeakRef(el));
+        const label = nodeText(el);
+        out += "  ".repeat(depth) + role + (label ? ' "' + label + '"' : "") + " [" + ref + "]\n";
+        pushed = true;
+      }
+      const childDepth = pushed ? depth + 1 : depth;
+      for (const c of el.children) walk(c, childDepth);
+    }
+    walk(document.body, 0);
+    const truncated = out.length >= o.maxChars || elementsSeen >= o.maxElements;
+    return {
+      ok: true,
+      pageContent: out,
+      url: location.href,
+      title: document.title,
+      viewport: { width: innerWidth, height: innerHeight },
+      refCount: refN,
+      elementsScanned: elementsSeen,
+      truncated,
+      limits: o,
+    };
+  }, [opts]);
+  return { tab: pickTab(tab), ...result };
+}
+
+// Click an element previously surfaced by chrome_read_page. Uses the same
+// application-layer click path as chromeClick (element.click()) — proven
+// stable in SPAs without Playwright-style actionability checks.
+async function chromeClickRef(params) {
+  const tab = await getTargetTab(params);
+  const ref = String(params?.ref || "").trim();
+  if (!ref) return { ok: false, error: "ref required (from chrome_read_page output)" };
+  const result = await runInTab(tab.id, (refId) => {
+    const map = window.__abrElementMap;
+    if (!map || !map.has(refId)) return { ok: false, error: "unknown_ref", reason: "page may have reloaded since read_page — call chrome_read_page again" };
+    const el = map.get(refId).deref();
+    if (!el || !el.isConnected) return { ok: false, error: "stale_ref", reason: "element removed from DOM since read_page" };
+    el.scrollIntoView({ block: "center", inline: "center" });
+    el.click();
+    return { ok: true, ref: refId, tag: el.tagName.toLowerCase() };
+  }, [ref]);
+  return { tab: pickTab(tab), ...result };
 }
 
 async function chromeClick(params) {

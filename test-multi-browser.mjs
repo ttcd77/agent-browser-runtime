@@ -14,7 +14,6 @@ const BRIDGE_WS = "ws://127.0.0.1:17346/extension";
 function fakeExt(instanceId, displayName) {
   return new Promise((resolve, reject) => {
     const ws = new WebSocket(BRIDGE_WS);
-    const pending = new Map();
     ws.on("open", () => {
       ws.send(JSON.stringify({
         type: "hello",
@@ -24,12 +23,31 @@ function fakeExt(instanceId, displayName) {
         browserInstanceId: instanceId,
         browserDisplayName: displayName,
       }));
-      // also reply to any command tests would send (echo result)
       ws.on("message", (raw) => {
         const m = JSON.parse(raw.toString());
-        if (m.type === "command") {
-          ws.send(JSON.stringify({ type: "result", id: m.id, ok: true, result: { echoedBy: displayName, command: m.command } }));
+        if (m.type !== "command") return;
+        // Real-extension-shaped responses for the new tools so we exercise the
+        // full HTTP→bridge→ws→ext-handler→reply→HTTP round-trip.
+        let result;
+        if (m.command === "chrome_read_page") {
+          result = {
+            ok: true,
+            pageContent: 'heading "Welcome" [ref_1]\n  button "Sign in" [ref_2]\n',
+            url: "https://fake.example/",
+            title: "Fake page from " + displayName,
+            viewport: { width: 1366, height: 768 },
+            refCount: 2,
+            elementsScanned: 2,
+            truncated: false,
+          };
+        } else if (m.command === "chrome_click_ref") {
+          result = m.params?.ref === "ref_2"
+            ? { ok: true, ref: "ref_2", tag: "button" }
+            : { ok: false, error: "unknown_ref" };
+        } else {
+          result = { echoedBy: displayName, command: m.command };
         }
+        ws.send(JSON.stringify({ type: "result", id: m.id, ok: true, result }));
       });
       resolve({ ws, instanceId, displayName });
     });
@@ -94,6 +112,18 @@ async function main() {
   console.log("\n=== Step 6: select_browser by instance id (not name) ===");
   const sel2 = await tool("personal_chrome_switch_browser", { browser: "uuid-AAA-bbb" });
   ok(sel2.json?.active?.browserDisplayName === "TestChrome-Victim", "switch by instance id works");
+
+  console.log("\n=== Step 6b: read_page on active browser (Victim) ===");
+  const rp = await tool("personal_chrome_read_page", { maxChars: 4000 });
+  ok(rp.status === 200, `read_page HTTP 200 (got ${rp.status})`);
+  ok(typeof rp.json?.pageContent === "string" && rp.json.pageContent.includes("[ref_"), `pageContent has refs: ${JSON.stringify(rp.json).slice(0,200)}`);
+  ok(rp.json?.title?.includes("Victim"), "routed to Victim (currently active)");
+
+  console.log("\n=== Step 6c: click_ref using ref from read_page ===");
+  const cr = await tool("personal_chrome_click_ref", { ref: "ref_2" });
+  ok(cr.json?.ref === "ref_2" && cr.json?.tag === "button", `click_ref hit ref_2 button: ${JSON.stringify(cr.json).slice(0,200)}`);
+  const crBad = await tool("personal_chrome_click_ref", { ref: "ref_999" });
+  ok(crBad.json?.error === "unknown_ref", `unknown ref returns unknown_ref error: ${JSON.stringify(crBad.json).slice(0,200)}`);
 
   console.log("\n=== Step 7: disconnect Victim, active hint should clear ===");
   A.ws.close();
