@@ -152,7 +152,13 @@ export function registerCapabilityFacadeTools(deps) {
     },
     async execute(id, params) {
       const managedProfiles = await profileRegistry.listProfiles();
-      const recovery = await recoverManagedCdp("backend-status");
+      // In personal-only mode (slim-abr) the managed backend is intentionally
+      // removed. Skip the recovery probe (it would surface a stub stack trace
+      // into the diagnostic response) and report "removed" cleanly.
+      const personalOnly = process.env.CDP_LAUNCH_BROWSER === "0";
+      const recovery = personalOnly
+        ? { browserVersion: null, recoveryAttempted: false, recovered: false, error: null }
+        : await recoverManagedCdp("backend-status");
       const managedTabs = recovery.browserVersion ? await cdpJson(cdpPort, "/json").catch(() => null) : null;
       const profilePortSummary = summarizeProfilePortConfig(process.env.CDP_BROWSER_PROFILE_CONFIG || "", cdpPort, { cdpPortMode: managedCdpPortMode });
       const personal = await personalBridgeHealth();
@@ -170,18 +176,18 @@ export function registerCapabilityFacadeTools(deps) {
         router: "unified-browser-runtime",
         managed: {
           ok: Array.isArray(managedTabs),
-          backend: "managed-cdp",
+          backend: personalOnly ? "managed-removed-slim-abr" : "managed-cdp",
           runtimeIdentity: Array.isArray(managedTabs) ? managedRuntimeIdentity(recovery.browserVersion) : { ...browserRuntimeIdentity, reachable: false },
           cdpPort,
           cdpReachable: Array.isArray(managedTabs),
           cdpHealth: {
             reachable: Array.isArray(managedTabs),
-            failureMode: Array.isArray(managedTabs) ? null : "managed-cdp-unreachable",
+            failureMode: personalOnly ? "managed-removed-in-slim-abr" : (Array.isArray(managedTabs) ? null : "managed-cdp-unreachable"),
             recoveryAttempted: recovery.recoveryAttempted,
             recovered: recovery.recovered,
             recoveryError: recovery.error,
           },
-          blocker: Array.isArray(managedTabs) ? null : "managed-cdp-unreachable",
+          blocker: personalOnly ? "use-personal-bridge-or-spawn-profile" : (Array.isArray(managedTabs) ? null : "managed-cdp-unreachable"),
           browserProcess: managedBrowserProcessSummary(),
           defaultProfile: defaultProfileName,
           profiles: managedProfiles.map((entry) => entry.name),
