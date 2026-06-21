@@ -145,6 +145,7 @@ export function registerInteractionTools(deps) {
         capturedTraffic: capture.capturedTraffic,
         trafficFile: capture.trafficFile,
         eventFile: capture.eventFile,
+        meta: { suggestion: "If browser_navigate hangs on a page that never fires load, or you need to navigate with custom headers/referrer, use send_cdp(profile, 'Page.navigate', {url, referrer, ...}) for direct CDP navigation. See skills/agent-browser-runtime SKILL.md Layer 2." },
       });
     },
   });
@@ -208,6 +209,7 @@ export function registerInteractionTools(deps) {
         trafficFile: capture.trafficFile,
         eventFile: capture.eventFile,
         afterObservation,
+        meta: { suggestion: "If browser_click returns effective:false or misses SPA React handlers, do not retry endlessly — use send_cdp(profile, 'Runtime.evaluate', {expression: 'document.querySelector(...).click()'}) for a direct DOM click, or send_cdp(profile, 'Input.dispatchMouseEvent', ...) for raw CDP mouse events. See skills/agent-browser-runtime SKILL.md Layer 2." },
       });
     },
   });
@@ -420,6 +422,7 @@ export function registerInteractionTools(deps) {
         capturedTraffic: capture.capturedTraffic,
         trafficFile: capture.trafficFile,
         eventFile: capture.eventFile,
+        meta: { suggestion: "If browser_type fails on React controlled inputs (value resets after typing), use send_cdp(profile, 'Runtime.evaluate', {expression: 'document.querySelector(...).value = \"...\"; document.querySelector(...).dispatchEvent(new Event(\"input\", {bubbles:true}))'}) for direct value set + React reconciliation. See skills/agent-browser-runtime SKILL.md Layer 2." },
       });
     },
   });

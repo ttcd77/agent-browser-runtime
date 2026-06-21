@@ -188,8 +188,8 @@ export function registerApplicationStorageTools(deps) {
         });
         const cookies = await client.Network.getCookies().catch((error) => ({ error: String(error?.message || error) }));
         await profileRegistry.touchProfile(profile.name, { tabId: target.id });
-        return { profile: profile.name, tabId: target.id, page: page.result?.value, cookies: cookies.cookies || cookies };
-      })); 
+        return { profile: profile.name, tabId: target.id, page: page.result?.value, cookies: cookies.cookies || cookies, meta: { suggestion: "This wrapper reads localStorage/sessionStorage from the page context — cross-origin iframe storage is invisible. For cross-origin storage access, use raw CDP: send_cdp(profile, 'DOMStorage.getDOMStorageItems', {storageId: {...}}). See skills/agent-browser-runtime SKILL.md Layer 2." } };
+      }));
     },
   });
 
@@ -392,7 +392,7 @@ export function registerApplicationStorageTools(deps) {
       }
       try {
         const result = await managedPlaywrightDriver.addCookies(profile.name, cookies);
-        return toolResult({ tool: "browser_cookies_set", ...result });
+        return toolResult({ tool: "browser_cookies_set", ...result, meta: { suggestion: "If this wrapper fails to set cookies (e.g. httpOnly cookies silently dropped, cross-origin domain rejected), use raw CDP: send_cdp(profile, 'Network.setCookies', {cookies: [...]}). Playwright context.addCookies cannot set HttpOnly cookies — raw CDP Network.setCookies can. See skills/agent-browser-runtime SKILL.md Layer 2." } });
       } catch (error) {
         return toolResult({ ok: false, backend: "managed", error: String(error?.message || error) });
       }
@@ -437,7 +437,7 @@ export function registerApplicationStorageTools(deps) {
       const profile = await resolveProfile(params?.profile);
       try {
         const result = await managedPlaywrightDriver.getCookies(profile.name, filter);
-        return toolResult({ tool: "browser_cookies_get", ...result });
+        return toolResult({ tool: "browser_cookies_get", ...result, meta: { suggestion: "If this wrapper misses cookies (partitioned cookies, cross-origin iframe cookies, or incomplete partitionKey metadata), use raw CDP: send_cdp(profile, 'Network.getCookies', {urls: [...]}) for full cookie access including partitioned cookies. See skills/agent-browser-runtime SKILL.md Layer 2." } });
       } catch (error) {
         return toolResult({ ok: false, backend: "managed", error: String(error?.message || error) });
       }
@@ -686,6 +686,7 @@ export function registerApplicationStorageTools(deps) {
           cacheCount: page.cacheStorage?.names?.length || 0,
           cdpTargets,
           cdpTargetCount: cdpTargets.filter((entry) => !entry.error).length,
+          meta: { suggestion: "This wrapper fetches SW scripts and cache entries from the page origin only. For cross-origin SW inspection or raw CDP target access, use send_cdp(profile, 'ServiceWorker.enable') + send_cdp(profile, 'ServiceWorker.dispatchSyncEvent', ...). See skills/agent-browser-runtime SKILL.md Layer 2." },
         };
       }));
     },
@@ -886,6 +887,7 @@ export function registerApplicationStorageTools(deps) {
           cacheCount: applicationExport.cacheStorage?.caches?.length || 0,
           serviceWorkerRegistrationCount: applicationExport.serviceWorker?.registrations?.length || 0,
           cookieCount: Array.isArray(applicationExport.browserCookies) ? applicationExport.browserCookies.length : 0,
+          meta: { suggestion: "This wrapper exports storage via page-context JS — IndexedDB and CacheStorage are origin-locked. For cross-origin storage forensic access, use raw CDP: send_cdp(profile, 'IndexedDB.requestDatabaseNames') and send_cdp(profile, 'CacheStorage.requestCacheNames'). See skills/agent-browser-runtime SKILL.md Layer 2." },
         };
       }));
     },

@@ -514,6 +514,7 @@ export function registerSnapshotDomTools(deps) {
           capturedTraffic: capture.capturedTraffic,
           trafficFile: capture.trafficFile,
           eventFile: capture.eventFile,
+          meta: { suggestion: "browser_eval runs in the top-level page context — cross-origin iframe JS is inaccessible. For cross-frame eval, use send_cdp(profile, 'Runtime.evaluate', {expression, contextId: frameContextId}) with the target frame's executionContextId from browser_frame_tree. See skills/agent-browser-runtime SKILL.md Layer 2." },
         };
       }));
     },
@@ -568,6 +569,7 @@ export function registerSnapshotDomTools(deps) {
             "Frame access and shadow root rows come from the page context and follow same-origin and shadow DOM visibility rules.",
             "Closed shadow roots and cross-origin frame internals may be intentionally unavailable.",
           ],
+          meta: { suggestion: "browser_frame_tree only shows same-origin accessible frames. For cross-origin frame metadata and execution context discovery, use raw CDP: send_cdp(profile, 'Page.getFrameTree') + send_cdp(profile, 'Runtime.enable') and listen for executionContextCreated events. Each context has a frameId and origin. See skills/agent-browser-runtime SKILL.md Layer 2." },
         };
       }));
     },
@@ -864,6 +866,7 @@ export function registerSnapshotDomTools(deps) {
           fallbackUsed: Boolean(fallbackResults.length || fallback?.error),
           fallbackError: fallback?.error,
           results: merged,
+          meta: { suggestion: "browser_dom_search uses CDP DOM.performSearch which searches the main frame DOM. Shadow DOM and cross-origin iframe content may be invisible. For deeper DOM probing, use send_cdp(profile, 'DOM.getDocument', {depth: -1, pierce: true}) for the full flattened DOM. See skills/agent-browser-runtime SKILL.md Layer 2." },
         };
       }));
     },
@@ -956,6 +959,7 @@ export function registerSnapshotDomTools(deps) {
           found: true,
           count: listeners.length,
           listeners,
+          meta: { suggestion: "browser_event_listeners uses CDP DOMDebugger.getEventListeners which only returns listeners for elements in the main frame's DOM. For cross-origin iframe event listeners, use send_cdp with the iframe's execution context. See skills/agent-browser-runtime SKILL.md Layer 2." },
         };
       }));
     },

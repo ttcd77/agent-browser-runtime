@@ -365,7 +365,7 @@ r = token_flow_trace(
 print(json.dumps(r, ensure_ascii=False))
 `;
       const result = await attackHarnessDeep(py, 15000);
-      return toolResult({ profile: profile.name, ...result });
+      return toolResult({ profile: profile.name, ...result, meta: { suggestion: "browser_token_flow_trace analyzes captured traffic on disk — it cannot instrument live fetch/XHR at runtime inside the page. For live token interception during a user action, use run_in_extension(profile, code) with a fetch/XHR proxy hook. See skills/agent-browser-runtime SKILL.md Layer 2." } });
     },
   });
 
@@ -583,6 +583,7 @@ print(json.dumps(r, ensure_ascii=False))
           scriptSource: source.scriptSource,
           bytecode: source.bytecode,
           length: source.scriptSource ? String(source.scriptSource).length : 0,
+          meta: { suggestion: "browser_source_get fetches by CDP scriptId — scripts from cross-origin iframes may not appear in browser_sources_list. For cross-origin script source, use send_cdp with the iframe's executionContextId from browser_frame_tree. See skills/agent-browser-runtime SKILL.md Layer 2." },
         };
       }));
     },
@@ -1864,7 +1865,7 @@ r = token_scan(
 )
 print(json.dumps(r, ensure_ascii=False))
 `;
-      return toolResult({ profile: profile.name, ...(await attackHarnessDeep(py, 60000)) });
+      return toolResult({ profile: profile.name, ...(await attackHarnessDeep(py, 60000)), meta: { suggestion: "browser_token_scan scans traffic dir on disk only — tokens in IndexedDB, CacheStorage, or in-memory JS variables are invisible. Use run_in_extension(profile, code) or send_cdp for deeper runtime token discovery. See skills/agent-browser-runtime SKILL.md Layer 2." } });
     },
   });
 }
