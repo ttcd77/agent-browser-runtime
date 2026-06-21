@@ -22,41 +22,6 @@ export function registerEvidenceCaptureTools(deps) {
     maybeRoutePersonal,
   } = deps;
 
-  const browserFeedbackTool = {
-    name: "browser_feedback",
-    description:
-      "Agent feedback entrypoint: record a local bug, capability gap, docs issue, product friction, or idea about Agent Browser Runtime. This writes a local feedback/*.md note and does not judge vulnerabilities.",
-    parameters: {
-      type: "object",
-      properties: {
-        type: { type: "string", enum: ["bug", "gap", "docs", "product", "idea"], description: "Feedback category." },
-        title: { type: "string", description: "Required. Short one-line title for the feedback note." },
-        summary: { type: "string", description: "Detailed description of the issue or idea." },
-        repro: { type: "string", description: "Reproduction steps for bugs." },
-        expected: { type: "string", description: "What the agent expected to happen." },
-        actual: { type: "string", description: "What actually happened." },
-        evidence: { type: "string", description: "Relevant evidence (tool output, error message, file path)." },
-        next: { type: "string", description: "Suggested next action or fix direction." },
-        tool: { type: "string", description: "The tool name this feedback is about (e.g. browser_click)." },
-        profile: { type: "string", description: "Profile name associated with the feedback, if applicable." },
-        reporter: { type: "string", description: "Agent or system that generated the feedback. Defaults to browser-worker-tool." },
-      },
-      required: ["title"],
-    },
-    async execute(_id, params = {}) {
-      const note = createFeedbackNote({
-        ...params,
-        reporter: params.reporter || "browser-worker-tool",
-      });
-      return toolResult({
-        ...note,
-        feedbackUrl: "http://127.0.0.1:17335/feedback",
-        docs: "docs/feedback-and-gaps.md",
-        publicIssueRule: "Review and redact before publishing. Do not include cookies, tokens, private screenshots, real HARs, or account state.",
-      });
-    },
-  };
-  tools.set("browser_feedback", browserFeedbackTool);
 
   tools.set("browser_capture_start", {
     name: "browser_capture_start",
