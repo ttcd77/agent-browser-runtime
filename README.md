@@ -2,25 +2,36 @@
 
 **DevTools-grade browser evidence runtime for AI agents.**
 
-Give your agent a browser with 143 Managed + 9 Personal tools — navigate, click, capture F12
-Network/Storage/Console/Sources evidence, replay requests, and collect one-call
-security research packs. Works over HTTP or CLI.
+Give your agent a browser with **155 HTTP tools** — navigate, click,
+capture F12 Network/Storage/Console/Sources evidence, replay requests, and
+collect one-call security research packs. Uses **real `chrome.exe`** spawned
+per profile (no Playwright wrapper) so the fingerprint passes anti-bot
+defenses your daily Chrome would.
+
+> **2026-06-21 (v0.5) slim refactor**: Playwright dropped, real Chrome
+> spawned per profile, `read_page`/`click_ref` Claude-in-Chrome-style DOM
+> walker added, business tools (JWT/OOB/Intruder) proxy to a companion
+> `attack-harness/` in helloworld. See [CHANGELOG.md](CHANGELOG.md).
 
 ---
 
 ## Why not Playwright or Chrome DevTools MCP?
 
-| | Playwright | **Agent Browser Runtime** |
-|---|---|---|
-| Interface | Script API (code, not tools) | HTTP + CLI, 143 Managed + 9 Personal tools |
-| Network evidence | Basic HAR | F12-grade: Network/Storage/Console/Sources/Performance |
-| Backends | One browser | Managed (clean profiles) + Personal Chrome (extension) |
-| Profile isolation | Manual | Named profiles, per-profile evidence dirs |
-| Replay/Intruder | External | Built-in replay, batch variants, intercept |
-| Agent-first design | No | Yes — facade → drill-down, bounded outputs, `next` hints |
+| | Playwright | Chrome DevTools MCP | **Agent Browser Runtime** |
+|---|---|---|---|
+| Browser process | Bundled Chromium with automation flags | Direct CDP to user's Chrome | **Real `chrome.exe` spawned per profile (same binary as user's daily Chrome)** |
+| Fingerprint | Detectable (`navigator.webdriver`, `--enable-automation`, Playwright CDP probes) | Real Chrome, no isolation | **Real Chrome + per-profile `--user-data-dir` — passes DataDome / Akamai checks** |
+| Interface | Script API (code, not tools) | MCP tool surface | **HTTP tools (155) + companion CLI heredoc (`attack-harness <<'PY' ... PY`)** |
+| Network evidence | Basic HAR | Live DevTools | **F12-grade per profile, on-disk body files at `~/.agent-browser-runtime/cdp-traffic/<name>/`** |
+| Profile isolation | Manual | None | **`profile_create {name}` spawns isolated real Chrome with extension auto-installed via template-copy** |
+| Replay / Intruder / JWT forge | External | None | **Built-in (subprocess-proxied to `helloworld/attack-harness/` Python primitives)** |
+| Agent-first design | No | Limited | Facade → drill-down, bounded outputs, `next` hints, decision-tree skill, agent-writable `agent-workspace/target-skills/` |
 
-Playwright is a library you code against. ABR is an HTTP service your agent calls
-directly — no wrapper needed.
+Playwright is a library you code against. Chrome DevTools MCP is a tool menu
+that drives your existing Chrome. ABR is **HTTP + companion harness CLI** —
+spawns its own real Chromes per profile, isolates cookies/login/history,
+captures full network bodies on disk, and routes complex attacks through a
+composable Python harness in the sibling helloworld repo.
 
 ---
 
@@ -30,17 +41,37 @@ directly — no wrapper needed.
 Agent (CLI / HTTP POST)
           |
           v
-  Worker :17335  (Managed Browser — Playwright + direct CDP)
+  Worker :17335   ──── 155 HTTP tools (browser_* / profile_* / attack_intruder_* / etc)
           |
-          +---> Named profile: one tab, one evidence dir, one traffic journal
+          +─── spawn-chrome-profile.mjs ──► chrome.exe --user-data-dir=<profile>
+          |                                          --remote-debugging-port=<auto>
+          |                                          (template-copy installs extension)
           |
-  Bridge :17337  (Personal Chrome — extension bridge via chrome.debugger)
+          +─── cdp-traffic-capture plugin ──► reads ~/.agent-browser-runtime/browser-profiles.json
+          |                                  attaches each personal-spawn profile's CDP
+          |                                  writes bodies under cdp-traffic/<profile>/
           |
-          +---> User's already-open Chrome tab (operator-authorized only)
+  Bridge :17337   ──── multi-Chrome routing (list/select/switch_browser by displayName)
+          |        ──── read_page / click_ref (Claude-in-Chrome-style DOM walker)
+          |        ──── per-profile tab isolation
+          |
+          v
+  Chrome extension (in each spawned profile + the user's daily Chrome if installed)
+          ──── chrome.scripting.executeScript for app-layer click/type (SPA-stable)
+          ──── chrome.debugger CDP transit for deep evidence
+
+  helloworld/attack-harness/  (sibling repo, complementary harness)
+          ──── Python primitives (raw_http, crypto, oob, subprocess, intruder, diff)
+          ──── `attack-harness <<'PY' ... PY` CLI for composable attack scripts
+          ──── interaction-skills/*.md playbooks (jwt-attacks, oob, smuggling, ...)
+          ──── 14 ABR business tools subprocess-proxy here (single source of truth)
 ```
 
-Both backends expose the same `browser_*` facade. Route by backend/profile, not
-by port or browser process.
+Multi-Chrome instances each show up via `personal_chrome_list_browsers` by
+their own `browserInstanceId` + `browserDisplayName`. Agent routes by name.
+The human's daily Chrome (if it has the extension) is one instance among the
+spawned profiles — bridge ensures agent work uses background tabs and never
+steals focus.
 
 ---
 
