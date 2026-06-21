@@ -60,18 +60,44 @@ function scheduleReconnect(delayMs = 1000) {
   }, delayMs);
 }
 
+// Stable per-Chrome-instance identity for multi-browser routing (Claude-in-Chrome
+// pattern: list_connected_browsers / select_browser / switch_browser). Each
+// Chrome --user-data-dir gets its own chrome.storage.local, so this UUID is
+// effectively per-instance. Bridge uses it to route commands to the right
+// browser when multiple Chromes are connected.
+async function getBrowserIdentity() {
+  const stored = await chrome.storage.local.get(["browserInstanceId", "browserDisplayName"]);
+  let { browserInstanceId, browserDisplayName } = stored;
+  if (!browserInstanceId) {
+    browserInstanceId = (self.crypto && crypto.randomUUID)
+      ? crypto.randomUUID()
+      : "id-" + Date.now().toString(36) + "-" + Math.random().toString(36).slice(2, 10);
+    await chrome.storage.local.set({ browserInstanceId });
+  }
+  if (!browserDisplayName) {
+    const plat = (navigator.userAgentData?.platform) || "Browser";
+    browserDisplayName = plat + "-" + browserInstanceId.slice(0, 4);
+    await chrome.storage.local.set({ browserDisplayName });
+  }
+  return { browserInstanceId, browserDisplayName };
+}
+
 async function connectBridge() {
   const bridgeUrl = await getBridgeUrl();
   if (socket && [WebSocket.CONNECTING, WebSocket.OPEN].includes(socket.readyState)) return;
 
+  const identity = await getBrowserIdentity();
+
   socket = new WebSocket(bridgeUrl);
   socket.onopen = () => {
-    log("connected", bridgeUrl);
+    log("connected", bridgeUrl, "as", identity.browserDisplayName);
     send({
       type: "hello",
       name: "personal-chrome",
       userAgent: navigator.userAgent,
       extensionVersion: chrome.runtime.getManifest().version,
+      browserInstanceId: identity.browserInstanceId,
+      browserDisplayName: identity.browserDisplayName,
     });
     clearInterval(heartbeatTimer);
     heartbeatTimer = setInterval(() => {

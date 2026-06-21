@@ -83,12 +83,17 @@ async function readJson(req) {
 class AmbiguousPersonalClientError extends Error {
   constructor(liveClients) {
     super(
-      "multiple personal Chrome windows are connected; pass clientId to choose one. Connected: " +
-        liveClients.map((c) => `${c.id}${c.name ? ` (${c.name})` : ""}`).join(", "),
+      "multiple personal Chrome windows are connected; pass `browser` (display name or instance id) to choose. Connected: " +
+        liveClients.map((c) => c.browserDisplayName || c.browserInstanceId || c.id).join(", "),
     );
     this.name = "AmbiguousPersonalClientError";
     this.code = "ambiguous_personal_client";
-    this.clients = liveClients.map((c) => ({ id: c.id, name: c.name, lastSeenAt: c.lastSeenAt }));
+    this.clients = liveClients.map((c) => ({
+      id: c.id,
+      browserInstanceId: c.browserInstanceId || null,
+      browserDisplayName: c.browserDisplayName || null,
+      lastSeenAt: c.lastSeenAt,
+    }));
   }
 }
 
@@ -96,10 +101,34 @@ function liveClients() {
   return [...clients.values()].filter((client) => client.ws.readyState === client.ws.OPEN);
 }
 
-function pickClient(clientId) {
+// Claude-in-Chrome-style active browser: when multiple Chromes are connected
+// and the caller doesn't say which one, fall through to the one the user/agent
+// last explicitly selected. Stored as a stable selector (instance id) so it
+// survives that browser reconnecting with a new WS UUID.
+let activeBrowserSelector = null;
+function setActiveBrowserFromClient(client) {
+  activeBrowserSelector = client.browserInstanceId || client.id;
+}
+function activeBrowserHint() {
+  if (!activeBrowserSelector) return null;
+  // Don't return a stale selector if that browser has since disconnected.
+  return liveClients().some((c) =>
+    c.id === activeBrowserSelector ||
+    c.browserInstanceId === activeBrowserSelector ||
+    c.browserDisplayName === activeBrowserSelector,
+  ) ? activeBrowserSelector : null;
+}
+
+function pickClient(selector) {
   const live = liveClients();
-  if (clientId) {
-    return live.find((client) => client.id === clientId) || null;
+  if (selector) {
+    // Accept any of: WS connection UUID (clientId), stable browserInstanceId, or
+    // human-readable browserDisplayName. Lets callers route by id OR by name.
+    return live.find((client) =>
+      client.id === selector ||
+      client.browserInstanceId === selector ||
+      client.browserDisplayName === selector,
+    ) || null;
   }
   if (live.length === 0) return null;
   if (live.length === 1) return live[0];
@@ -110,6 +139,8 @@ function listClients() {
   return [...clients.values()].map((client) => ({
     id: client.id,
     name: client.name,
+    browserInstanceId: client.browserInstanceId || null,
+    browserDisplayName: client.browserDisplayName || null,
     connectedAt: client.connectedAt,
     lastSeenAt: client.lastSeenAt,
     userAgent: client.userAgent,
@@ -234,11 +265,14 @@ function normalizeCommand(toolName) {
 }
 
 function callExtension(command, params = {}) {
-  // clientId / targetClientId are bridge-level routing hints (root cause #9):
-  // which connected Chrome window to target. They are not command params, so
-  // strip them before forwarding to the extension.
-  const { clientId, targetClientId, ...commandParams } = params || {};
-  const wantClientId = clientId || targetClientId || null;
+  // Bridge-level routing hints — which connected Chrome window to target.
+  // Stripped before forwarding to the extension.
+  //   browser              — Claude-in-Chrome-style: display name or instance id
+  //   clientId/targetClientId — legacy: WS connection UUID
+  // pickClient() accepts any of the three forms transparently.
+  const { clientId, targetClientId, browser, ...commandParams } = params || {};
+  // Fallback chain: explicit selector → active browser → (single live client) → ambiguous.
+  const wantClientId = browser || clientId || targetClientId || activeBrowserHint() || null;
   const client = pickClient(wantClientId);
   if (!client) {
     if (wantClientId) {
@@ -3740,6 +3774,32 @@ function postProcessToolResult(toolName, result, params = {}) {
 }
 
 async function callBridgeTool(toolName, params = {}) {
+  // --- Claude-in-Chrome-style multi-browser tools (route by display name) ---
+  if (toolName === "personal_chrome_list_browsers") {
+    return { browsers: listClients(), activeBrowser: activeBrowserHint() };
+  }
+  if (toolName === "personal_chrome_select_browser" || toolName === "personal_chrome_switch_browser") {
+    const sel = params?.browser;
+    if (!sel) {
+      const choices = listClients().map((c) => c.browserDisplayName || c.browserInstanceId || c.id);
+      throw new Error(`${toolName} requires \`browser\` (display name or instance id). Connected: ${choices.join(", ") || "(none)"}`);
+    }
+    const client = pickClient(sel);
+    if (!client) {
+      const choices = listClients().map((c) => c.browserDisplayName || c.browserInstanceId || c.id);
+      throw new Error(`browser not connected: ${sel}. Connected: ${choices.join(", ") || "(none)"}`);
+    }
+    setActiveBrowserFromClient(client);
+    return {
+      ok: true,
+      active: {
+        id: client.id,
+        browserInstanceId: client.browserInstanceId,
+        browserDisplayName: client.browserDisplayName,
+      },
+    };
+  }
+
   // Per-agent tab isolation: a caller that passes `profile` operates in its OWN
   // tab. Resolve/allocate it once and inject tabId; the inner
   // facade -> safeBridgeTool -> callBridgeTool re-entry sees tabId already set
@@ -4570,6 +4630,11 @@ wss.on("connection", (ws) => {
       record.name = message.name || record.name;
       record.userAgent = message.userAgent;
       record.extensionVersion = message.extensionVersion;
+      // Multi-browser routing: stable per-Chrome-instance UUID + human-readable
+      // name reported by the extension (from chrome.storage.local). Lets agents
+      // target a specific Chrome by id or friendly name instead of WS UUID.
+      record.browserInstanceId = message.browserInstanceId || null;
+      record.browserDisplayName = message.browserDisplayName || null;
       return;
     }
     if (message.type === "heartbeat") return;
@@ -4600,6 +4665,9 @@ const tools = {
   browser_raw: "Facade: advanced escape hatch for one exact browser_*, chrome_*, or personal_chrome_* tool.",
   agent_inspect: "Agent-facing F12 router. Pick a focus and get the right DevTools evidence without choosing from dozens of low-level tools.",
   personal_chrome_status: "Check whether the real Chrome extension is connected.",
+  personal_chrome_list_browsers: "List every connected Chrome window. Returns {browsers:[{browserInstanceId,browserDisplayName,...}], activeBrowser}. Use this to discover which Chrome instances are available before routing.",
+  personal_chrome_select_browser: "Set the active Chrome window so subsequent tool calls default to it. Pass {browser:<displayName-or-instanceId>}. Returns the selected browser's identity.",
+  personal_chrome_switch_browser: "Alias of personal_chrome_select_browser — switch the active Chrome window. Pass {browser:<displayName-or-instanceId>}.",
   personal_chrome_open: "Open a URL in the user's real Chrome through chrome.tabs.update/create, then return tab metadata.",
   personal_chrome_extension_reload: "Reload the unpacked extension service worker after local development changes.",
   personal_chrome_tabs: "List tabs from the user's real Chrome.",
