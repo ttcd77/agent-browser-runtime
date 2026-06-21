@@ -2,8 +2,16 @@ import http from "node:http";
 import { createHash, randomUUID } from "node:crypto";
 import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve, sep } from "node:path";
+import { homedir } from "node:os";
 import { WebSocketServer } from "ws";
 import { buildArtifactIndex as buildSharedArtifactIndex, inferArtifactKind as inferSharedArtifactKind } from "./lib/artifact-index.mjs";
+import {
+  spawnChromeProfile,
+  listSpawnedProfiles,
+  killChromeProfile,
+  templateExists,
+  templateSetupInstructions,
+} from "./lib/spawn-chrome-profile.mjs";
 
 const httpPort = Number.parseInt(process.env.PERSONAL_CHROME_HTTP_PORT || "17337", 10);
 const httpHost = process.env.PERSONAL_CHROME_HTTP_HOST || "127.0.0.1";
@@ -39,6 +47,51 @@ const pending = new Map();
 // of whatever the user is currently looking at. Two agents with different profiles
 // never collide with each other — or steal the human's active tab.
 const profileTabs = new Map(); // profile -> tabId
+
+// browser-profiles.json (read by cdp-traffic-capture plugin) maps profile name
+// to cdpPort. Bridge updates it when profile_create/delete fires so the plugin
+// auto-attaches a fresh CDP session and stores traffic under
+// ~/.agent-browser-runtime/cdp-traffic/<profile>/ — per-profile traffic
+// isolation for after-the-fact analysis.
+const PROFILES_CONFIG_PATH = process.env.CDP_BROWSER_PROFILE_CONFIG
+  || join(homedir(), ".agent-browser-runtime", "browser-profiles.json");
+
+function readProfilesConfig() {
+  if (!existsSync(PROFILES_CONFIG_PATH)) return { browser: { profiles: {} } };
+  try {
+    const raw = readFileSync(PROFILES_CONFIG_PATH, "utf-8").replace(/^﻿/, "");
+    const parsed = JSON.parse(raw);
+    if (!parsed.browser) parsed.browser = { profiles: {} };
+    if (!parsed.browser.profiles) parsed.browser.profiles = {};
+    return parsed;
+  } catch {
+    return { browser: { profiles: {} } };
+  }
+}
+
+function writeProfilesConfig(cfg) {
+  const dir = dirname(PROFILES_CONFIG_PATH);
+  if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
+  writeFileSync(PROFILES_CONFIG_PATH, JSON.stringify(cfg, null, 2));
+}
+
+function upsertProfilePortConfig(name, port) {
+  const cfg = readProfilesConfig();
+  cfg.browser.profiles[name] = {
+    cdpPort: port,
+    backend: "personal-spawn",
+    updatedAt: new Date().toISOString(),
+  };
+  writeProfilesConfig(cfg);
+}
+
+function removeProfilePortConfig(name) {
+  const cfg = readProfilesConfig();
+  if (cfg.browser.profiles[name]) {
+    delete cfg.browser.profiles[name];
+    writeProfilesConfig(cfg);
+  }
+}
 
 function sendJson(res, status, payload) {
   res.writeHead(status, {
@@ -3800,6 +3853,58 @@ async function callBridgeTool(toolName, params = {}) {
     };
   }
 
+  // --- Step 4h: profile lifecycle (spawn isolated real-Chrome processes) ---
+  if (toolName === "profile_create") {
+    const name = params?.name;
+    if (!name) throw new Error("profile_create requires `name` (alphanumeric, e.g. 'victim')");
+    if (!templateExists()) {
+      const err = new Error(templateSetupInstructions());
+      err.code = "template_not_set_up";
+      throw err;
+    }
+    const result = await spawnChromeProfile(name);
+    // Tell cdp-traffic-capture plugin about the new profile so it auto-attaches
+    // and stores traffic under cdp-traffic/<name>/ for after-the-fact analysis.
+    upsertProfilePortConfig(name, result.port);
+    return {
+      ok: true,
+      profile: result.name,
+      pid: result.pid,
+      cdpPort: result.port,
+      userDataDir: result.userDataDir,
+      alreadyRunning: result.alreadyRunning,
+      trafficDir: join(homedir(), ".agent-browser-runtime", "cdp-traffic", result.name),
+      hint: "extension in this Chrome auto-connects the bridge; check personal_chrome_list_browsers to see its instanceId/displayName.",
+    };
+  }
+  if (toolName === "profile_list") {
+    return {
+      spawned: listSpawnedProfiles(),
+      connectedBrowsers: listClients().map((c) => ({
+        id: c.id,
+        instanceId: c.browserInstanceId,
+        displayName: c.browserDisplayName,
+      })),
+      hint: "spawned[] are profiles this bridge launched (chrome processes it owns). connectedBrowsers[] is the WS view (extension hellos), which may include browsers spawned outside the bridge.",
+    };
+  }
+  if (toolName === "profile_delete") {
+    const name = params?.name;
+    if (!name) throw new Error("profile_delete requires `name`");
+    const removeData = params?.removeData !== false; // default true
+    const result = await killChromeProfile(name, { removeData });
+    removeProfilePortConfig(name);
+    return {
+      ok: true,
+      killed: Boolean(result.killed),
+      removed: result.removed,
+      userDataDir: result.userDataDir,
+      hint: removeData
+        ? "user-data-dir (cookies/login/history) deleted; traffic-capture directory left for analysis."
+        : "chrome process killed; user-data-dir preserved (pass removeData:true to delete).",
+    };
+  }
+
   // Per-agent tab isolation: a caller that passes `profile` operates in its OWN
   // tab. Resolve/allocate it once and inject tabId; the inner
   // facade -> safeBridgeTool -> callBridgeTool re-entry sees tabId already set
@@ -4668,6 +4773,9 @@ const tools = {
   personal_chrome_list_browsers: "List every connected Chrome window. Returns {browsers:[{browserInstanceId,browserDisplayName,...}], activeBrowser}. Use this to discover which Chrome instances are available before routing.",
   personal_chrome_select_browser: "Set the active Chrome window so subsequent tool calls default to it. Pass {browser:<displayName-or-instanceId>}. Returns the selected browser's identity.",
   personal_chrome_switch_browser: "Alias of personal_chrome_select_browser — switch the active Chrome window. Pass {browser:<displayName-or-instanceId>}.",
+  profile_create: "Spawn a fresh isolated Chrome with the ABR extension. Real chrome.exe (same fingerprint as the user's daily Chrome — no Playwright, no AutomationControlled flag) on its own --user-data-dir (cookies/login/history isolated) and its own --remote-debugging-port (cdp-traffic-capture attaches automatically; traffic stored under cdp-traffic/<name>/). Template-copy install: requires a one-time `scripts/setup-template-profile.ps1` run that GUI-loads the extension into a template dir. Params: {name: 'alphanumeric-only, e.g. victim'}. Returns {profile, pid, cdpPort, userDataDir, trafficDir, alreadyRunning}.",
+  profile_list: "List Chrome profiles the bridge has spawned (with pid/port/userDataDir) and the live extension WS connections. The two views may differ if a profile chrome was killed externally or a browser connected without being bridge-spawned. Returns {spawned, connectedBrowsers}.",
+  profile_delete: "Kill the Chrome process for `name` and (by default) delete its user-data-dir. Traffic-capture directory is preserved for after-the-fact analysis. Params: {name, removeData?: bool=true}. Returns {killed, removed, userDataDir}.",
   personal_chrome_open: "Open a URL in the user's real Chrome through chrome.tabs.update/create, then return tab metadata.",
   personal_chrome_extension_reload: "Reload the unpacked extension service worker after local development changes.",
   personal_chrome_tabs: "List tabs from the user's real Chrome.",

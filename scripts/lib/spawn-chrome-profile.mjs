@@ -1,0 +1,161 @@
+// Step 4h: spawn isolated Chrome profiles using real chrome.exe (no Playwright).
+//
+// Replaces the spawn half of the deleted Playwright-driven managed backend.
+// Each profile gets its own --user-data-dir (cookie / login / history isolation)
+// and a distinct --remote-debugging-port (so cdp-traffic-capture can attach and
+// record traffic per profile, see ~/.agent-browser-runtime/cdp-traffic/<name>/).
+//
+// Fingerprint is identical to the user's daily Chrome: same chrome.exe binary,
+// same OS, same GPU, same fonts, same TLS stack. No --disable-blink-features
+// flag, no Playwright CDP runtime, no AutomationControlled warning bar.
+//
+// Chrome 137+ blocks command-line --load-extension, so we propagate the
+// extension via template-copy: the operator sets up a one-time template
+// user-data-dir with the extension installed via chrome://extensions GUI, and
+// every profile_create copies that template directory before launching.
+
+import { spawn } from "node:child_process";
+import { cpSync, existsSync, mkdirSync, rmSync } from "node:fs";
+import { join } from "node:path";
+import { homedir } from "node:os";
+import http from "node:http";
+
+const CHROME_EXE = process.env.ABR_CHROME_EXECUTABLE
+  || "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe";
+const PROFILES_ROOT = process.env.ABR_PROFILES_ROOT
+  || join(homedir(), "abr-chrome");
+const TEMPLATE_DIR = join(PROFILES_ROOT, "_template");
+const PORT_BASE = Number(process.env.ABR_CHROME_PORT_BASE || 9300);
+const PORT_LIMIT = PORT_BASE + 200;
+
+// In-memory registry: profileName -> { name, pid, port, userDataDir, startedAt }
+const registry = new Map();
+
+function nextFreePort() {
+  for (let p = PORT_BASE; p < PORT_LIMIT; p++) {
+    if (![...registry.values()].some((r) => r.port === p)) return p;
+  }
+  throw new Error(`no free port between ${PORT_BASE}-${PORT_LIMIT}`);
+}
+
+function safeName(name) {
+  if (!/^[a-zA-Z0-9_-]+$/.test(String(name || ""))) {
+    throw new Error(`profile name must match /^[a-zA-Z0-9_-]+$/ — got ${JSON.stringify(name)}`);
+  }
+  return String(name);
+}
+
+function probeCdp(port) {
+  return new Promise((resolve) => {
+    const req = http.get(`http://127.0.0.1:${port}/json/version`, (res) => {
+      resolve(res.statusCode === 200);
+      res.resume();
+    });
+    req.on("error", () => resolve(false));
+    req.setTimeout(1200, () => { req.destroy(); resolve(false); });
+  });
+}
+
+async function waitForCdpReady(port, maxMs = 15000) {
+  const start = Date.now();
+  while (Date.now() - start < maxMs) {
+    if (await probeCdp(port)) return true;
+    await new Promise((r) => setTimeout(r, 250));
+  }
+  return false;
+}
+
+export function templateExists() {
+  return existsSync(TEMPLATE_DIR);
+}
+
+export function templateSetupInstructions() {
+  return [
+    `Template profile not found at: ${TEMPLATE_DIR}`,
+    ``,
+    `One-time setup (so spawned profiles get the ABR extension):`,
+    `  1. Run: powershell -File scripts/setup-template-profile.ps1`,
+    `  2. In the Chrome window that opens (chrome://extensions/):`,
+    `     - toggle Developer mode (top-right)`,
+    `     - click "Load unpacked"`,
+    `     - select the worktree extension folder`,
+    `     - close the Chrome window`,
+    `  3. The template is now ready. profile_create will copy it for each new profile.`,
+  ].join("\n");
+}
+
+export async function spawnChromeProfile(rawName) {
+  const name = safeName(rawName);
+
+  // Already-running idempotency.
+  if (registry.has(name)) {
+    const existing = registry.get(name);
+    if (await probeCdp(existing.port)) {
+      return { ok: true, alreadyRunning: true, ...existing };
+    }
+    registry.delete(name); // stale
+  }
+
+  if (!templateExists()) {
+    const err = new Error(templateSetupInstructions());
+    err.code = "template_not_set_up";
+    throw err;
+  }
+
+  const userDataDir = join(PROFILES_ROOT, name);
+  if (existsSync(userDataDir)) {
+    rmSync(userDataDir, { recursive: true, force: true });
+  }
+  mkdirSync(PROFILES_ROOT, { recursive: true });
+  cpSync(TEMPLATE_DIR, userDataDir, { recursive: true });
+
+  const port = nextFreePort();
+  const args = [
+    `--user-data-dir=${userDataDir}`,
+    `--remote-debugging-port=${port}`,
+    `--no-first-run`,
+    `--no-default-browser-check`,
+    `about:blank`,
+  ];
+
+  const proc = spawn(CHROME_EXE, args, {
+    detached: true,
+    stdio: "ignore",
+    windowsHide: false,
+  });
+  proc.unref();
+
+  const ready = await waitForCdpReady(port);
+  if (!ready) {
+    try { process.kill(proc.pid); } catch { /* already gone */ }
+    rmSync(userDataDir, { recursive: true, force: true });
+    throw new Error(`chrome did not become CDP-ready on port ${port} within 15s for profile ${name}`);
+  }
+
+  const record = {
+    name, pid: proc.pid, port, userDataDir,
+    startedAt: new Date().toISOString(),
+  };
+  registry.set(name, record);
+  return { ok: true, alreadyRunning: false, ...record };
+}
+
+export function listSpawnedProfiles() {
+  return [...registry.values()];
+}
+
+export async function killChromeProfile(rawName, { removeData = false } = {}) {
+  const name = safeName(rawName);
+  const rec = registry.get(name);
+  if (rec) {
+    try { process.kill(rec.pid); } catch { /* already gone */ }
+    registry.delete(name);
+  }
+  const dir = rec?.userDataDir || join(PROFILES_ROOT, name);
+  let removed = false;
+  if (removeData && existsSync(dir)) {
+    rmSync(dir, { recursive: true, force: true });
+    removed = true;
+  }
+  return { ok: true, killed: rec || null, removed, userDataDir: dir };
+}

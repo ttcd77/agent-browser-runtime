@@ -55,6 +55,75 @@ browser id and don't collide.
 - **Worker boot**: starts cleanly in personal-only mode on a temp port,
   `/health` returns `ok: true, blockers: []`, 93 tools.
 
+## Agent-self-service isolated Chrome profiles (Step 4h)
+
+The bridge can spawn its own isolated Chrome instances on demand — each one a
+real `chrome.exe` process (same fingerprint as your daily Chrome: same UA,
+brands, GPU, TLS stack, fonts), but with its own `--user-data-dir` so cookies /
+login / history are isolated, and its own `--remote-debugging-port` so
+`cdp-traffic-capture` records traffic per profile under
+`~/.agent-browser-runtime/cdp-traffic/<name>/` for after-the-fact analysis.
+
+### One-time setup (operator does this once)
+
+Chrome 137+ blocks the `--load-extension` command-line flag, so the bridge
+can't auto-install the worktree extension into freshly-spawned Chromes.
+Workaround: build a **template** user-data-dir with the extension pre-loaded
+via the chrome://extensions GUI, then every `profile_create` copies it.
+
+```powershell
+powershell -File C:\Users\Tong\project\abr-slim\scripts\setup-template-profile.ps1
+# Follow the on-screen prompts:
+#   - Chrome opens at chrome://extensions
+#   - toggle Developer mode → Load unpacked → pick the worktree extension
+#   - close the Chrome window
+# Template now lives at %USERPROFILE%\abr-chrome\_template
+```
+
+After this, every `profile_create` works.
+
+### Tool calls
+
+```jsonc
+// Spawn a fresh isolated Chrome for victim-account testing
+POST /tool/profile_create  {"name": "victim"}
+  // -> { profile, pid, cdpPort, userDataDir, trafficDir,
+  //      alreadyRunning, hint }
+
+// See what's spawned + which extensions are connected
+POST /tool/profile_list  {}
+  // -> { spawned: [{name, pid, port, userDataDir, startedAt}],
+  //      connectedBrowsers: [{id, instanceId, displayName}] }
+
+// Now route an open into that profile by its displayName
+// (extension reports it on first hello; see personal_chrome_list_browsers).
+POST /tool/personal_chrome_open
+  {"url": "https://target", "browser": "Windows-<id>", "newTab": true, "active": false}
+
+// Same browser= for read_page / click_ref / etc
+
+// Tear down — kills chrome process, deletes user-data-dir, keeps traffic for analysis
+POST /tool/profile_delete  {"name": "victim", "removeData": true}
+```
+
+### Isolation guarantees
+
+- **Cookies / login / history**: 100% per profile (separate user-data-dir)
+- **Browser fingerprint**: identical to your daily Chrome (same chrome.exe)
+- **Traffic record**: per profile under `~/.agent-browser-runtime/cdp-traffic/<name>/`
+- **Process**: separate chrome.exe — kill one doesn't touch others or your daily Chrome
+- **Bridge view**: each profile shows up in `personal_chrome_list_browsers` as
+  a distinct `browserDisplayName` / `browserInstanceId`
+
+### What this replaces
+
+`profile_create` is the personal-only re-implementation of what the old
+managed backend used to do automatically (Playwright `launchPersistentContext`
+per profile). The shell is ~150 lines vs the deleted 877-line Playwright
+wrapper, no fingerprint cost.
+
+---
+
 ## What's still gated — traffic / HAR / Source-Map capture
 
 The stripped-down managed backend means there's no Chrome on `cdpPort`
