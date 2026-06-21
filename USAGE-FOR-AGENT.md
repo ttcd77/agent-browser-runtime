@@ -8,9 +8,11 @@ The worktree bridge runs on **HTTP 17347 / WS 17346**. Production bridge on
 17337 is untouched. Production worker on 17335 is also untouched (your
 existing tooling keeps working).
 
-The user's real Chrome has the worktree extension installed (loaded via
-chrome://extensions → Developer mode → Load unpacked → `C:/Users/Tong/project/abr-slim/extension`). It auto-connects the worktree bridge as a
-browser named `Windows-fe8c` (instance UUID persisted in chrome.storage.local).
+The user's real Chrome (or any Chrome instance) has the worktree extension
+installed (loaded via chrome://extensions → Developer mode → Load unpacked →
+`<worktree-dir>/extension`). It auto-connects the worktree bridge as a
+browser with a stable `browserInstanceId` (random UUID, persisted in
+chrome.storage.local) and a derived `browserDisplayName` like `Windows-<4hex>`.
 
 Agent calls go to `http://127.0.0.1:17347/tool/<name>`. Examples:
 
@@ -72,7 +74,7 @@ Workaround: build a **template** user-data-dir with the extension pre-loaded
 via the chrome://extensions GUI, then every `profile_create` copies it.
 
 ```powershell
-powershell -File C:\Users\Tong\project\abr-slim\scripts\setup-template-profile.ps1
+powershell -File <repo-root>\scripts\setup-template-profile.ps1
 # Follow the on-screen prompts:
 #   - Chrome opens at chrome://extensions
 #   - toggle Developer mode → Load unpacked → pick the worktree extension
@@ -145,13 +147,13 @@ $dir    = "C:\abr-evidence-chrome"   # isolated profile, NOT the user's daily Ch
     "chrome://extensions/"
 
 # In that Chrome window: enable Developer mode, Load unpacked from
-# C:\Users\Tong\project\abr-slim\extension
+# <repo-root>\extension
 
 # Then start the worker pointing at this Chrome's CDP port:
 $env:CDP_AGENT_SERVER_PORT = "17348"
 $env:CDP_BROWSER_PORT = "9229"
 $env:CDP_LAUNCH_BROWSER = "0"
-cd C:\Users\Tong\project\abr-slim
+cd <repo-root>
 node scripts/agent-cdp-server.mjs
 ```
 

@@ -34,8 +34,8 @@ Chrome via chrome://extensions > Developer mode > Load unpacked.
 ## Real-SPA stress
 
 - **GitHub Dashboard (logged-in)**: refs=55, elementsScanned=200 (cap),
-  user `@ttcd77` content surfaced including avatar / Copilot button / feed
-  articles. ARIA role detection correct on banner / navigation / list /
+  authenticated user content surfaced including avatar / Copilot button /
+  feed articles. ARIA role detection correct on banner / navigation / list /
   listitem / button / link / article / heading. Authenticated session
   preserved through the walker.
 

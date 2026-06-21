@@ -3,12 +3,24 @@
 // The 5 helper libs (raw-request, jwt-forge, oob-client, replay-http, attack-intruder) are
 // now dead code — kept for reference, not imported.
 import { spawn } from "node:child_process";
+import { fileURLToPath } from "node:url";
+import { dirname, resolve } from "node:path";
 import { toolResult } from "./result-format.mjs";
 
-// Python executable and attack-harness working directory.
-// On Windows, python may be in AppData; attack-harness is installed editable at this path.
+// Python executable + attack-harness working directory.
+// Defaults: `python` on PATH + sibling helloworld repo's attack-harness/.
+// Operators with different layouts override via env:
+//   ATTACK_HARNESS_CWD=/abs/path/to/attack-harness
+//   PYTHON_BIN=/abs/path/to/python
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
 const PYTHON = process.env.PYTHON_BIN || "python";
-const AH_CWD = process.env.ATTACK_HARNESS_CWD || "C:/Users/Tong/project/helloworld/attack-harness";
+// Default assumes ABR and helloworld are siblings under the same parent dir:
+//   parent/
+//     agent-browser-runtime/scripts/lib/register-replay-attack.mjs   (this file)
+//     helloworld/attack-harness/
+const AH_CWD = process.env.ATTACK_HARNESS_CWD
+  || resolve(__dirname, "..", "..", "..", "helloworld", "attack-harness");
 
 /**
  * Spawn attack-harness CLI with a Python snippet on stdin, return parsed JSON result.

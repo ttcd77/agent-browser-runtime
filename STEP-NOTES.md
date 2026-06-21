@@ -68,27 +68,19 @@ Two cosmetic blockers remain in /health (`profile-port-drift` warning and
 that produce noise now that the backend is stubbed. Step 4f cleanup
 will silence them.
 
-### Expedia is IP-level blocked, not browser-level
+### Note on IP-level blocks
 
-Live test against expedia.co.uk via the user's real Chrome (Windows-fe8c,
-personal extension, no AutomationControlled flag, no Playwright fingerprint):
+Some target hosts edge-deny by IP reputation (Akamai / DataDome) **before**
+the browser layer gets to render anything. In that case the response is a
+bare "Access Denied" body (single heading, no challenge), not a DataDome /
+hCaptcha / reCAPTCHA challenge. ABR's slim refactor fixes the browser layer
+(real Chrome, no AutomationControlled flag, true fingerprint — passes
+challenges that flag Playwright), but it cannot fix IP-layer reputation.
 
-  title: "Access Denied"
-  refCount: 1 (single heading, nothing else)
-  url: https://www.expedia.co.uk/
-
-That is not the "Bot or Not?" / DataDome challenge — that is Akamai edge
-denying at TCP/HTTP level before the browser gets to render anything. Worktree
-fixes the browser layer (personal real Chrome with real fingerprint), and
-that layer is verified working on GitHub Dashboard / BBC / example.com.
-But Expedia's specific IP reputation is burnt across the whole group
-(expedia / vrbo / cheaptickets / hotwire) — any browser from this IP gets
-edge-denied.
-
-ABR cannot fix this layer. Resolution paths:
-  A. switch egress IP (mobile hotspot or UK residential proxy — NOT VPS IP)
-  B. wait out reputation (days to weeks, Akamai doesn't publish)
-  C. drop Expedia from active targets
+When you see this signature, resolution is environmental, not in this repo:
+  A. switch egress IP (mobile hotspot or residential proxy — NOT VPS IP)
+  B. wait out reputation (days to weeks; CDNs don't publish)
+  C. drop the target from active testing
 
 ### Step 4i — traffic body capture on spawned profiles (incomplete)
 
@@ -151,7 +143,7 @@ runtime + evidence-collection primitives.
 
 To run worktree bridge on isolated ports without colliding with prod:
 
-    cd C:/Users/Tong/project/abr-slim
+    cd <worktree-dir>     # e.g. ../abr-slim if you `git worktree add`'d it
     ln -s ../agent-browser-runtime/node_modules ./node_modules  # one-time
     ln -s ../agent-browser-runtime/dist ./dist                  # one-time
     PERSONAL_CHROME_HTTP_PORT=17347 PERSONAL_CHROME_WS_PORT=17346 \
@@ -161,9 +153,8 @@ To load the worktree extension into a Chrome instance (Chrome 137+ disables
 `--load-extension` command-line flag; GUI is required):
 
     chrome://extensions  →  Developer mode ON  →  Load unpacked
-    →  C:/Users/Tong/project/abr-slim/extension
+    →  <worktree-dir>/extension
 
 The extension's chrome.storage.local default bridgeUrl is ws://127.0.0.1:17346,
 so it auto-connects the worktree bridge. Production extension at
-C:/Users/Tong/project/agent-browser-runtime/extension uses ws://127.0.0.1:17336
-and is unaffected.
+`<main-repo>/extension` uses ws://127.0.0.1:17336 and is unaffected.
