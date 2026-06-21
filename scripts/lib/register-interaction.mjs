@@ -607,6 +607,8 @@ export function registerInteractionTools(deps) {
       },
     },
     async execute(_id, params) {
+      const routed = await maybeRoutePersonal("browser_stuck", params);
+      if (routed) return toolResult(routed);
       const profile = await resolveProfile(params?.profile);
       const profileName = profile.name;
       let url = null;
