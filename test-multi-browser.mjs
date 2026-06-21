@@ -75,13 +75,19 @@ function ok(cond, msg) {
 }
 
 async function main() {
-  console.log("=== Step 1: connect two fake extensions, verify identity captured ===");
+  // Baseline: bridge may already have real-Chrome extensions / SW-restart ghosts
+  // connected. We measure Δ from this baseline, not absolute counts.
+  const baseline = await health();
+  const baselineClientCount = baseline.connected;
+  console.log(`(baseline: ${baselineClientCount} pre-existing client(s) on bridge — smoke verifies Δ from this)`);
+
+  console.log("\n=== Step 1: connect two fake extensions, verify identity captured ===");
   const A = await fakeExt("uuid-AAA-bbb", "TestChrome-Victim");
   const B = await fakeExt("uuid-CCC-ddd", "TestChrome-Attacker");
   await new Promise((r) => setTimeout(r, 400));
 
   const h = await health();
-  ok(h.connected === 2, `health.connected === 2 (got ${h.connected})`);
+  ok(h.connected === baselineClientCount + 2, `health.connected += 2 (baseline ${baselineClientCount} + 2 fake = ${baselineClientCount + 2}, got ${h.connected})`);
   const byName = Object.fromEntries(h.clients.map((c) => [c.browserDisplayName, c]));
   ok(byName["TestChrome-Victim"]?.browserInstanceId === "uuid-AAA-bbb", "Victim instanceId stored");
   ok(byName["TestChrome-Attacker"]?.browserInstanceId === "uuid-CCC-ddd", "Attacker instanceId stored");
@@ -89,8 +95,14 @@ async function main() {
   console.log("\n=== Step 2: list_browsers tool ===");
   const lb = await tool("personal_chrome_list_browsers");
   ok(lb.status === 200, `list_browsers HTTP 200 (got ${lb.status})`);
-  ok(lb.json?.browsers?.length === 2, `list returns 2 browsers (got ${lb.json?.browsers?.length})`);
-  ok(lb.json?.activeBrowser === null, "no active browser initially");
+  ok(lb.json?.browsers?.length === baselineClientCount + 2, `list returns ${baselineClientCount + 2} browsers (got ${lb.json?.browsers?.length})`);
+  // activeBrowser may carry over from earlier runs in same bridge process; only
+  // assert it's null when there's no carry-over baseline activity to inherit.
+  if (baselineClientCount === 0) {
+    ok(lb.json?.activeBrowser === null, "no active browser initially");
+  } else {
+    console.log(`(skipped 'no active browser initially' check — bridge has pre-existing state from baseline)`);
+  }
 
   console.log("\n=== Step 3: select_browser by display name ===");
   const sel = await tool("personal_chrome_select_browser", { browser: "TestChrome-Attacker" });
@@ -129,7 +141,11 @@ async function main() {
   A.ws.close();
   await new Promise((r) => setTimeout(r, 600));
   const h2 = await health();
-  ok(h2.connected === 1, `after Victim closes, connected === 1 (got ${h2.connected})`);
+  // Test asserts THIS smoke's fake Victim is gone — not total client count,
+  // because the bridge may also hold real-Chrome extension clients (and
+  // transient SW-restart ghost connections) we did not create here.
+  const victimGone = !h2.clients.some((c) => c.browserInstanceId === "uuid-AAA-bbb");
+  ok(victimGone, `Victim (uuid-AAA-bbb) removed from clients after disconnect`);
   const lb3 = await tool("personal_chrome_list_browsers");
   ok(lb3.json?.activeBrowser === null, `stale active selector auto-cleared (got ${lb3.json?.activeBrowser})`);
 
