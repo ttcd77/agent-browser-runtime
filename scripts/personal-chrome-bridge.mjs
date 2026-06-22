@@ -3,7 +3,7 @@ import { createHash, randomUUID } from "node:crypto";
 import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve, sep } from "node:path";
 import { homedir } from "node:os";
-import { WebSocketServer } from "ws";
+import WebSocket, { WebSocketServer } from "ws";
 import { buildArtifactIndex as buildSharedArtifactIndex, inferArtifactKind as inferSharedArtifactKind } from "./lib/artifact-index.mjs";
 import {
   spawnChromeProfile,
@@ -91,6 +91,85 @@ function removeProfilePortConfig(name) {
     delete cfg.browser.profiles[name];
     writeProfilesConfig(cfg);
   }
+}
+
+// --- Spawn-profile direct CDP ----------------------------------------------
+// profile_create starts an isolated real chrome.exe on its own
+// --remote-debugging-port (bound to 127.0.0.1 on THIS host). The extension
+// inside that chrome does NOT connect back to this bridge, so the normal
+// extension-WS path can't reach it. When a tool targets a spawn profile we
+// connect straight to its local CDP port instead. This bridge binds 0.0.0.0,
+// so an inner-field agent over tailnet still reaches the bridge, which then
+// proxies to the local port — both inner and outer field work identically.
+function getSpawnProfilePort(name) {
+  if (!name) return null;
+  const cfg = readProfilesConfig();
+  const p = cfg.browser.profiles?.[name];
+  if (p && p.backend === "personal-spawn" && p.cdpPort) return p.cdpPort;
+  return null;
+}
+
+function cdpHttpJson(port, path, method = "GET") {
+  return new Promise((resolve, reject) => {
+    const req = http.request({ host: "127.0.0.1", port, path, method }, (res) => {
+      let data = "";
+      res.on("data", (c) => (data += c));
+      res.on("end", () => {
+        try { resolve(JSON.parse(data)); } catch (e) { reject(new Error(`bad CDP JSON from :${port}${path}: ${e.message}`)); }
+      });
+    });
+    req.on("error", reject);
+    req.end();
+  });
+}
+
+// Resolve a page target's debugger WS url on a spawn profile's CDP port.
+// Reuses the first open page; creates a blank tab if none exists.
+async function spawnProfileTargetWs(port) {
+  const list = await cdpHttpJson(port, "/json");
+  const page = Array.isArray(list) && list.find((t) => t.type === "page" && t.webSocketDebuggerUrl);
+  if (page) return page.webSocketDebuggerUrl;
+  const created = await cdpHttpJson(port, "/json/new?about:blank", "PUT");
+  if (!created?.webSocketDebuggerUrl) throw new Error(`could not open a page target on :${port}`);
+  return created.webSocketDebuggerUrl;
+}
+
+// Run one raw CDP command against a spawn profile by connecting straight to its
+// local debugger port. Returns the same shape the extension path would
+// ({ ok, result } / { ok:false, error }) so callers don't branch on backend.
+async function directCdpCommand(port, method, params, sessionId) {
+  if (!method) return { ok: false, error: "directCdpCommand requires `method`" };
+  let wsUrl;
+  try {
+    wsUrl = await spawnProfileTargetWs(port);
+  } catch (e) {
+    return { ok: false, error: `spawn profile CDP unreachable on :${port}: ${e.message}` };
+  }
+  return await new Promise((resolve) => {
+    const ws = new WebSocket(wsUrl);
+    let done = false;
+    const finish = (val) => {
+      if (done) return;
+      done = true;
+      try { ws.close(); } catch { /* already closed */ }
+      resolve(val);
+    };
+    const timer = setTimeout(() => finish({ ok: false, error: `direct CDP timeout (${commandTimeoutMs}ms) on :${port} for ${method}` }), commandTimeoutMs);
+    ws.on("open", () => {
+      const msg = { id: 1, method, params: params || {} };
+      if (sessionId) msg.sessionId = sessionId;
+      ws.send(JSON.stringify(msg));
+    });
+    ws.on("message", (raw) => {
+      let m;
+      try { m = JSON.parse(raw.toString()); } catch { return; }
+      if (m.id !== 1) return; // ignore CDP events, wait for our command's reply
+      clearTimeout(timer);
+      if (m.error) finish({ ok: false, backend: "personal-spawn", error: m.error.message || String(m.error), cdpError: m.error });
+      else finish({ ok: true, backend: "personal-spawn", result: m.result });
+    });
+    ws.on("error", (e) => { clearTimeout(timer); finish({ ok: false, error: `direct CDP ws error on :${port}: ${e.message}` }); });
+  });
 }
 
 function sendJson(res, status, payload) {
@@ -3827,6 +3906,18 @@ function postProcessToolResult(toolName, result, params = {}) {
 }
 
 async function callBridgeTool(toolName, params = {}) {
+  // --- Spawn-profile raw CDP: route straight to the isolated chrome's port ---
+  // send_cdp(profile, ...) hits personal_chrome_cdp_command. If `profile` is a
+  // spawn profile (profile_create'd, has its own --remote-debugging-port), the
+  // extension path can't reach it — connect to its local CDP port directly.
+  // This is the operate path for target work: profile_create then send_cdp.
+  if (toolName === "personal_chrome_cdp_command" || toolName === "chrome_cdp_command") {
+    const spawnPort = getSpawnProfilePort(params?.profile);
+    if (spawnPort) {
+      return await directCdpCommand(spawnPort, params?.method, params?.params, params?.sessionId);
+    }
+  }
+
   // --- Claude-in-Chrome-style multi-browser tools (route by display name) ---
   if (toolName === "personal_chrome_list_browsers") {
     return { browsers: listClients(), activeBrowser: activeBrowserHint() };
