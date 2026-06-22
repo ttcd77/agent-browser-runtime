@@ -1,4 +1,10 @@
-const DEFAULT_BRIDGE_URL = "ws://127.0.0.1:17346/extension";
+// Production bridge WS port. 17336 is the personal-chrome-bridge default
+// (PERSONAL_CHROME_WS_PORT). Was wrongly changed to 17346 (a worktree-dev
+// port) in a189b61 — that port has no listener in production, so the
+// extension silently connected nowhere (bridge health showed connected:0
+// even with the extension installed). Worktree dev overrides via
+// chrome.storage.local.bridgeUrl, NOT by editing this default.
+const DEFAULT_BRIDGE_URL = "ws://127.0.0.1:17336/extension";
 const DEBUGGER_PROTOCOL_VERSION = "1.3";
 const MAX_DEVTOOLS_EVENTS = 1000;
 const CHROME_DEBUGGER_ALLOWED_DOMAINS = [
