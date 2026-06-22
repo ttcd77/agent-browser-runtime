@@ -623,11 +623,18 @@ async function chromeOpen(params = {}) {
   if (!/^https?:$/.test(url.protocol)) throw new Error("url must use http or https");
   const waitMs = Math.min(Math.max(Number(params.waitMs || 1000), 0), 10000);
   let tab = null;
+  // Focus-steal fix (2026-06-21): default active=false so agent work stays
+  // in background, never yanks the human's current tab away. Caller must
+  // explicitly pass active:true to surface the tab. Bridge has a similar
+  // guard at scripts/personal-chrome-bridge.mjs:3916 but only fires when
+  // params.profile is set AND params.active is not undefined — this layer
+  // is the robust catch-all.
+  const wantActive = params.active === true;
   if (params.newTab) {
-    tab = await chrome.tabs.create({ url: url.toString(), active: params.active !== false });
+    tab = await chrome.tabs.create({ url: url.toString(), active: wantActive });
   } else {
     const target = await getTargetTab(params);
-    tab = await chrome.tabs.update(target.id, { url: url.toString(), active: params.active !== false });
+    tab = await chrome.tabs.update(target.id, { url: url.toString(), active: wantActive });
   }
   const current = tab?.id ? await waitForTabReady(tab.id, waitMs) : tab;
   return {
