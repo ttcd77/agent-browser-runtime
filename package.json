@@ -83,6 +83,7 @@
     "smoke:agent-browser-cli": "node scripts/agent-browser-cli-smoke.mjs",
     "smoke:raw": "node scripts/raw-request-smoke.mjs",
     "smoke:agentic-burp": "node scripts/agentic-burp-workflow-smoke.mjs",
+    "selftest:session-clone": "node scripts/session-clone-self-test.mjs",
     "research:pack": "node scripts/security-research-pack-cli.mjs",
     "check": "npm run build && npm run test && npm run smoke:cli && npm run smoke:feedback && npm run smoke:agentic-burp && npm run smoke:raw",
     "check:smoke:agent-browser-cli": "node scripts/agent-browser-cli-smoke.mjs",

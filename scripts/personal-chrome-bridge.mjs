@@ -12,6 +12,13 @@ import {
   templateExists,
   templateSetupInstructions,
 } from "./lib/spawn-chrome-profile.mjs";
+import {
+  cdpOriginStateAdapter,
+  cloneOriginState,
+  filterCookiesForOrigins,
+  normalizeOrigin,
+  openCdpPageSession,
+} from "./lib/origin-state-clone.mjs";
 
 const httpPort = Number.parseInt(process.env.PERSONAL_CHROME_HTTP_PORT || "17337", 10);
 const httpHost = process.env.PERSONAL_CHROME_HTTP_HOST || "127.0.0.1";
@@ -169,6 +176,153 @@ async function directCdpCommand(port, method, params, sessionId) {
       else finish({ ok: true, backend: "personal-spawn", result: m.result });
     });
     ws.on("error", (e) => { clearTimeout(timer); finish({ ok: false, error: `direct CDP ws error on :${port}: ${e.message}` }); });
+  });
+}
+
+function cloneEndpoint(raw = {}, fallback = {}) {
+  if (typeof raw === "string") return { ...fallback, profile: raw };
+  return { ...fallback, ...(raw || {}) };
+}
+
+function cloneEndpointProfile(endpoint) {
+  return endpoint.profile || endpoint.name || endpoint.profileName || null;
+}
+
+async function withSpawnOriginStateAdapter(profile, options, fn) {
+  const port = getSpawnProfilePort(profile);
+  if (!port) throw new Error(`spawn profile not found or not running: ${profile}`);
+  const session = await openCdpPageSession(port, options);
+  try {
+    return await fn(cdpOriginStateAdapter(session, options), { port, session });
+  } finally {
+    await session.close().catch(() => {});
+  }
+}
+
+async function exportPersonalOriginState(origin, endpoint = {}, options = {}) {
+  const normalizedOrigin = normalizeOrigin(origin);
+  const commandParams = {
+    browser: endpoint.browser,
+    clientId: endpoint.clientId,
+    targetClientId: endpoint.targetClientId,
+    tabId: endpoint.tabId,
+    urlContains: endpoint.urlContains,
+    maxIndexedDbRecords: options.maxIndexedDbRecords,
+    includeCacheBodies: false,
+  };
+  if (endpoint.profile && commandParams.tabId == null) {
+    commandParams.tabId = await ensureProfileTab(endpoint.profile);
+  }
+  if (endpoint.navigate === true || endpoint.url) {
+    const url = endpoint.url || `${normalizedOrigin}/`;
+    const opened = await callExtension("chrome_open", {
+      ...commandParams,
+      url,
+      active: endpoint.active === true,
+      newTab: endpoint.newTab === true,
+    });
+    commandParams.tabId = opened?.tab?.id || commandParams.tabId;
+  }
+
+  const result = await callExtension("chrome_application_export", commandParams);
+  const exported = result?.export || {};
+  const actualOrigin = exported.origin ? normalizeOrigin(exported.origin) : null;
+  if (actualOrigin !== normalizedOrigin) {
+    throw new Error(`personal source tab origin mismatch: expected ${normalizedOrigin}, got ${actualOrigin || "(unknown)"}`);
+  }
+  return {
+    exportedAt: exported.exportedAt || new Date().toISOString(),
+    origin: normalizedOrigin,
+    page: {
+      url: exported.url,
+      origin: exported.origin,
+      localStorage: exported.localStorage || {},
+      sessionStorage: exported.sessionStorage || {},
+      indexedDB: exported.indexedDB || { supported: false, databases: [] },
+    },
+    cookies: filterCookiesForOrigins(exported.browserCookies || [], [normalizedOrigin]),
+    source: {
+      backend: "personal-chrome",
+      tab: result?.tab || null,
+    },
+  };
+}
+
+async function profileCloneOriginState(params = {}) {
+  const origins = Array.isArray(params.origins)
+    ? params.origins
+    : params.origin
+      ? [params.origin]
+      : [];
+  if (!origins.length) throw new Error("profile_clone_origin_state requires origins:[...] or origin");
+
+  const source = cloneEndpoint(params.source, {
+    profile: params.sourceProfile || params.srcProfile,
+    browser: params.browser,
+    tabId: params.sourceTabId || params.srcTabId,
+    urlContains: params.sourceUrlContains,
+  });
+  const destination = cloneEndpoint(params.destination || params.dest || params.dst, {
+    profile: params.destinationProfile || params.dstProfile || params.profile,
+  });
+  const destinationProfile = cloneEndpointProfile(destination);
+  if (!destinationProfile) throw new Error("profile_clone_origin_state requires destination.profile");
+  if (!getSpawnProfilePort(destinationProfile)) {
+    throw new Error(`destination.profile must be a profile_create spawn profile: ${destinationProfile}`);
+  }
+
+  const sourceProfile = cloneEndpointProfile(source);
+  const sourcePort = sourceProfile ? getSpawnProfilePort(sourceProfile) : null;
+  const maxIndexedDbRecords = Math.min(Math.max(1, Number(params.maxIndexedDbRecords || 1000)), 10_000);
+  const includeSessionStorage = params.includeSessionStorage !== false;
+  const timeoutMs = Math.min(Math.max(1000, Number(params.timeoutMs || commandTimeoutMs)), 120_000);
+
+  return await withSpawnOriginStateAdapter(destinationProfile, { timeoutMs }, async (destinationAdapter, destinationInfo) => {
+    const runClone = async (sourceAdapter, sourceInfo) => {
+      const result = await cloneOriginState({
+        source: sourceAdapter,
+        destination: destinationAdapter,
+        origins,
+        maxIndexedDbRecords,
+        includeSessionStorage,
+      });
+      return {
+        ...result,
+        tool: "profile_clone_origin_state",
+        source: sourceInfo,
+        destination: {
+          backend: "personal-spawn",
+          profile: destinationProfile,
+          cdpPort: destinationInfo.port,
+        },
+        next: [
+          "Navigate the destination profile to the target workspace URL.",
+          "Verify the profile stays on the workspace URL instead of redirecting to sign-in.",
+        ],
+      };
+    };
+
+    if (sourcePort) {
+      return await withSpawnOriginStateAdapter(sourceProfile, { timeoutMs }, async (sourceAdapter, sourceInfo) =>
+        await runClone(sourceAdapter, {
+          backend: "personal-spawn",
+          profile: sourceProfile,
+          cdpPort: sourceInfo.port,
+        }));
+    }
+
+    const personalSourceAdapter = {
+      async exportOriginState(origin, options) {
+        return await exportPersonalOriginState(origin, source, options);
+      },
+    };
+    return await runClone(personalSourceAdapter, {
+      backend: "personal-chrome",
+      profile: source.profile || null,
+      browser: source.browser || null,
+      tabId: source.tabId || null,
+      boundary: "Personal Chrome is read-only for this clone operation; destination writes are limited to the spawn profile.",
+    });
   });
 }
 
@@ -3507,8 +3661,8 @@ function workflowGuide(task = "first-pass") {
       routeSummaryTemplate: {
         firstStep: { tool: "browser_professional_readiness", input: {} },
         evidencePack: { tool: "browser_security_pack", input: { url: "https://example.com", includeHar: true, includeTrace: true, includeApplicationExport: true } },
-        latestHandoffInspect: { tool: "browser_artifact_inspect", input: { path: "<researchPackPath>" } },
-        latestHandoffRead: { tool: "browser_artifact_read", input: { path: "<researchPackPath>", mode: "line", startLine: 1, maxLines: 120 } },
+        latestHandoffInspect: { tool: "personal_chrome_artifact_inspect", input: { path: "<researchPackPath>" } },
+        latestHandoffRead: { tool: "personal_chrome_artifact_read", input: { path: "<researchPackPath>", mode: "line", startLine: 1, maxLines: 120 } },
         firstConcreteDrilldown: "Use devtools_professional_readiness.routeSummary.firstConcreteDrilldown after evidence exists.",
         objectiveBoundary: "This template is routing metadata for the professional workflow; it does not read evidence content or judge vulnerabilities.",
       },
@@ -3520,7 +3674,7 @@ function workflowGuide(task = "first-pass") {
         { tool: "browser_inspect", input: { mode: "overview", limit: 10 }, why: "Read the first objective evidence set and next tool plan." },
         { tool: "browser_security_pack", input: { url: "https://example.com", includeHar: true, includeTrace: true, includeApplicationExport: true }, why: "Save a portable evidence pack, manifest, timeline, and drilldown plan." },
         { tool: "browser_professional_readiness", input: {}, why: "Confirm the evidence package created the expected handoff, artifact, timeline, and parity readiness signals." },
-        { tool: "browser_artifact_read", input: { path: "<researchPackPath>", mode: "line", startLine: 1, maxLines: 80 }, why: "Preview the handoff artifact without loading every saved file." },
+        { tool: "personal_chrome_artifact_read", input: { path: "<researchPackPath>", mode: "line", startLine: 1, maxLines: 80 }, why: "Preview the handoff artifact without loading every saved file." },
         { tool: "<drilldownPlan.tool>", input: "<drilldownPlan.input>", why: "Continue with concrete request, replay, trace, source, or artifact drilldowns returned by the evidence pack." },
       ],
       exitCriteria: [
@@ -3535,29 +3689,29 @@ function workflowGuide(task = "first-pass") {
       title: "First page inspection",
       goal: "Understand current page, backend layer, capture state, and first objective signals.",
       steps: [
-        { tool: "chrome_backend_capabilities", why: "Know this is Personal Chrome and what chrome.debugger boundaries apply." },
+        { tool: "personal_chrome_backend_capabilities", why: "Know this is Personal Chrome and what chrome.debugger boundaries apply." },
         { tool: "agent_inspect", input: { focus: "overview", limit: 10 }, why: "Get dashboard evidence and next drill-down tools." },
-        { tool: "browser_signal_summary", why: "List objective cross-panel signals without deciding vulnerability impact." },
+        { tool: "personal_chrome_signal_summary", why: "List objective cross-panel signals without deciding vulnerability impact." },
       ],
     },
     "security-research-pack": {
       title: "One-call security research evidence pack",
       goal: "Create portable first-pass evidence from the user's active Chrome tab.",
       steps: [
-        { tool: "browser_security_research_pack", input: { url: "https://example.com" }, why: "Capture, reload, collect F12 evidence, and save artifact paths." },
-        { tool: "browser_evidence_manifest", why: "Verify artifact hashes and provenance when needed." },
-        { tool: "browser_request_correlation_graph", why: "Choose which request/script/frame chain to drill into." },
+        { tool: "personal_chrome_security_research_pack", input: { url: "https://example.com" }, why: "Capture, reload, collect F12 evidence, and save artifact paths." },
+        { tool: "personal_chrome_evidence_manifest", why: "Verify artifact hashes and provenance when needed." },
+        { tool: "personal_chrome_request_correlation_graph", why: "Choose which request/script/frame chain to drill into." },
       ],
     },
     "network-capture": {
       title: "Network capture and request drill-down",
       goal: "Record a reproducible action and inspect request details.",
       steps: [
-        { tool: "browser_capture_start", input: { clear: true, label: "reproduce" }, why: "Start an explicit F12 recording window." },
-        { tool: "browser_hard_reload", input: { waitMs: 1000 }, why: "Reload with cache disabled where supported." },
+        { tool: "personal_chrome_capture_start", input: { clear: true, label: "reproduce" }, why: "Start an explicit F12 recording window." },
+        { tool: "personal_chrome_hard_reload", input: { waitMs: 1000 }, why: "Reload with cache disabled where supported." },
         { tool: "agent_inspect", input: { focus: "network", limit: 20 }, why: "Find request ids and request shapes." },
-        { tool: "chrome_har_completeness", input: { includeBodies: true, maxBodyBytes: 2000 }, why: "Check objective HAR body/timing/redirect/security evidence completeness before drilling down." },
-        { tool: "chrome_request_detail", input: { requestId: "<request-id>" }, why: "Inspect headers, cookies, timing, initiator, and body availability." },
+        { tool: "personal_chrome_har_completeness", input: { includeBodies: true, maxBodyBytes: 2000 }, why: "Check objective HAR body/timing/redirect/security evidence completeness before drilling down." },
+        { tool: "personal_chrome_request_detail", input: { requestId: "<request-id>" }, why: "Inspect headers, cookies, timing, initiator, and body availability." },
       ],
     },
     "request-replay": {
@@ -3565,26 +3719,26 @@ function workflowGuide(task = "first-pass") {
       goal: "Replay an observed browser request with bounded variants and compare responses.",
       steps: [
         { tool: "agent_inspect", input: { focus: "network", limit: 20 }, why: "Pick a requestId from captured traffic." },
-        { tool: "chrome_request_replay_batch", input: { requestId: "<request-id>", variants: [{ label: "baseline" }] }, why: "Run variants and compare observed browser fetch results." },
+        { tool: "personal_chrome_request_replay_batch", input: { requestId: "<request-id>", variants: [{ label: "baseline" }] }, why: "Run variants and compare observed browser fetch results." },
       ],
     },
     "auth-boundary": {
       title: "Authentication boundary evidence",
       goal: "Collect cookies, auth headers, storage tokens, credentialed requests, and page security context.",
       steps: [
-        { tool: "browser_auth_boundary_report", input: { includeTokenScan: true, save: true }, why: "Collect objective auth-related evidence." },
-        { tool: "browser_cookie_summary", why: "Inspect cookie attributes and objective attribute signals." },
-        { tool: "browser_token_scan", why: "Search authorized browser evidence for token-like material." },
+        { tool: "personal_chrome_auth_boundary_report", input: { includeTokenScan: true, save: true }, why: "Collect objective auth-related evidence." },
+        { tool: "personal_chrome_cookie_summary", why: "Inspect cookie attributes and objective attribute signals." },
+        { tool: "personal_chrome_token_scan", why: "Search authorized browser evidence for token-like material." },
       ],
     },
     "before-after-diff": {
       title: "Before/after evidence diff",
       goal: "Compare evidence before and after login, role switch, account switch, or permission change.",
       steps: [
-        { tool: "browser_evidence_bundle", input: { save: true }, why: "Save the before snapshot." },
-        { tool: "browser_capture_start", input: { clear: true, label: "after-action" }, why: "Record the action window." },
-        { tool: "browser_capture_diff", input: { beforePath: "<before-bundle-path>", save: true }, why: "Compare before snapshot to current captured traffic." },
-        { tool: "chrome_har_completeness", input: { includeBodies: true, maxBodyBytes: 2000 }, why: "Check whether the HAR evidence is complete enough for the claim." },
+        { tool: "personal_chrome_evidence_bundle", input: { save: true }, why: "Save the before snapshot." },
+        { tool: "personal_chrome_capture_start", input: { clear: true, label: "after-action" }, why: "Record the action window." },
+        { tool: "personal_chrome_capture_diff", input: { beforePath: "<before-bundle-path>", save: true }, why: "Compare before snapshot to current captured traffic." },
+        { tool: "personal_chrome_har_completeness", input: { includeBodies: true, maxBodyBytes: 2000 }, why: "Check whether the HAR evidence is complete enough for the claim." },
       ],
     },
     "source-debug": {
@@ -3592,8 +3746,8 @@ function workflowGuide(task = "first-pass") {
       goal: "Find relevant scripts, read source, and pause around runtime behavior.",
       steps: [
         { tool: "agent_inspect", input: { focus: "sources", query: "<marker>" }, why: "List and search parsed scripts." },
-        { tool: "browser_source_get", input: { scriptId: "<script-id>" }, why: "Read exact script source." },
-        { tool: "browser_debugger_control", input: { action: "setBreakpointByUrl" }, why: "Use live runtime state when source text is insufficient." },
+        { tool: "personal_chrome_source_get", input: { scriptId: "<script-id>" }, why: "Read exact script source." },
+        { tool: "personal_chrome_debugger_control", input: { action: "setBreakpointByUrl" }, why: "Use live runtime state when source text is insufficient." },
       ],
     },
     performance: {
@@ -3601,8 +3755,8 @@ function workflowGuide(task = "first-pass") {
       goal: "Capture objective timing, observer, CPU, coverage, and trace evidence.",
       steps: [
         { tool: "agent_inspect", input: { focus: "performance" }, why: "Start with lightweight performance evidence." },
-        { tool: "browser_chrome_trace", input: { durationMs: 1000 }, why: "Capture a bounded trace around the smallest reproducible action." },
-        { tool: "browser_trace_query", input: { tracePath: "<trace-path>", minDurationMs: 5 }, why: "Search saved trace events." },
+        { tool: "personal_chrome_chrome_trace", input: { durationMs: 1000 }, why: "Capture a bounded trace around the smallest reproducible action." },
+        { tool: "personal_chrome_trace_query", input: { tracePath: "<trace-path>", minDurationMs: 5 }, why: "Search saved trace events." },
       ],
     },
   };
@@ -3995,6 +4149,9 @@ async function callBridgeTool(toolName, params = {}) {
         : "chrome process killed; user-data-dir preserved (pass removeData:true to delete).",
     };
   }
+  if (toolName === "profile_clone_origin_state") {
+    return await profileCloneOriginState(params);
+  }
 
   // Per-agent tab isolation: a caller that passes `profile` operates in its OWN
   // tab. Resolve/allocate it once and inject tabId; the inner
@@ -4166,10 +4323,10 @@ async function callBridgeTool(toolName, params = {}) {
   if (toolName === "personal_chrome_worker_frame_deep_dive") {
     return await workerFrameDeepDive(params);
   }
-  if (toolName === "personal_chrome_tool_catalog") {
+  if (["personal_chrome_tool_catalog", "browser_tool_catalog", "chrome_tool_catalog"].includes(toolName)) {
     return toolCatalog(params);
   }
-  if (toolName === "personal_chrome_tool_help") {
+  if (["personal_chrome_tool_help", "browser_tool_help", "chrome_tool_help"].includes(toolName)) {
     const name = String(params?.tool || "").trim();
     if (!tools[name]) throw new Error(`unknown tool: ${name}`);
     return {
@@ -4177,23 +4334,24 @@ async function callBridgeTool(toolName, params = {}) {
       name,
       category: devtoolsToolCategory(name),
       description: tools[name],
-      parameters: { type: "object", properties: {}, note: "Personal Chrome bridge exposes detailed examples through browser_workflow_guide and docs/personal-chrome-extension.md." },
+      parameters: toolParameterSchema(name),
       hints: {
         firstPass: name === "agent_inspect" || name === "browser_security_research_pack",
+        aliases: toolAliasesFor(name),
         objectiveBoundary: "This help describes tool usage only; it does not interpret evidence.",
       },
     };
   }
-  if (toolName === "personal_chrome_workflow_guide") {
+  if (["personal_chrome_workflow_guide", "browser_workflow_guide", "chrome_workflow_guide"].includes(toolName)) {
     return workflowGuide(params?.task);
   }
-  if (toolName === "personal_chrome_capability_map") {
+  if (["personal_chrome_capability_map", "browser_capability_map", "chrome_capability_map"].includes(toolName)) {
     return capabilityMap();
   }
-  if (toolName === "personal_chrome_f12_parity_matrix") {
+  if (["personal_chrome_f12_parity_matrix", "browser_f12_parity_matrix", "chrome_f12_parity_matrix"].includes(toolName)) {
     return f12ParityMatrix();
   }
-  if (toolName === "personal_chrome_professional_readiness") {
+  if (["personal_chrome_professional_readiness", "browser_professional_readiness", "chrome_professional_readiness"].includes(toolName)) {
     const workflow = workflowGuide("professional-appsec");
     const capabilityMapResult = capabilityMap();
     const parityMatrix = f12ParityMatrix();
@@ -4236,6 +4394,120 @@ async function safeBridgeTool(toolName, params = {}) {
   } catch (error) {
     return { unavailable: true, tool: toolName, error: String(error?.message || error) };
   }
+}
+
+function toolParameterSchema(name) {
+  const schemas = {
+    browser_tool_help: {
+      type: "object",
+      required: ["tool"],
+      properties: {
+        tool: { type: "string", description: "Tool name to describe, e.g. personal_chrome_read_page." },
+      },
+    },
+    personal_chrome_tool_help: {
+      type: "object",
+      required: ["tool"],
+      properties: {
+        tool: { type: "string", description: "Tool name to describe, e.g. personal_chrome_read_page." },
+      },
+    },
+    browser_workflow_guide: {
+      type: "object",
+      properties: {
+        task: { type: "string", description: "Workflow name, e.g. first-pass, network-capture, auth-boundary, professional-appsec." },
+      },
+    },
+    personal_chrome_workflow_guide: {
+      type: "object",
+      properties: {
+        task: { type: "string", description: "Workflow name, e.g. first-pass, network-capture, auth-boundary, professional-appsec." },
+      },
+    },
+    profile_create: {
+      type: "object",
+      required: ["name"],
+      properties: {
+        name: { type: "string", description: "Agent Browser profile name, e.g. target-attacker or target-victim." },
+      },
+    },
+    profile_list: { type: "object", properties: {} },
+    profile_delete: {
+      type: "object",
+      required: ["name"],
+      properties: {
+        name: { type: "string", description: "Agent Browser profile name to stop." },
+        removeData: { type: "boolean", description: "Delete user-data-dir. Defaults to true; traffic evidence is preserved." },
+      },
+    },
+    profile_clone_origin_state: {
+      type: "object",
+      required: ["source", "destination", "origins"],
+      properties: {
+        source: { type: "object", description: "Personal Chrome tab or Agent Browser profile source." },
+        destination: { type: "object", description: "Destination Agent Browser profile, e.g. {profile:'target-attacker'}." },
+        origins: { type: "array", items: { type: "string" }, description: "Origins to clone, e.g. https://app.example.com." },
+        maxIndexedDbRecords: { type: "number", description: "Max IndexedDB records per store. Defaults to 1000." },
+      },
+    },
+    personal_chrome_list_browsers: { type: "object", properties: {} },
+    personal_chrome_select_browser: {
+      type: "object",
+      required: ["browser"],
+      properties: {
+        browser: { type: "string", description: "browserDisplayName or browserInstanceId from personal_chrome_list_browsers." },
+      },
+    },
+    personal_chrome_open: {
+      type: "object",
+      required: ["url"],
+      properties: {
+        url: { type: "string", description: "HTTP(S) URL to open." },
+        browser: { type: "string", description: "Optional browserDisplayName or browserInstanceId." },
+        newTab: { type: "boolean", description: "Open in a new tab." },
+        active: { type: "boolean", description: "Make the tab active. Defaults depend on caller; agents should prefer false." },
+        tabId: { type: "number", description: "Existing tab id to navigate." },
+      },
+    },
+    personal_chrome_read_page: {
+      type: "object",
+      properties: {
+        browser: { type: "string", description: "Optional browserDisplayName or browserInstanceId." },
+        tabId: { type: "number", description: "Tab id to read. Omit only when intentionally using the active tab." },
+        maxChars: { type: "number", description: "Max characters of role-tree output. Default 8000." },
+        maxDepth: { type: "number", description: "Max DOM/ARIA tree depth. Default 15." },
+        maxElements: { type: "number", description: "Max elements scanned. Default 1500." },
+      },
+    },
+    personal_chrome_click_ref: {
+      type: "object",
+      required: ["ref"],
+      properties: {
+        ref: { type: "string", description: "Stable ref id from personal_chrome_read_page, e.g. ref_42." },
+        browser: { type: "string", description: "Optional browserDisplayName or browserInstanceId." },
+        tabId: { type: "number", description: "Tab id containing the ref." },
+      },
+    },
+  };
+  return schemas[name] || {
+    type: "object",
+    properties: {},
+    note: "No hand-written parameter schema yet. Use browser_workflow_guide for recipes or inspect /tools for the tool description.",
+  };
+}
+
+function toolAliasesFor(name) {
+  const aliases = {
+    browser_tool_help: ["personal_chrome_tool_help", "chrome_tool_help"],
+    personal_chrome_tool_help: ["browser_tool_help", "chrome_tool_help"],
+    browser_workflow_guide: ["personal_chrome_workflow_guide", "chrome_workflow_guide"],
+    personal_chrome_workflow_guide: ["browser_workflow_guide", "chrome_workflow_guide"],
+    browser_professional_readiness: ["personal_chrome_professional_readiness", "chrome_professional_readiness"],
+    personal_chrome_professional_readiness: ["browser_professional_readiness", "chrome_professional_readiness"],
+    browser_capability_map: ["personal_chrome_capability_map", "chrome_capability_map"],
+    personal_chrome_capability_map: ["browser_capability_map", "chrome_capability_map"],
+  };
+  return aliases[name] || [];
 }
 
 async function securityResearchPack(params = {}) {
@@ -4859,6 +5131,12 @@ const tools = {
   browser_diff: "Facade: compare before/after evidence artifacts or current captured traffic.",
   browser_replay: "Facade: replay one captured request or batch variants.",
   browser_raw: "Facade: advanced escape hatch for one exact browser_*, chrome_*, or personal_chrome_* tool.",
+  browser_tool_catalog: "Agent usability: list available Personal Chrome and Agent Browser bridge tools by category.",
+  browser_tool_help: "Agent usability: return description, category, aliases, and parameter schema for one tool.",
+  browser_capability_map: "Agent usability: return the DevTools capability map grouped by F12 panel and drill-down route.",
+  browser_f12_parity_matrix: "Agent usability: return the objective F12 parity matrix and backend boundaries.",
+  browser_workflow_guide: "Agent usability: return deterministic tool recipes for common browser-security research tasks.",
+  browser_professional_readiness: "Agent usability: report whether the professional F12 evidence workflow is mechanically ready and which objective tool to call next.",
   agent_inspect: "Agent-facing F12 router. Pick a focus and get the right DevTools evidence without choosing from dozens of low-level tools.",
   personal_chrome_status: "Check whether the real Chrome extension is connected.",
   personal_chrome_list_browsers: "List every connected Chrome window. Returns {browsers:[{browserInstanceId,browserDisplayName,...}], activeBrowser}. Use this to discover which Chrome instances are available before routing.",
@@ -4867,6 +5145,7 @@ const tools = {
   profile_create: "Spawn a fresh isolated Chrome with the ABR extension. Real chrome.exe (same fingerprint as the user's daily Chrome — no Playwright, no AutomationControlled flag) on its own --user-data-dir (cookies/login/history isolated) and its own --remote-debugging-port (cdp-traffic-capture attaches automatically; traffic stored under cdp-traffic/<name>/). Template-copy install: requires a one-time `scripts/setup-template-profile.ps1` run that GUI-loads the extension into a template dir. Params: {name: 'alphanumeric-only, e.g. victim'}. Returns {profile, pid, cdpPort, userDataDir, trafficDir, alreadyRunning}.",
   profile_list: "List Chrome profiles the bridge has spawned (with pid/port/userDataDir) and the live extension WS connections. The two views may differ if a profile chrome was killed externally or a browser connected without being bridge-spawned. Returns {spawned, connectedBrowsers}.",
   profile_delete: "Kill the Chrome process for `name` and (by default) delete its user-data-dir. Traffic-capture directory is preserved for after-the-fact analysis. Params: {name, removeData?: bool=true}. Returns {killed, removed, userDataDir}.",
+  profile_clone_origin_state: "Clone full per-origin authenticated browser state into a profile_create spawn profile. Source can be a personal Chrome tab or another spawn profile; destination must be a spawn profile. Copies httpOnly cookies via CDP/cookie APIs, localStorage, sessionStorage for the clone tab, and IndexedDB object stores/records. Params: {source:{profile?|tabId?|browser?|navigate?|url?}, destination:{profile}, origins:['https://app.example.com'], maxIndexedDbRecords?}.",
   personal_chrome_open: "Open a URL in the user's real Chrome through chrome.tabs.update/create, then return tab metadata.",
   personal_chrome_extension_reload: "Reload the unpacked extension service worker after local development changes.",
   personal_chrome_tabs: "List tabs from the user's real Chrome.",
