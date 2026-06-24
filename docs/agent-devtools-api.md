@@ -5,7 +5,7 @@ Agent DevTools is the product-level contract.
 The user should not need to know whether the browser is:
 
 - their real Chrome, connected through the extension bridge, or
-- a managed CDP browser started by the runtime.
+- an Agent Browser started by the runtime.
 
 The agent should call the same `browser_*` facade tools in both modes for normal
 work. The detailed `devtools_*` tools are the F12 evidence layer underneath the
@@ -13,7 +13,7 @@ facade. Backend-specific tools may exist for debugging, but they are not the
 product contract.
 
 Use `devtools_backend_capabilities` when an agent needs to know whether it is
-running against Personal Chrome (`chrome.debugger`) or Managed Browser (direct
+running against Personal Chrome (`chrome.debugger`) or Agent Browser (direct
 CDP), and what evidence boundaries apply.
 
 ## Product Shape
@@ -22,7 +22,7 @@ CDP), and what evidence boundaries apply.
 User / Agent
   -> Agent DevTools API
       -> Personal Chrome Extension + chrome.debugger
-      -> Managed Browser + CDP
+      -> Agent Browser + CDP
 ```
 
 ## User Mental Model
@@ -274,8 +274,10 @@ return a successful structured no-op with `notApplicable: true`, not disappear.
 and parameters where the backend exposes the protocol schema. `devtools_cdp_command`
 is the escape hatch for F12 parity: when Chrome exposes a DevTools Protocol
 method that does not yet have a friendly wrapper, agents can call that CDP method
-directly against the selected tab and still keep the same Managed/Personal
-backend contract.
+directly against the selected tab and still keep the same Agent Browser/Personal
+backend contract. Some low-level compatibility fields still use `managed` as the
+backend id; that is a legacy protocol value, not the product name agents should
+use in prompts or handoffs.
 
 ## Current F12 Coverage
 
@@ -303,7 +305,7 @@ Not fully implemented yet:
 - Application panel deep browsing beyond current reads: richer Storage Buckets mutation fixtures and origin-partition comparison fixtures.
 - Network replay edge cases: raw socket-level replay and replay UI. Browser fetch replay already reports forbidden/skipped headers, supports raw/form/json/multipart body helpers, and can run batch variants with response diffs.
 - Browser UI/system dialogs and Chrome internal pages.
-- Complete JavaScript heap/closure interpretation. Managed Browser can save HeapProfiler snapshots, but interpreting object-retainer paths and closure-only secrets remains analysis work for the agent or human.
+- Complete JavaScript heap/closure interpretation. Agent Browser can save HeapProfiler snapshots, but interpreting object-retainer paths and closure-only secrets remains analysis work for the agent or human.
 
 ## Backends
 
@@ -333,9 +335,9 @@ is debugging the browser. That is expected.
 Boundary: Personal Chrome exposes the user's selected tab through the extension
 `chrome.debugger` transport. It can inspect ordinary web-page F12 evidence, but
 browser-process CDP commands and some heavy artifacts may return structured
-`notApplicable` responses with Managed Browser fallback guidance.
+`notApplicable` responses with Agent Browser fallback guidance.
 
-### Managed Browser
+### Agent Browser
 
 Run:
 
@@ -350,7 +352,7 @@ Call tools at:
 http://127.0.0.1:17335/tool/devtools_network_log
 ```
 
-Boundary: Managed Browser uses direct CDP and can expose broader page-target and
+Boundary: Agent Browser uses direct CDP and can expose broader page-target and
 browser-process DevTools domains where Chrome allows them. Use it for clean
 profiles, repeatable captures, and deeper evidence packs.
 

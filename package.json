@@ -1,7 +1,7 @@
 {
   "name": "agent-browser-runtime",
   "version": "0.4.0",
-  "description": "A local DevTools evidence runtime for AI agents. Single CLI surface (agent-browser); Personal Chrome and Managed Browser backends.",
+  "description": "A local DevTools evidence runtime for AI agents. Single CLI surface (agent-browser); Personal Chrome, Agent Browser, and Raw HTTP lanes.",
   "type": "module",
   "license": "MIT",
   "private": false,
@@ -84,6 +84,8 @@
     "smoke:raw": "node scripts/raw-request-smoke.mjs",
     "smoke:agentic-burp": "node scripts/agentic-burp-workflow-smoke.mjs",
     "selftest:session-clone": "node scripts/session-clone-self-test.mjs",
+    "acceptance": "node scripts/acceptance-suite.mjs",
+    "acceptance:strict": "node scripts/acceptance-suite.mjs --strict",
     "research:pack": "node scripts/security-research-pack-cli.mjs",
     "check": "npm run build && npm run test && npm run smoke:cli && npm run smoke:feedback && npm run smoke:agentic-burp && npm run smoke:raw",
     "check:smoke:agent-browser-cli": "node scripts/agent-browser-cli-smoke.mjs",

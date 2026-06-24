@@ -20,9 +20,9 @@ Without this layer, an agent can interact with a website but still fail to under
 
 ## What It Provides
 
-- **Managed Browser mainline**: starts a visible browser for professional AppSec work, with headless mode reserved for CI and smoke tests.
+- **Agent Browser mainline**: starts an isolated real Chrome profile for professional AppSec work, with headless mode reserved for CI and smoke tests.
 - **Personal Chrome beta**: optional bridge for operator-authorized inspection of a user's own browser state.
-- **Unified backend router**: the main worker can route `browser_*` facade calls to Managed Browser or Personal Chrome through one product entrypoint.
+- **Unified backend router**: the main worker can route `browser_*` facade calls to Agent Browser or Personal Chrome through one product entrypoint.
 - **Facade-first agent API**: agents start with `browser_open`, `browser_capture`, `browser_inspect`, and `browser_security_pack` instead of choosing from dozens of low-level tools.
 - **F12 drilldown tools**: `devtools_*` tools expose Network, Application, Elements, Sources, Security, Console, Frames, Performance, Trace, and raw CDP escape hatches.
 - **Evidence packs**: one command can produce a manifest, HAR, application export, trace artifacts, correlation graph, realtime payload logs, and machine-readable operator handoff.
@@ -33,7 +33,11 @@ Without this layer, an agent can interact with a website but still fail to under
 
 Current status: **professional core ready, active development**.
 
-The Managed Browser path is the primary supported workflow. It has release readiness checks, contract checks, unit tests, F12 smoke tests, professional workflow smoke tests, example workflow smoke tests, and a scorecard. Personal Chrome mode exists for local authorized debugging and is now reachable through the same main facade by passing `backend: "personal"` or `currentTab: true`, but it should still be treated as beta because it depends on the local Chrome extension bridge and user authorization.
+The Agent Browser path is the primary supported workflow. It has release readiness checks, contract checks, unit tests, F12 smoke tests, professional workflow smoke tests, example workflow smoke tests, an acceptance suite, and a scorecard. Personal Chrome mode exists for local authorized debugging and is now reachable through the same main facade by passing `backend: "personal"` or `currentTab: true`, but it should still be treated as beta because it depends on the local Chrome extension bridge and user authorization.
+
+Implementation note: some low-level APIs and compatibility responses still use
+the legacy backend id `managed`. Agent-facing docs and prompts should call that
+lane **Agent Browser**.
 
 Known boundaries are documented rather than hidden. For example, historical browser data cannot be recovered if capture was not enabled before the action, and browser replay is not raw socket-level replay.
 

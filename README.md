@@ -122,6 +122,20 @@ Now try your own URL: `agent-browser pack https://your-site.com --profile mine`.
 
 ---
 
+## Acceptance suite
+
+For a local production check, run:
+
+```bash
+npm run acceptance:strict
+```
+
+It verifies the agent-facing tool contract, Personal Chrome safe background-tab
+operation, Agent Browser profile lifecycle, origin-state warm-up, and Raw HTTP
+smoke coverage.
+
+---
+
 ## Auto-start on login
 
 | Platform | Script | Mechanism |
@@ -169,7 +183,7 @@ Read `docs/personal-chrome-quickstart.md` before using this mode.
 
 ---
 
-## Tools (143 Managed + 9 Personal, 7 categories)
+## Tools (Agent Browser + Personal Chrome, 7 categories)
 
 | Category | Count | Example tools |
 |---|---|---|
@@ -245,7 +259,7 @@ For DNS rebinding protection and full boundary details: `docs/safety-boundaries.
 |---|---|---|
 | `CDP_AGENT_SERVER_PORT` | `17335` | Worker HTTP port |
 | `CDP_AGENT_PROFILE` | `default` | Default profile when omitted |
-| `CDP_LAUNCH_BROWSER` | unset | Launch Managed Browser on start |
+| `CDP_LAUNCH_BROWSER` | unset | Launch Agent Browser backend on start |
 | `CDP_BROWSER_HEADLESS` | unset | Headless mode (CI/test) |
 | `CDP_SECURITY_DATA_DIR` | `~/.agent-browser-runtime` | Evidence storage root |
 | `CDP_BROWSER_PORT_MODE` | `ephemeral` | `ephemeral` or `fixed` CDP port |
@@ -314,7 +328,7 @@ families, security boundaries, and cross-platform support.
 
 ### "browser CDP endpoint is not available; no DevToolsActivePort appeared"
 
-The Managed Browser worker tried to launch Chrome but the CDP port never came up. Common causes:
+The Agent Browser worker tried to launch Chrome but the CDP port never came up. Common causes:
 
 - **Playwright browser not installed**: run `npx playwright install chromium` once.
 - **Port 17335 (worker) or 9222 (CDP) in use**: another worker may already be running. Stop it (`agent-browser doctor` to confirm) or set `CDP_AGENT_SERVER_PORT` and `CDP_DEBUG_PORT` to free ports.
